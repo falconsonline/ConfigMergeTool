@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ConfigMergeTool — Merge Diff Report</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; background: #f4f6f9; color: #222; }
+
+  /* ── HEADER ── */
+  .page-header { background: #1e2a3a; color: #fff; padding: 18px 28px; }
+  .page-header h1 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .page-header .meta { font-size: 12px; color: #9ab; display: flex; gap: 24px; flex-wrap: wrap; }
+  .page-header .meta span { display: flex; gap: 6px; }
+  .page-header .meta label { color: #6a8fa8; }
+
+  /* ── SUMMARY BAR ── */
+  .summary { background: #fff; border-bottom: 1px solid #dde3ed; padding: 14px 28px; display: flex; gap: 20px; flex-wrap: wrap; align-items: center; }
+  .stat { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
+  .stat .num { font-size: 22px; font-weight: 700; color: #1e2a3a; }
+  .stat .label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+  .stat.error .num { color: #c62828; }
+  .stat-divider { width: 1px; background: #dde3ed; align-self: stretch; }
+
+  /* ── FILTER BUTTONS ── */
+  .toolbar { background: #fff; border-bottom: 1px solid #dde3ed; padding: 10px 28px; display: flex; gap: 8px; align-items: center; }
+  .toolbar button { padding: 5px 14px; border: 1px solid #c0c8d8; border-radius: 4px; background: #f4f6f9; cursor: pointer; font-size: 12px; color: #444; }
+  .toolbar button.active { background: #1e2a3a; color: #fff; border-color: #1e2a3a; }
+  .toolbar .spacer { flex: 1; }
+  .expand-all { font-size: 12px; color: #4a7aab; cursor: pointer; text-decoration: underline; background: none; border: none; }
+
+  /* ── NAV ── */
+  .nav { background: #fff; border-bottom: 1px solid #dde3ed; padding: 10px 28px; font-size: 12px; color: #555; }
+  .nav a { color: #4a7aab; text-decoration: none; margin-right: 14px; }
+  .nav a:hover { text-decoration: underline; }
+
+  /* ── FILE SECTION ── */
+  .file-section { margin: 16px 28px; border: 1px solid #dde3ed; border-radius: 6px; background: #fff; overflow: hidden; }
+  .file-header { background: #eef2f8; padding: 11px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+  .file-header:hover { background: #e3e9f4; }
+  .file-header .fname { font-weight: 600; font-size: 13px; color: #1e2a3a; flex: 1; }
+  .file-header .badge { font-size: 11px; background: #1e2a3a; color: #fff; border-radius: 10px; padding: 2px 9px; }
+  .file-header .paths { font-size: 11px; color: #777; display: flex; gap: 16px; }
+  .file-header .chevron { font-size: 11px; color: #999; transition: transform .2s; }
+  .file-section.collapsed .file-body { display: none; }
+  .file-section.collapsed .chevron { transform: rotate(-90deg); }
+
+  .file-body { padding: 0; }
+
+  /* ── CHANGE ROW ── */
+  .change-row { border-top: 1px solid #eef0f4; }
+  .change-row.first { border-top: none; }
+
+  .change-header { padding: 7px 16px; background: #f9fafc; font-size: 11px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eef0f4; }
+  .change-header .param-name { font-weight: 600; color: #333; font-family: monospace; font-size: 12px; }
+  .tag { padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+  .tag.replaced    { background: #e8f4fd; color: #1565c0; }
+  .tag.base-only   { background: #e8f5e9; color: #1b5e20; }
+  .tag.rel-only    { background: #fff3e0; color: #e65100; }
+  .tag.error       { background: #ffebee; color: #b71c1c; }
+  .tag.duplicate   { background: #fce4ec; color: #880e4f; }
+  .tag.group       { background: #ede7f6; color: #4527a0; }
+
+  /* ── SIDE-BY-SIDE TABLE ── */
+  .diff-table { width: 100%; border-collapse: collapse; font-family: 'Courier New', monospace; font-size: 12px; }
+  .diff-table .col-header { padding: 6px 16px; background: #f0f2f6; font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: .4px; width: 50%; }
+  .diff-table .col-header.release { border-right: 2px solid #dde3ed; }
+  .diff-table td { padding: 8px 16px; vertical-align: top; width: 50%; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+  .diff-table td.release-col { border-right: 2px solid #dde3ed; background: #fafbfc; }
+  .diff-table td.merged-col  { background: #fdfffe; }
+  .diff-table tr.single-col td { width: 100%; }
+
+  /* ── HIGHLIGHTS ── */
+  .changed    { background: #ffe066; padding: 0 2px; border-radius: 2px; font-weight: bold; }
+  .added-row td { background: #f0fff4 !important; }
+  .added-row td.release-col { background: #f9fafc !important; color: #aaa; }
+  .relonly-row td { background: #fff8f0 !important; }
+  .error-row td { background: #fff5f5 !important; }
+  .gutter { color: #dc3545; font-weight: bold; padding: 0 4px; }
+
+  /* ── COMMENT LINES ── */
+  .comment-line { color: #888; font-style: italic; }
+  .comment-diff-badge { display: inline-block; font-size: 10px; background: #fff3cd; color: #856404; border: 1px solid #ffc107; border-radius: 3px; padding: 0 5px; margin-left: 6px; font-style: normal; font-family: sans-serif; }
+
+  /* ── XML SYNTAX ── */
+  .xml-tag  { color: #0070c0; }
+  .xml-attr { color: #2e7d32; }
+  .xml-val  { color: #c62828; }
+  .xml-comment { color: #888; font-style: italic; }
+
+  /* ── JSON SYNTAX ── */
+  .json-key     { color: #0070c0; }
+  .json-val-str { color: #2e7d32; }
+  .json-val-num { color: #e65100; }
+
+  /* ── INDEXED GROUP ── */
+  .group-header-row td { background: #f3f0ff !important; font-size: 11px; color: #4527a0; padding: 5px 16px; }
+  .group-added td.release-col { color: #aaa; font-style: italic; }
+  .group-added td.merged-col { background: #f0fff4 !important; }
+  .namespace-row td { background: #fffde7 !important; font-size: 11px; }
+  .namespace-row .tag { margin-right: 6px; }
+
+  /* ── FOOTER ── */
+  footer { text-align: center; padding: 20px; font-size: 11px; color: #aaa; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ PAGE HEADER ══════════════════ -->
+<div class="page-header">
+  <h1>ConfigMergeTool — Merge Diff Report</h1>
+  <div class="meta">
+    <span><label>Base:</label> base/</span>
+    <span><label>Release:</label> release/</span>
+    <span><label>Output:</label> output/</span>
+    <span><label>Generated:</label> 2026-04-01 11:42</span>
+  </div>
+</div>
+
+<!-- ══════════════════ SUMMARY ══════════════════ -->
+<div class="summary">
+  <div class="stat"><span class="num">4</span><span class="label">Files Processed</span></div>
+  <div class="stat-divider"></div>
+  <div class="stat"><span class="num">14</span><span class="label">Total Changes</span></div>
+  <div class="stat-divider"></div>
+  <div class="stat"><span class="num">7</span><span class="label">Replaced</span></div>
+  <div class="stat"><span class="num">3</span><span class="label">Base-Only Added</span></div>
+  <div class="stat"><span class="num">2</span><span class="label">Release-Only</span></div>
+  <div class="stat-divider"></div>
+  <div class="stat error"><span class="num">2</span><span class="label">Errors</span></div>
+  <div class="stat error"><span class="num">1</span><span class="label">Duplicates</span></div>
+</div>
+
+<!-- ══════════════════ TOOLBAR ══════════════════ -->
+<div class="toolbar">
+  <button class="active">All Changes</button>
+  <button>Errors Only</button>
+  <button>Base-Only Added</button>
+  <button>Release-Only</button>
+  <div class="spacer"></div>
+  <button class="expand-all" onclick="toggleAll()">Collapse All</button>
+</div>
+
+<!-- ══════════════════ NAV ══════════════════ -->
+<div class="nav">
+  Jump to:
+  <a href="#f1">conf/app.properties</a>
+  <a href="#f2">scheduler/test1.properties</a>
+  <a href="#f3">config/base.xml</a>
+  <a href="#f4">config/settings.json</a>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     FILE 1: KV — app.properties
+═══════════════════════════════════════════════════════════ -->
+<div class="file-section" id="f1">
+  <div class="file-header" onclick="toggle(this)">
+    <span class="chevron">▼</span>
+    <span class="fname">conf/app.properties</span>
+    <div class="paths">
+      <span>Base: base/conf/app.properties</span>
+      <span>Release: release/conf/app.properties</span>
+    </div>
+    <span class="badge">5 changes</span>
+  </div>
+  <div class="file-body">
+
+    <!-- ── CHANGE 1: Normal replacement ── -->
+    <div class="change-row first">
+      <div class="change-header">
+        <span class="param-name">log.dir</span>
+        <span class="tag replaced">Base → Release Replaced</span>
+        <span style="color:#777;font-size:11px;">Section: [Logging]</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (value from Base)</th>
+        </tr>
+        <tr>
+          <td class="release-col"><span class="comment-line"># Directory for application logs</span></td>
+          <td class="merged-col"><span class="comment-line"># Directory for application logs</span></td>
+        </tr>
+        <tr>
+          <td class="release-col">log.dir=<span class="changed">/var/log/app</span></td>
+          <td class="merged-col">log.dir=<span class="changed">/logs</span></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── CHANGE 2: Comment differs ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">log.level</span>
+        <span class="tag replaced">Base → Release Replaced</span>
+        <span style="color:#777;font-size:11px;">Section: [Logging]</span>
+        <span class="comment-diff-badge">comment changed</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (value from Base)</th>
+        </tr>
+        <tr>
+          <td class="release-col"><span class="comment-line"># Log verbosity (1=ERROR, 5=DEBUG)</span> <span class="comment-diff-badge">release comment</span></td>
+          <td class="merged-col"><span class="comment-line"># Log level: 3=INFO recommended for prod</span> <span class="comment-diff-badge">base comment</span></td>
+        </tr>
+        <tr>
+          <td class="release-col">log.level=<span class="changed">5</span></td>
+          <td class="merged-col">log.level=<span class="changed">3</span></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── CHANGE 3: Base-only parameter added ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">log.syslog.facility</span>
+        <span class="tag base-only">Base-Only Added</span>
+        <span style="color:#777;font-size:11px;">Section: [Logging]</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (added from Base)</th>
+        </tr>
+        <tr class="added-row">
+          <td class="release-col"><em style="color:#aaa;">(not present in release)</em></td>
+          <td class="merged-col"><span class="comment-line"># Syslog facility code</span>
+log.syslog.facility=5</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── CHANGE 4: Empty base override ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">log.syslog.option</span>
+        <span class="tag error">Empty Base Override</span>
+        <span style="color:#777;font-size:11px;">Section: [Logging] — review recommended</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (forced empty from Base)</th>
+        </tr>
+        <tr class="error-row">
+          <td class="release-col">log.syslog.option=<span class="changed">3</span></td>
+          <td class="merged-col">log.syslog.option=<span class="changed"></span> ⚠ <em style="color:#b71c1c;">base value is empty — forced empty</em></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── CHANGE 5: Release-only ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">snmp.manager.uri.list</span>
+        <span class="tag rel-only">Release-Only Retained</span>
+        <span style="color:#777;font-size:11px;">Section: [SNMP]</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (retained from Release)</th>
+        </tr>
+        <tr class="relonly-row">
+          <td class="release-col">snmp.manager.uri.list=10.253.87.34:18084</td>
+          <td class="merged-col">snmp.manager.uri.list=10.253.87.34:18084 <em style="color:#888;">(no base entry — kept as-is)</em></td>
+        </tr>
+      </table>
+    </div>
+
+  </div><!-- /file-body -->
+</div><!-- /file-section -->
+
+
+<!-- ══════════════════════════════════════════════════════
+     FILE 2: Indexed Group — scheduler/test1.properties
+═══════════════════════════════════════════════════════════ -->
+<div class="file-section" id="f2">
+  <div class="file-header" onclick="toggle(this)">
+    <span class="chevron">▼</span>
+    <span class="fname">scheduler/test1.properties</span>
+    <div class="paths">
+      <span>Base: base1/test1.properties</span>
+      <span>Release: release/test1.properties</span>
+    </div>
+    <span class="badge">3 changes</span>
+  </div>
+  <div class="file-body">
+
+    <!-- ── schedule.registry union ── -->
+    <div class="change-row first">
+      <div class="change-header">
+        <span class="param-name">schedule.registry</span>
+        <span class="tag group">Indexed Group — Header Union</span>
+        <span style="color:#777;font-size:11px;">Section: [AppScheduler]</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (union of base + release)</th>
+        </tr>
+        <tr>
+          <td class="release-col" style="word-break:break-all;">schedule.registry=com.myapp.app.om.CallbackQueueProcessor,<br>com.myapp.app.om.SMSBroadcastProcessor,<br>...,<br><span class="changed">com.myapp.app.om.NoMessageReceivedQueue,<br>com.myapp.app.om.DistributedScheduledEventPoller</span></td>
+          <td class="merged-col" style="word-break:break-all;">schedule.registry=com.myapp.app.om.CallbackQueueProcessor,<br>com.myapp.app.om.SMSBroadcastProcessor,<br>...,<br><span class="changed">com.myapp.app.om.NoMessageReceivedQueue,<br>com.myapp.app.om.DistributedScheduledEventPoller</span><br><em style="color:#888;font-size:11px;">↑ 5 new entries added from release</em></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── schedule count ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">schedule.count</span>
+        <span class="tag group">Indexed Group — Count Updated</span>
+        <span style="color:#777;font-size:11px;">Section: [AppScheduler]</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config</th>
+        </tr>
+        <tr>
+          <td class="release-col">schedule.count=<span class="changed">11</span></td>
+          <td class="merged-col">schedule.count=<span class="changed">11</span> <em style="color:#888;font-size:11px;">(5 from base + 6 new from release)</em></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── schedule group summary ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">schedule.5 … schedule.11</span>
+        <span class="tag group">Indexed Group — Renumbered + Appended</span>
+        <span style="color:#777;font-size:11px;">Section: [AppScheduler] — Base had 5 groups; Release added 6 new</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config</th>
+        </tr>
+        <!-- base group 5 retained, release group 5 renumbered to 6 -->
+        <tr class="group-header-row">
+          <td colspan="2">▸ Base group 5 retained as schedule.5 (Message Receipt Status Poller)  |  Release group 5 (BackHome Subscribers) renumbered → schedule.6</td>
+        </tr>
+        <tr>
+          <td class="release-col"><span class="comment-line">#BACKHOME SUBSCRIBERS POLLER</span>
+schedule.5.name=BackHome Subscribers Loader
+schedule.5.type=event-creator
+schedule.5.interval=300
+schedule.5.enabled=no</td>
+          <td class="merged-col"><span class="comment-line">#BACKHOME SUBSCRIBERS POLLER</span>
+<span class="changed">schedule.6</span>.name=BackHome Subscribers Loader
+<span class="changed">schedule.6</span>.type=event-creator
+<span class="changed">schedule.6</span>.interval=300
+<span class="changed">schedule.6</span>.enabled=no</td>
+        </tr>
+        <tr class="group-header-row">
+          <td colspan="2">▸ Release groups 6–11 appended as schedule.7–11 (new in this release)</td>
+        </tr>
+        <tr class="group-added">
+          <td class="release-col"><em style="color:#aaa;">(new groups from release, not in base)</em></td>
+          <td class="merged-col" style="background:#f0fff4 !important;"><span class="comment-line">#IdleSubscriberProcessor</span>
+<span class="changed">schedule.7</span>.name=Idle Subscriber Processor
+<span class="changed">schedule.7</span>.type=idle-subs-poller
+…
+<span class="changed">schedule.11</span>.name=EventTrigger Redistribution Doc Handler</td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     FILE 3: XML — config/base.xml
+═══════════════════════════════════════════════════════════ -->
+<div class="file-section" id="f3">
+  <div class="file-header" onclick="toggle(this)">
+    <span class="chevron">▼</span>
+    <span class="fname">config/base.xml</span>
+    <div class="paths">
+      <span>Base: base/config/base.xml</span>
+      <span>Release: release/config/base.xml</span>
+    </div>
+    <span class="badge">3 changes</span>
+  </div>
+  <div class="file-body">
+
+    <!-- ── Namespace adaptation ── -->
+    <div class="change-row first">
+      <div class="change-header">
+        <span class="param-name">XML Namespace Header</span>
+        <span class="tag replaced">Namespace Adapted from Release</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Namespace (used in output)</th>
+          <th class="col-header">Base Namespace (discarded)</th>
+        </tr>
+        <tr class="namespace-row">
+          <td class="release-col"><span class="xml-tag">&lt;pmd</span> <span class="xml-attr">xmlns</span>=<span class="xml-val">"http://www.test.com/adm/<span class="changed">version2</span>"</span>
+  <span class="xml-attr">xsi:schemaLocation</span>=<span class="xml-val">"…test-adm-<span class="changed">v2</span>.xsd"</span><span class="xml-tag">&gt;</span></td>
+          <td class="merged-col"><span class="xml-tag">&lt;pmd</span> <span class="xml-attr">xmlns</span>=<span class="xml-val">"http://www.test.com/adm/<span class="changed">version</span>"</span>
+  <span class="xml-attr">xsi:schemaLocation</span>=<span class="xml-val">"…test-adm<span class="changed"></span>.xsd"</span><span class="xml-tag">&gt;</span>
+  <em style="color:#888;font-size:11px;">↑ release namespace applied to output</em></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── XML element value change ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">&lt;var name="BASE"&gt;</span>
+        <span class="tag replaced">XML Base → Release Replaced</span>
+        <span style="color:#777;font-size:11px;">Path: /pmd/settings/variables/var[@name=BASE]</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (value from Base)</th>
+        </tr>
+        <tr>
+          <td class="release-col"><span class="xml-tag">&lt;settings&gt;</span>
+  <span class="xml-tag">&lt;variables&gt;</span>
+    <span class="xml-tag">&lt;var</span> <span class="xml-attr">name</span>=<span class="xml-val">"BASE"</span> <span class="xml-attr">val</span>=<span class="xml-val">"<span class="changed">/app</span>"</span> <span class="xml-tag">/&gt;</span>
+  <span class="xml-tag">&lt;/variables&gt;</span>
+<span class="xml-tag">&lt;/settings&gt;</span></td>
+          <td class="merged-col"><span class="xml-tag">&lt;settings&gt;</span>
+  <span class="xml-tag">&lt;variables&gt;</span>
+    <span class="xml-tag">&lt;var</span> <span class="xml-attr">name</span>=<span class="xml-val">"BASE"</span> <span class="xml-attr">val</span>=<span class="xml-val">"<span class="changed">/app1</span>"</span> <span class="xml-tag">/&gt;</span>
+  <span class="xml-tag">&lt;/variables&gt;</span>
+<span class="xml-tag">&lt;/settings&gt;</span></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── XML attribute value change with comment diff ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">&lt;process name="app"&gt; → envEntry E_NODE_ID</span>
+        <span class="tag replaced">XML Base → Release Replaced</span>
+        <span class="comment-diff-badge">comment changed</span>
+        <span style="color:#777;font-size:11px;">Path: /pmd/process[@name=app]/envEntry[@var=E_NODE_ID]</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (value from Base)</th>
+        </tr>
+        <tr>
+          <td class="release-col"><span class="xml-comment">&lt;!-- testing release comment1 --&gt;</span> <span class="comment-diff-badge">release comment</span>
+<span class="xml-tag">&lt;process</span> <span class="xml-attr">name</span>=<span class="xml-val">"app"</span>
+    <span class="xml-attr">importSystemEnvironment</span>=<span class="xml-val">"true"</span>
+    <span class="xml-attr">cmd</span>=<span class="xml-val">"./start-app.sh"</span><span class="xml-tag">&gt;</span>
+  <span class="xml-tag">&lt;envEntry</span> <span class="xml-attr">var</span>=<span class="xml-val">"JAVA_XMS_ARG"</span> <span class="xml-attr">val</span>=<span class="xml-val">"1024m"</span><span class="xml-tag">/&gt;</span>
+  <span class="xml-tag">&lt;envEntry</span> <span class="xml-attr">var</span>=<span class="xml-val">"JAVA_XMX_ARG"</span> <span class="xml-attr">val</span>=<span class="xml-val">"1024m"</span><span class="xml-tag">/&gt;</span>
+  <span class="xml-tag">&lt;envEntry</span> <span class="xml-attr">var</span>=<span class="xml-val">"NODE_ID"</span>     <span class="xml-attr">val</span>=<span class="xml-val">"node1"</span><span class="xml-tag">/&gt;</span>
+  <span class="xml-tag">&lt;envEntry</span> <span class="xml-attr">var</span>=<span class="xml-val">"E_NODE_ID"</span>   <span class="xml-attr">val</span>=<span class="xml-val">"<span class="changed">4020</span>"</span><span class="xml-tag">/&gt;</span>
+<span class="xml-tag">&lt;/process&gt;</span></td>
+          <td class="merged-col"><span class="xml-comment">&lt;!-- testing base comment to verify no overwritten --&gt;</span> <span class="comment-diff-badge">base comment</span>
+<span class="xml-tag">&lt;process</span> <span class="xml-attr">name</span>=<span class="xml-val">"app"</span>
+    <span class="xml-attr">importSystemEnvironment</span>=<span class="xml-val">"true"</span>
+    <span class="xml-attr">cmd</span>=<span class="xml-val">"./start-app.sh"</span><span class="xml-tag">&gt;</span>
+  <span class="xml-tag">&lt;envEntry</span> <span class="xml-attr">var</span>=<span class="xml-val">"JAVA_XMS_ARG"</span> <span class="xml-attr">val</span>=<span class="xml-val">"1024m"</span><span class="xml-tag">/&gt;</span>
+  <span class="xml-tag">&lt;envEntry</span> <span class="xml-attr">var</span>=<span class="xml-val">"JAVA_XMX_ARG"</span> <span class="xml-attr">val</span>=<span class="xml-val">"1024m"</span><span class="xml-tag">/&gt;</span>
+  <span class="xml-tag">&lt;envEntry</span> <span class="xml-attr">var</span>=<span class="xml-val">"NODE_ID"</span>     <span class="xml-attr">val</span>=<span class="xml-val">"node1"</span><span class="xml-tag">/&gt;</span>
+  <span class="xml-tag">&lt;envEntry</span> <span class="xml-attr">var</span>=<span class="xml-val">"E_NODE_ID"</span>   <span class="xml-attr">val</span>=<span class="xml-val">"<span class="changed">4021</span>"</span><span class="xml-tag">/&gt;</span>
+<span class="xml-tag">&lt;/process&gt;</span></td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     FILE 4: JSON — config/settings.json
+═══════════════════════════════════════════════════════════ -->
+<div class="file-section" id="f4">
+  <div class="file-header" onclick="toggle(this)">
+    <span class="chevron">▼</span>
+    <span class="fname">config/settings.json</span>
+    <div class="paths">
+      <span>Base: base/config/settings.json</span>
+      <span>Release: release/config/settings.json</span>
+    </div>
+    <span class="badge">3 changes</span>
+  </div>
+  <div class="file-body">
+
+    <!-- ── JSON key replacement ── -->
+    <div class="change-row first">
+      <div class="change-header">
+        <span class="param-name">server.port</span>
+        <span class="tag replaced">JSON Base → Release Replaced</span>
+        <span style="color:#777;font-size:11px;">Path: server.port</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (value from Base)</th>
+        </tr>
+        <tr>
+          <td class="release-col">{
+  <span class="json-key">"server"</span>: {
+    <span class="json-key">"host"</span>: <span class="json-val-str">"localhost"</span>,
+    <span class="json-key">"port"</span>: <span class="json-val-num"><span class="changed">8080</span></span>
+  }
+}</td>
+          <td class="merged-col">{
+  <span class="json-key">"server"</span>: {
+    <span class="json-key">"host"</span>: <span class="json-val-str">"localhost"</span>,
+    <span class="json-key">"port"</span>: <span class="json-val-num"><span class="changed">9090</span></span>
+  }
+}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── JSON release-only key ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">server.timeout</span>
+        <span class="tag rel-only">Release-Only Retained</span>
+        <span style="color:#777;font-size:11px;">Path: server.timeout — not present in base</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Release Config</th>
+          <th class="col-header">Merged Config (retained from Release)</th>
+        </tr>
+        <tr class="relonly-row">
+          <td class="release-col">{
+  <span class="json-key">"server"</span>: {
+    <span class="json-key">"timeout"</span>: <span class="json-val-num">30000</span>
+  }
+}</td>
+          <td class="merged-col">{
+  <span class="json-key">"server"</span>: {
+    <span class="json-key">"timeout"</span>: <span class="json-val-num">30000</span>
+  }
+}
+<em style="color:#888;font-size:11px;">(key not in base — kept from release)</em></td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ── JSON duplicate key ── -->
+    <div class="change-row">
+      <div class="change-header">
+        <span class="param-name">database.pool.size</span>
+        <span class="tag duplicate">Duplicate Key Detected</span>
+        <span style="color:#777;font-size:11px;">Path: database.pool.size — appeared twice in base; last value used</span>
+      </div>
+      <table class="diff-table">
+        <tr>
+          <th class="col-header release">Duplicate Occurrences in Base</th>
+          <th class="col-header">Merged Config (last value used)</th>
+        </tr>
+        <tr class="error-row">
+          <td class="release-col"><span class="json-key">"pool"</span>: {
+  <span class="json-key">"size"</span>: <span class="json-val-num">10</span>   ← <em>1st occurrence (ignored)</em>
+}
+…
+<span class="json-key">"pool"</span>: {
+  <span class="json-key">"size"</span>: <span class="json-val-num">20</span>   ← <em>2nd occurrence (used)</em>
+}</td>
+          <td class="merged-col"><span class="json-key">"pool"</span>: {
+  <span class="json-key">"size"</span>: <span class="json-val-num"><span class="changed">20</span></span>
+}
+⚠ <em style="color:#b71c1c;">Duplicate key — review base config</em></td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+
+<footer>Generated by ConfigMergeTool &mdash; 2026-04-01 11:42 &mdash; <em>sample preview</em></footer>
+
+<script>
+  function toggle(header) {
+    header.closest('.file-section').classList.toggle('collapsed');
+  }
+  var allCollapsed = false;
+  function toggleAll() {
+    allCollapsed = !allCollapsed;
+    document.querySelectorAll('.file-section').forEach(function(s) {
+      s.classList.toggle('collapsed', allCollapsed);
+    });
+    document.querySelector('.expand-all').textContent = allCollapsed ? 'Expand All' : 'Collapse All';
+  }
+</script>
+</body>
+</html>
