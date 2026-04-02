@@ -81,6 +81,7 @@ class MergeConfig:
     exclude_base_only: bool = False
     dry_run: bool = False
     verbose: bool = False
+    three_way_diff: bool = True    # always-on: 3-way Base|Release|Output diff in HTML
 
     def __post_init__(self) -> None:
         errors: List[str] = []
@@ -193,10 +194,12 @@ class MergeResult:
     multi_base_mappings: List[Tuple[str, List[str]]] = field(default_factory=list)
     excluded_params: List[ReportEntry] = field(default_factory=list)
     failed_files: List[FileProcessResult] = field(default_factory=list)
-    # Full file contents for HTML "Show Full Config" diff view
-    # Diff direction: release (before merge) → output (after merge)
+    # Full file contents for HTML diff views
+    # 2-way diff:  release (before merge) → output (after merge)
+    # 3-way diff:  base | release | output
     output_contents:  Dict[str, str] = field(default_factory=dict)  # rel_file → merged output text
     release_contents: Dict[str, str] = field(default_factory=dict)  # rel_file → original release text
+    base_contents:    Dict[str, str] = field(default_factory=dict)  # rel_file → original base text
     # Which BaseDirConfig produced this result
     base_name: str = ""
     base_dir: str = ""

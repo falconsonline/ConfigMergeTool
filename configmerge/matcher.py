@@ -82,6 +82,7 @@ class FileMatcher:
         if not path:
             return
         base_name = os.path.basename(self.base_dir)
+        base_dir_norm = os.path.normpath(self.base_dir)
         with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -90,7 +91,11 @@ class FileMatcher:
                 norm = os.path.normpath(line)
                 if os.path.isabs(norm):
                     rel = os.path.relpath(norm, self.base_dir)
+                elif norm.startswith(base_dir_norm + os.sep):
+                    # full base_dir prefix: singtel/Singtel-APP-01/config/file.xml
+                    rel = os.path.relpath(norm, base_dir_norm)
                 elif norm.startswith(base_name + os.sep):
+                    # base dir name prefix: Singtel-APP-01/config/file.xml
                     rel = norm.split(os.sep, 1)[1]
                 else:
                     rel = norm

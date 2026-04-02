@@ -104,17 +104,30 @@ All fields except `base_dir` are optional. `name` defaults to the directory's fo
 
 **`--mapping-file` format:**
 ```
-base/config/old-name.cfg=release/config/new-name.properties
-base/config/db-primary.xml=release/config/database.xml
-base/config/db-replica.xml=release/config/database.xml
+# Paths are relative to the working directory (preferred).
+base/config/fsmapp.cfg = release/config/app.properties
+base/config/db-primary.xml = release/config/database.xml
+base/config/db-replica.xml = release/config/database.xml
 ```
+
+Path resolution for the base side (checked in order):
+1. Full path from working directory: `base_dir/subdir/file.cfg`  ← preferred
+2. Base dir name prefix: `base_dirname/subdir/file.cfg`
+3. Bare path relative to within base dir: `subdir/file.cfg`  ← legacy, still accepted
+
 Many-to-One is supported: multiple base paths can map to one release path.
 
 **`--copy-baseonlyconfigfile` format:**
 ```
+# Paths are relative to the working directory (preferred).
 base/config/ssl/server.keystore
 base/config/licence.dat
 ```
+
+Path resolution (checked in order):
+1. Full path from working directory: `base_dir/subdir/file`  ← preferred
+2. Base dir name prefix: `base_dirname/subdir/file`
+3. Bare path relative to within base dir: `subdir/file`  ← legacy, still accepted
 
 ---
 
@@ -146,6 +159,7 @@ base/config/licence.dat
 | F-08 | Path traversal guard | Paths from mapping and copy-only files are canonicalised with `os.path.realpath`; must remain within `base_dir` |
 | F-09 | Output dir cleanup | Output dir is removed and recreated before each run (skipped in `--dry-run`) |
 | F-10 | Release-only detection | Release files with no base counterpart are noted in the ReleaseOnlyFiles Excel sheet |
+| F-11 | Flexible path format | Both mapping-file and copy-only-file accept full working-directory paths (`base_dir/path`), base-dir-name-prefixed paths (`basename/path`), or bare paths (`path`); all resolve to the same internal relative path |
 
 ---
 
@@ -167,23 +181,30 @@ base/config/licence.dat
 Handles: `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`
 
 **Parser — `KVDocument`:**
-- Section-aware (`[section]` headers tracked; global keys go in a default section)
-- Each key captures: value, comment lines above it, whether it is currently commented-out, delimiter (`=` or `:`)
-- Detects duplicate `section|key` pairs; last value wins; all logged as `DUPLICATE_KEY`
+- Section-aware (`[section]` headers tracked; global keys go in `DEFAULT` section)
+- Shadow sections: a line like `#[SectionName]` (entire section header commented out) is parsed as its own section keyed `#[SectionName]`; during merge it is reconciled with the corresponding active section from release
+- Each entry captures: key, value, comment lines above it, whether it is commented-out (`is_commented`), delimiter (`=` or `:`), and the original raw line
+- `lookup` dict maps `section|key` → entry; active entries always win over commented entries in lookup
+- Duplicate tracking: only **active** entries counted; commented entries (annotations) alongside active entries are never flagged as duplicates
 
 | ID | Feature | Behaviour |
 |---|---|---|
-| K-01 | Base value wins | For keys in both base and release, the base value is used in output |
+| K-01 | Base value wins | For keys in both base and release (both active), the base value is used in output |
 | K-02 | Comment preservation | Comment/blank lines immediately preceding a key are re-emitted with the key |
 | K-03 | Comment source preference | If both files have a comment for the same key and they differ, the release comment is used in output |
-| K-04 | Commented-out key handling | If a release key is commented out (`# key=value`) but base has a value for it, the key is uncommented and set to the base value; reported as `UNCOMMENT_REPLACE` |
-| K-05 | Base-only insertion | Keys in base absent from release are inserted into the matching section in output; reported as `BASE_ONLY_PARAMETER_ADDED` |
+| K-04 | Commented-out key handling | If a release key is commented out (`# key=value`) but base has an active value for it, the key is uncommented and set to the base value; reported as `UNCOMMENT_REPLACE` |
+| K-05 | Base-only insertion | Keys in base (active) absent from release are inserted into the matching section in output; reported as `BASE_ONLY_PARAMETER_ADDED` |
 | K-06 | Release-only preservation | Keys in release absent from base are kept in output; reported as `RELEASE_ONLY_PARAMETER_ADDED` |
 | K-07 | Exclude flag | `--exclude-params-in-baseonlyconfig` suppresses K-05; excluded params logged as `EXCLUDED_BASE_ONLY_PARAMETER` |
 | K-08 | Empty base override | If the base value is blank/empty, the release value is forced blank; logged as `EMPTY_BASE_OVERRIDE` (requires review) |
 | K-09 | Indexed group handling | Keys matching `prefix.N.subkey` (e.g. `schedule.1.name`) are detected as indexed groups; base groups retained in order; release-only groups appended with renumbered indices; `prefix.count` updated to final total |
 | K-10 | Comma-value union | Group header params with comma-separated values (e.g. `schedule.registry`) get a union of base + release values |
-| K-11 | Duplicate key detection | Multiple occurrences of the same `section|key` in base are reported as `DUPLICATE_KEY` |
+| K-11 | Active duplicate detection | Multiple **active** occurrences of the same `section|key` in the release file are reported as `DUPLICATE_KEY`; base duplicates are resolved silently (last-wins) and not reported |
+| K-12 | Shadow section handling | If base has `#[SectionName]` (entire section commented out) and release has active `[SectionName]`, output entries keep the base comment-state (all remain commented); base wins on comment-state |
+| K-13 | Pre-annotation preservation | A commented entry `#key=old` that appears before the first active `key=new` in release is emitted verbatim immediately before the merged active entry |
+| K-14 | Post-annotation preservation | A commented entry `#key=alt` that appears after the active `key=val` in release is emitted verbatim after the active entry in output; these are "alternative value" comments (e.g. `#event.list=UCGDMLS`) and must not be suppressed |
+| K-15 | Section interleaving | Base-only sections are interleaved at their natural relative position from the base file order — they appear immediately before the release section that follows them in base, not appended at end |
+| K-16 | Release spine ordering | The combined output walks the release file in order; all base-only insertions (params and sections) are anchored to their nearest successor in the release spine |
 
 ---
 
@@ -280,16 +301,18 @@ No internet connection required; no external JS or CSS dependencies.
 
 **Sidebar:**
 - Tree mirrors the output directory structure
-- Click any file to jump to its section and highlight it
+- Click any file to jump to its section; the file header is scrolled into view so "Show Full Config" and "3-Way Diff" buttons are immediately accessible without further scrolling
+- `scroll-margin-top` on `.file-hdr` accounts for sticky page header and toolbar so the file header lands below fixed elements
 - Search box filters the file list by name
 - Multi-base: sidebar has one top-level group per base name
 - Directories are collapsible
 
 **File sections:**
 - Click header to expand/collapse
-- "Show Full Config" button toggles between:
+- **"Show Full Config"** button toggles between:
   - **Changes-only view**: each changed parameter with release vs merged values side-by-side
   - **Full Config Diff**: entire file shown in two-column layout — Release (left) vs Merged Output (right)
+- **"3-Way Diff"** button: three-column view — Base (left) vs Release (centre) vs Merged Output (right)
 
 **Full Config Diff colour coding:**
 
@@ -309,6 +332,11 @@ No internet connection required; no external JS or CSS dependencies.
 | Orange tag | RELEASE_ONLY_PARAMETER_ADDED — kept from release |
 | Red tag | EMPTY_BASE_OVERRIDE / DUPLICATE_KEY / errors |
 
+**Duplicate Key rows:**
+- Only duplicates found in the **release** file are shown (base duplicates are resolved silently)
+- Left column shows: "Duplicate key in release config: \<all values\> → last value used: \<final\>"
+- Right column shows the merged value with a warning badge
+
 **Legend bar (fixed bottom):**
 - Always visible regardless of scroll position
 - Two sections: Change Row colours and Full Config Diff colours
@@ -318,7 +346,7 @@ No internet connection required; no external JS or CSS dependencies.
 - All Changes, Empty Override, Base-Only, Release-Only — filter visible change rows
 - Collapse All / Expand All — toggle all file sections
 
-**JavaScript:** Pure vanilla JS (~80 lines); no external libraries.
+**JavaScript:** Pure vanilla JS; no external libraries.
 
 ---
 
@@ -373,7 +401,7 @@ zip -r run_20260401_143022.zip reports/run_20260401_143022/
 | `EMPTY_BASE_OVERRIDE_XML` | **Red/ERROR** | XML: base element empty — release element forced empty; review required |
 | `JSON_EMPTY_BASE_OVERRIDE` | **Red/ERROR** | JSON: base value `""` — release value forced `""`; review required |
 | `LOGROTATE_EMPTY_BASE_OVERRIDE` | **Red/ERROR** | Logrotate: base file blank — output forced empty; review required |
-| `DUPLICATE_KEY` | **Red** | Duplicate key/element in base file; last value used |
+| `DUPLICATE_KEY` | **Red** | Duplicate active key in **release** file; last value used |
 | `INVALID_JSON` | **Red** | Input file contains invalid JSON; file skipped |
 | `INVALID_OUTPUT_JSON` | **Red** | Merged JSON failed re-validation; output discarded |
 | `FILE_MAPPING` | Normal | Explicit file mapping from `--mapping-file` applied |
@@ -388,9 +416,18 @@ zip -r run_20260401_143022.zip reports/run_20260401_143022/
 
 | Date | Change |
 |---|---|
+| 2026-04-02 | Duplicate key reporting: only release-file duplicates surfaced; base duplicates resolved silently (last-wins) without user-visible noise |
+| 2026-04-02 | Duplicate detection: commented entries (`#key=val`) alongside active entries treated as annotations and never counted as duplicates |
+| 2026-04-02 | HTML: sidebar click scrolls to file header (not section body); `scroll-margin-top` on `.file-hdr` accounts for sticky page header; "Show Full Config" and "3-Way Diff" buttons immediately visible |
+| 2026-04-02 | Copy-only and mapping file path format: now uses full working-directory path (`base_dir/subdir/file`) as preferred format; base-dir-name prefix and bare path still accepted for backward compatibility |
+| 2026-04-02 | Shadow section support: `#[SectionName]` in base (entire section commented out) correctly merged with active `[SectionName]` in release; all output entries keep base comment-state (base wins) |
+| 2026-04-02 | Post-annotation preservation: commented alternatives after an active key (e.g. `#event.list=UCGDMLS` after `event.list=UCM`) emitted verbatim after the active entry |
+| 2026-04-02 | Pre-annotation preservation: `#key=old` before active `key=new` in release emitted verbatim before the merged active entry |
+| 2026-04-02 | Section interleaving: base-only sections inserted at correct relative positions (before their successor release section) rather than appended at end |
 | 2026-04-01 | Fixed bottom legend bar with hover tooltips; always visible regardless of scroll position |
 | 2026-04-01 | All run artifacts (log, Excel, HTML) consolidated into one `reports/run_YYYYMMDD_HHMMSS/` directory per run |
 | 2026-04-01 | Full Config Diff corrected to release ↔ output direction (was base ↔ output); two-column side-by-side layout |
+| 2026-04-01 | 3-Way Diff view added: base ↔ release ↔ merged output in three columns per file section |
 | 2026-04-01 | Multi-base execution: `--base-config-file` JSON option; independent pass per node; per-base output subdirs; combined HTML |
 | 2026-04-01 | HTML sidebar: collapsible file-system tree, file search, click-to-navigate, multi-base grouping |
 | 2026-04-01 | "Show Full Config" toggle per file section; shows complete merged file with diff highlights |

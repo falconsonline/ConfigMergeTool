@@ -165,6 +165,10 @@ class MergeEngine:
         for file_match in matcher.matches:
             if not file_match.base_paths or file_match.ambiguous:
                 continue
+            # Skip files designated as copy-only — already copied above;
+            # processing them here would overwrite the direct copy with a merge.
+            if any(bp in matcher.copy_only for bp in file_match.base_paths):
+                continue
 
             rel_file = self._resolve_rel_abs(file_match.rel_path, config.release_dirs)
             if not rel_file:
@@ -213,8 +217,7 @@ class MergeEngine:
             for bp in file_match.base_paths:
                 result.base_only_files.discard(bp)
 
-            # Store release + merged output content for HTML "Show Full Config" diff view.
-            # Diff direction: release (before merge) → output (after merge).
+            # Store file contents for HTML diff views.
             # Key = rel_file (must match entry.file set by processors).
             # On dry-run, use the release file as the output proxy (nothing was written).
             content_source = out_file if (not config.dry_run and os.path.exists(out_file)) else rel_file
@@ -228,6 +231,13 @@ class MergeEngine:
                     result.release_contents[rel_file] = f.read()
             except Exception:
                 pass
+            # Base content — first matched base file; used for 3-way diff view.
+            if base_files:
+                try:
+                    with open(base_files[0], encoding="utf-8-sig") as f:
+                        result.base_contents[rel_file] = f.read()
+                except Exception:
+                    pass
 
         # ── Per-base Excel report ────────────────────────────────────────
         xlsx_path = write_excel(result, base_config, base_report_dir, bdc.name)

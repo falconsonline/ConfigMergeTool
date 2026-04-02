@@ -108,7 +108,8 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;
 .file-section { margin: 14px 24px; border: 1px solid #dde3ed;
                 border-radius: 6px; background: #fff; overflow: hidden; }
 .file-hdr { background: #eef2f8; padding: 10px 14px; cursor: pointer;
-            display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            scroll-margin-top: 160px; }
 .file-hdr:hover { background: #e3e9f4; }
 .file-hdr .fname { font-weight: 600; font-size: 13px; color: #1e2a3a; flex: 1;
                    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -232,6 +233,59 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;
 .fcl-col-hdr  { padding: 5px 48px; }
 .fcl-col-hdr.left { border-right: 2px solid #dde3ed; }
 
+/* ── THREE-WAY DIFF ──────────────────────────── */
+/* Hidden feature: Base | Release | Output side-by-side */
+.three-way-btn { padding: 3px 10px; border: 1px solid #b0bac8; border-radius: 4px;
+                 background: #eef2f8; cursor: pointer; font-size: 11px; color: #444;
+                 flex-shrink: 0; }
+.three-way-btn:hover { background: #dde5f0; }
+.three-way-btn.active { background: #5a3fa0; color: #fff; border-color: #5a3fa0; }
+.three-way-view { /* starts hidden via inline style */ }
+.tdw-col-hdrs { display: grid; grid-template-columns: 1fr 1fr 1fr;
+                font-size: 10px; font-weight: 600; color: #555;
+                text-transform: uppercase; letter-spacing: .4px;
+                background: #f0f2f6; border-bottom: 1px solid #dde3ed; }
+.tdw-col-hdr  { padding: 5px 48px; }
+.tdw-col-hdr.left, .tdw-col-hdr.mid { border-right: 2px solid #dde3ed; }
+.tdw-cols { display: grid; grid-template-columns: 1fr 1fr 1fr;
+            border-top: 1px solid #eef0f4; min-width: 0; }
+.tdw-cols:first-child { border-top: none; }
+.tdw-cols:hover .tdw-cell { filter: brightness(0.97); }
+.tdw-pane  { display: flex; min-width: 0; overflow: hidden; }
+.tdw-pane.left, .tdw-pane.mid { border-right: 2px solid #dde3ed; }
+.tdw-lno  { flex-shrink: 0; width: 38px; padding: 0 6px; text-align: right;
+            color: #aaa; border-right: 1px solid #dde3ed; background: #f0f2f6;
+            user-select: none; font-size: 11px; line-height: 1.7; }
+.tdw-cell { flex: 1; padding: 0 10px; white-space: pre-wrap; word-break: break-all;
+            line-height: 1.7; min-width: 0; }
+/* Equal — identical in all three */
+.tdw-equal .tdw-cell { background: #fff; }
+.tdw-equal .tdw-lno  { background: #f0f2f6; }
+/* Base won — base value used in output; release had a different value */
+.tdw-base-won .tdw-cell         { background: #fffbdd; }
+.tdw-base-won .tdw-lno          { background: #f5e97a; border-right-color: #d4a900; color: #7a6500; }
+.tdw-base-won .mid .tdw-cell    { background: #fff3cd; color: #7a5000; text-decoration: line-through; }
+/* Release kept — release value used in output; base had a different value */
+.tdw-rel-kept .tdw-cell         { background: #eef6ff; }
+.tdw-rel-kept .tdw-lno          { background: #c8e0ff; border-right-color: #5a9ef8; color: #1a4f9a; }
+.tdw-rel-kept .left .tdw-cell   { background: #e8edf5; color: #888; font-style: italic; }
+/* Deleted — in base/release but not carried to output */
+.tdw-deleted .tdw-cell          { background: #fff0f0; color: #c62828; text-decoration: line-through; }
+.tdw-deleted .tdw-lno           { background: #ffbbbb; border-right-color: #f55; color: #c62828; }
+.tdw-deleted .right .tdw-cell   { background: #f9fafc; color: #bbb; font-style: italic; text-decoration: none; }
+.tdw-deleted .right .tdw-lno    { background: #f0f2f6; color: #aaa; }
+/* Added in output only — not in base or release */
+.tdw-out-only .tdw-cell         { background: #eaffed; }
+.tdw-out-only .tdw-lno          { background: #a6f0b0; border-right-color: #4caf6a; color: #1a6e32; }
+.tdw-out-only .left .tdw-cell,
+.tdw-out-only .mid  .tdw-cell   { background: #f9fafc; color: #bbb; font-style: italic; }
+/* Conflict — all three differ (rare) */
+.tdw-conflict .tdw-cell         { background: #fff3e0; }
+.tdw-conflict .right .tdw-cell  { font-weight: bold; background: #ffeacc; }
+.tdw-conflict .tdw-lno          { background: #ffd180; border-right-color: #e65100; color: #7a3200; }
+/* Blank placeholder pane */
+.tdw-blank { background: #f5f6f8 !important; }
+
 /* ── XML SYNTAX ──────────────────────────────── */
 .xml-tag  { color: #0070c0; }
 .xml-attr { color: #2e7d32; }
@@ -242,6 +296,36 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;
 .jk  { color: #0070c0; }
 .jvs { color: #2e7d32; }
 .jvn { color: #e65100; }
+
+/* ── REFERENCE SECTIONS ──────────────────────── */
+.ref-divider { margin: 4px 24px 0; padding: 12px 0 4px;
+               font-size: 11px; font-weight: 700; color: #667;
+               text-transform: uppercase; letter-spacing: .6px;
+               border-top: 2px solid #dde3ed; }
+.ref-section { margin: 8px 24px; border: 1px solid #dde3ed;
+               border-radius: 6px; background: #fff; overflow: hidden; }
+.ref-hdr { background: #f4f6f9; padding: 9px 14px; cursor: pointer;
+           display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ref-hdr:hover { background: #eaecf4; }
+.ref-hdr .ref-title { font-weight: 600; font-size: 13px; color: #1e2a3a; flex: 1; }
+.ref-hdr .ref-sub   { font-size: 11px; color: #778; flex-basis: 100%; padding-left: 18px; }
+.ref-hdr .ref-badge { font-size: 11px; background: #546e8a; color: #fff;
+                      border-radius: 10px; padding: 2px 9px; flex-shrink: 0; }
+.ref-section.collapsed .ref-body { display: none; }
+.ref-section.collapsed .chevron  { transform: rotate(-90deg); }
+.ref-body { padding: 0; overflow-x: auto; }
+.ref-empty { padding: 12px 16px; color: #999; font-style: italic; font-size: 12px; }
+.ref-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ref-table th { padding: 7px 14px; background: #f4f6f9; font-size: 11px;
+                color: #555; text-align: left; border-bottom: 1px solid #dde3ed;
+                font-weight: 600; text-transform: uppercase; letter-spacing: .4px;
+                white-space: nowrap; }
+.ref-table td { padding: 6px 14px; border-bottom: 1px solid #f0f2f6;
+                font-family: 'Courier New', monospace; word-break: break-all; }
+.ref-table tr:last-child td { border-bottom: none; }
+.ref-table tr:hover td { background: #f9fafc; }
+.ref-table .td-base { color: #546e8a; font-size: 11px; white-space: nowrap; }
+.ref-table .td-val  { color: #555; font-family: 'Segoe UI', Arial, sans-serif; }
 
 /* ── FOOTER ──────────────────────────────────── */
 footer { text-align: center; padding: 18px 18px 72px; font-size: 11px; color: #aaa; margin-top: 10px; }
@@ -320,8 +404,8 @@ function toggleFullConfig(btn, fileId) {
   if (!section) return;
   var changesView = section.querySelector('.changes-view');
   var fullView    = section.querySelector('.full-cfg-view');
+  var threeWay    = section.querySelector('.three-way-view');
   if (!fullView) return;
-  /* Use computed style so the CSS-driven initial display:none is detected */
   var showingFull = window.getComputedStyle(fullView).display !== 'none';
   if (showingFull) {
     fullView.style.display    = 'none';
@@ -331,6 +415,34 @@ function toggleFullConfig(btn, fileId) {
   } else {
     fullView.style.display    = 'block';
     changesView.style.display = 'none';
+    if (threeWay) threeWay.style.display = 'none';
+    var tdwBtn = section.querySelector('.three-way-btn');
+    if (tdwBtn) { tdwBtn.textContent = '3-Way Diff'; tdwBtn.classList.remove('active'); }
+    btn.textContent = 'Show Changes Only';
+    btn.classList.add('active');
+  }
+}
+
+/* ── Three-way diff toggle ────────────────────── */
+function toggleThreeWay(btn, fileId) {
+  var section = document.getElementById(fileId);
+  if (!section) return;
+  var changesView = section.querySelector('.changes-view');
+  var fullView    = section.querySelector('.full-cfg-view');
+  var threeWay    = section.querySelector('.three-way-view');
+  if (!threeWay) return;
+  var showing = window.getComputedStyle(threeWay).display !== 'none';
+  if (showing) {
+    threeWay.style.display    = 'none';
+    changesView.style.display = '';
+    btn.textContent = '3-Way Diff';
+    btn.classList.remove('active');
+  } else {
+    threeWay.style.display    = 'block';
+    changesView.style.display = 'none';
+    if (fullView) fullView.style.display = 'none';
+    var fcBtn = section.querySelector('.full-cfg-btn');
+    if (fcBtn) { fcBtn.textContent = 'Show Full Config'; fcBtn.classList.remove('active'); }
     btn.textContent = 'Show Changes Only';
     btn.classList.add('active');
   }
@@ -341,12 +453,18 @@ function selectFile(fileId) {
   var section = document.getElementById(fileId);
   if (!section) return;
   section.classList.remove('collapsed');
-  section.scrollIntoView({behavior: 'smooth', block: 'start'});
   document.querySelectorAll('.tree-file').forEach(function(el) {
     el.classList.remove('active');
   });
   var item = document.querySelector('.tree-file[data-fid="' + fileId + '"]');
   if (item) item.classList.add('active');
+  // Scroll to the file-hdr (not the section body) after the browser has
+  // applied the uncollapse layout change, accounting for sticky headers
+  // via scroll-margin-top on .file-hdr.
+  requestAnimationFrame(function() {
+    var hdr = section.querySelector('.file-hdr') || section;
+    hdr.scrollIntoView({behavior: 'smooth', block: 'start'});
+  });
 }
 
 /* ── Sidebar: filter files by name ───────────── */
@@ -360,6 +478,11 @@ function filterSidebarFiles(val) {
 /* ── Sidebar: toggle directory ────────────────── */
 function toggleDir(id) {
   document.getElementById(id).classList.toggle('closed');
+}
+
+/* ── Reference section toggle ─────────────────── */
+function toggleRef(hdr) {
+  hdr.closest('.ref-section').classList.toggle('collapsed');
 }
 """
 
@@ -572,6 +695,149 @@ def _render_full_config_diff(output_content: str, release_content: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Three-way diff renderer  (Base | Release | Output)   — hidden feature
+# ---------------------------------------------------------------------------
+
+def _render_three_way_diff(base_content: str, release_content: str,
+                           output_content: str) -> str:
+    """
+    Three-column diff: Base (production) | Release (new release) | Merged Output.
+
+    Colour coding on .tdw-cols rows:
+      • tdw-equal    — identical in all three
+      • tdw-base-won — base value used in output; release had a different value
+      • tdw-rel-kept — release value kept in output; base had a different value
+      • tdw-deleted  — line in base/release not carried to output
+      • tdw-out-only — line only in output (neither base nor release had it)
+      • tdw-conflict — all three differ (rare)
+    """
+    bl = base_content.splitlines()    if base_content    else []
+    rl = release_content.splitlines() if release_content else []
+    ol = output_content.splitlines()  if output_content  else []
+
+    # --- Build output-indexed maps: what was in base/release at each output line ---
+    base_at:     Dict[int, str] = {}   # out_idx → base text
+    base_lno_at: Dict[int, int] = {}   # out_idx → 1-based base line number
+    base_del:    Dict[int, List[Tuple[int, str]]] = {}  # before out_idx → [(lno, text)]
+
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(
+            None, bl, ol, autojunk=False).get_opcodes():
+        if tag == "equal":
+            for k in range(i2 - i1):
+                base_at[j1 + k]     = bl[i1 + k]
+                base_lno_at[j1 + k] = i1 + k + 1
+        elif tag == "replace":
+            for k in range(j2 - j1):
+                if i1 + k < i2:
+                    base_at[j1 + k]     = bl[i1 + k]
+                    base_lno_at[j1 + k] = i1 + k + 1
+        elif tag == "delete":
+            base_del.setdefault(j1, []).extend(
+                (i1 + k + 1, bl[i1 + k]) for k in range(i2 - i1)
+            )
+
+    rel_at:     Dict[int, str] = {}
+    rel_lno_at: Dict[int, int] = {}
+    rel_del:    Dict[int, List[Tuple[int, str]]] = {}
+
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(
+            None, rl, ol, autojunk=False).get_opcodes():
+        if tag == "equal":
+            for k in range(i2 - i1):
+                rel_at[j1 + k]     = rl[i1 + k]
+                rel_lno_at[j1 + k] = i1 + k + 1
+        elif tag == "replace":
+            for k in range(j2 - j1):
+                if i1 + k < i2:
+                    rel_at[j1 + k]     = rl[i1 + k]
+                    rel_lno_at[j1 + k] = i1 + k + 1
+        elif tag == "delete":
+            rel_del.setdefault(j1, []).extend(
+                (i1 + k + 1, rl[i1 + k]) for k in range(i2 - i1)
+            )
+
+    # --- Helpers ---
+    def _pane(side: str, lno, text: str) -> str:
+        return (
+            f'<div class="tdw-pane {side}">'
+            f'<span class="tdw-lno">{lno}</span>'
+            f'<span class="tdw-cell">{_esc(text)}</span>'
+            f'</div>'
+        )
+
+    def _blank(side: str) -> str:
+        return (
+            f'<div class="tdw-pane {side}">'
+            f'<span class="tdw-lno"></span>'
+            f'<span class="tdw-cell tdw-blank"></span>'
+            f'</div>'
+        )
+
+    def _row(css: str, left: str, mid: str, right: str) -> str:
+        return f'<div class="tdw-cols {css}">{left}{mid}{right}</div>'
+
+    # --- Build rows ---
+    rows: List[str] = []
+    out_lno = 0
+
+    for j, out_line in enumerate(ol):
+        # Emit deleted-from-base / deleted-from-release lines before this output pos
+        bd = base_del.get(j, [])
+        rd = rel_del.get(j, [])
+        for k in range(max(len(bd), len(rd))):
+            lp = _pane("left", bd[k][0], bd[k][1]) if k < len(bd) else _blank("left")
+            mp = _pane("mid",  rd[k][0], rd[k][1]) if k < len(rd) else _blank("mid")
+            rows.append(_row("tdw-deleted", lp, mp, _blank("right")))
+
+        out_lno += 1
+        b_text = base_at.get(j)
+        r_text = rel_at.get(j)
+        b_lno  = base_lno_at.get(j, "")
+        r_lno  = rel_lno_at.get(j, "")
+
+        # Classify
+        if b_text == out_line and r_text == out_line:
+            css = "tdw-equal"
+        elif b_text == out_line:          # base value used; release differed (or absent)
+            css = "tdw-base-won"
+        elif r_text == out_line:          # release value kept; base differed (or absent)
+            css = "tdw-rel-kept"
+        elif b_text is None and r_text is None:
+            css = "tdw-out-only"          # present only in output
+        else:
+            css = "tdw-conflict"          # all three differ
+
+        lp = _pane("left", b_lno, b_text) if b_text is not None else _blank("left")
+        mp = _pane("mid",  r_lno, r_text) if r_text is not None else _blank("mid")
+        rp = _pane("right", out_lno, out_line)
+        rows.append(_row(css, lp, mp, rp))
+
+    # Trailing deleted lines after last output line
+    j = len(ol)
+    bd = base_del.get(j, [])
+    rd = rel_del.get(j, [])
+    for k in range(max(len(bd), len(rd))):
+        lp = _pane("left", bd[k][0], bd[k][1]) if k < len(bd) else _blank("left")
+        mp = _pane("mid",  rd[k][0], rd[k][1]) if k < len(rd) else _blank("mid")
+        rows.append(_row("tdw-deleted", lp, mp, _blank("right")))
+
+    col_hdrs = (
+        '<div class="tdw-col-hdrs">'
+        '<div class="tdw-col-hdr left">Base (production)</div>'
+        '<div class="tdw-col-hdr mid">Release (new release)</div>'
+        '<div class="tdw-col-hdr right">Merged Output</div>'
+        '</div>'
+    )
+
+    return (
+        col_hdrs +
+        '<div class="full-cfg-pre">' +
+        "".join(rows) +
+        '</div>'
+    )
+
+
+# ---------------------------------------------------------------------------
 # Per-change-type row builders  (unchanged from previous version)
 # ---------------------------------------------------------------------------
 
@@ -663,9 +929,10 @@ def _render_empty_override(entry: ReportEntry) -> str:
 
 
 def _render_duplicate(entry: ReportEntry) -> str:
-    rel = f'Duplicates found:\n{_esc(entry.old)}\n→ last value used: {_esc(entry.new)}'
+    rel = (f'Duplicate key in release config:\n'
+           f'{_esc(entry.old)}\n→ last value used: {_esc(entry.new)}')
     mrg = (f'{_esc(entry.element)}={_esc(entry.new)}\n'
-           f'⚠ <em style="color:#b71c1c;">Duplicate key — review config</em>')
+           f'⚠ <em style="color:#b71c1c;">Duplicate key in release — review config</em>')
     tag = _tag_html("dup", "Duplicate Key")
     hdr = _chg_header(entry.element, tag)
     return hdr + _two_col_table(rel, mrg, row_class="error-row")
@@ -974,6 +1241,32 @@ def _sidebar_html(
         f'</div>'
     )
 
+    ref_nav = (
+        '<div class="sidebar-title" style="margin-top:6px">Reference</div>'
+        '<div style="padding:4px 0 6px">'
+        '<div class="tree-file" style="padding:5px 14px" '
+        'onclick="document.getElementById(\'ref-base-only-files\').classList.remove(\'collapsed\'); '
+        'document.getElementById(\'ref-base-only-files\').scrollIntoView({behavior:\'smooth\',block:\'start\'})">'
+        '<span class="fn">Base-Only Files</span></div>'
+        '<div class="tree-file" style="padding:5px 14px" '
+        'onclick="document.getElementById(\'ref-rel-only-files\').classList.remove(\'collapsed\'); '
+        'document.getElementById(\'ref-rel-only-files\').scrollIntoView({behavior:\'smooth\',block:\'start\'})">'
+        '<span class="fn">Release-Only Files</span></div>'
+        '<div class="tree-file" style="padding:5px 14px" '
+        'onclick="document.getElementById(\'ref-file-mappings\').classList.remove(\'collapsed\'); '
+        'document.getElementById(\'ref-file-mappings\').scrollIntoView({behavior:\'smooth\',block:\'start\'})">'
+        '<span class="fn">File Mappings</span></div>'
+        '<div class="tree-file" style="padding:5px 14px" '
+        'onclick="document.getElementById(\'ref-excl-params\').classList.remove(\'collapsed\'); '
+        'document.getElementById(\'ref-excl-params\').scrollIntoView({behavior:\'smooth\',block:\'start\'})">'
+        '<span class="fn">Excluded Parameters</span></div>'
+        '<div class="tree-file" style="padding:5px 14px" '
+        'onclick="document.getElementById(\'ref-copy-only\').classList.remove(\'collapsed\'); '
+        'document.getElementById(\'ref-copy-only\').scrollIntoView({behavior:\'smooth\',block:\'start\'})">'
+        '<span class="fn">Files Copied As-Is</span></div>'
+        '</div>'
+    )
+
     return (
         f'<div class="sidebar">'
         f'<div class="sidebar-title">Files</div>'
@@ -981,7 +1274,170 @@ def _sidebar_html(
         f'<input type="text" placeholder="Filter files&#8230;" '
         f'oninput="filterSidebarFiles(this.value)"></div>'
         f'{tree_html}'
+        f'{ref_nav}'
         f'</div>'
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reference sections (Base-Only Files, Release-Only, Mappings, Excluded, Copy-Only)
+# ---------------------------------------------------------------------------
+
+def _ref_section_html(sec_id: str, title: str, subtitle: str,
+                      count: int, body_html: str,
+                      start_collapsed: bool = False) -> str:
+    cls = "ref-section collapsed" if start_collapsed else "ref-section"
+    badge = f'<span class="ref-badge">{count}</span>'
+    sub   = f'<span class="ref-sub">{_esc(subtitle)}</span>' if subtitle else ""
+    return (
+        f'<div class="{cls}" id="{sec_id}">'
+        f'<div class="ref-hdr" onclick="toggleRef(this)">'
+        f'<span class="chevron">&#9660;</span>'
+        f'<span class="ref-title">{_esc(title)}</span>'
+        f'{badge}'
+        f'{sub}'
+        f'</div>'
+        f'<div class="ref-body">{body_html}</div>'
+        f'</div>'
+    )
+
+
+def _ref_file_table(rows: List[tuple], multi: bool, empty_msg: str) -> str:
+    """Render a simple file-list table. rows = [(base_name, filepath)]."""
+    if not rows:
+        return f'<div class="ref-empty">{_esc(empty_msg)}</div>'
+    hdrs = '<tr>'
+    if multi:
+        hdrs += '<th class="td-base">Base</th>'
+    hdrs += '<th>File Path</th></tr>'
+    trs = ""
+    for base_name, fpath in rows:
+        trs += "<tr>"
+        if multi:
+            trs += f'<td class="td-base">{_esc(base_name)}</td>'
+        trs += f'<td>{_esc(fpath)}</td></tr>'
+    return f'<table class="ref-table">{hdrs}{trs}</table>'
+
+
+def _ref_mappings_table(rows: List[tuple], multi: bool) -> str:
+    """Render file-mapping table. rows = [(base_name, base_path, rel_path)]."""
+    if not rows:
+        return '<div class="ref-empty">No file mappings defined.</div>'
+    hdrs = '<tr>'
+    if multi:
+        hdrs += '<th class="td-base">Base</th>'
+    hdrs += '<th>Base Config File</th><th>Release Config File</th></tr>'
+    trs = ""
+    for base_name, bp, rp in rows:
+        trs += "<tr>"
+        if multi:
+            trs += f'<td class="td-base">{_esc(base_name)}</td>'
+        trs += f'<td>{_esc(bp)}</td><td>{_esc(rp)}</td></tr>'
+    return f'<table class="ref-table">{hdrs}{trs}</table>'
+
+
+def _ref_excluded_table(rows: List[tuple], multi: bool) -> str:
+    """Render excluded-params table. rows = [(base_name, ReportEntry)]."""
+    if not rows:
+        return '<div class="ref-empty">No parameters were excluded.</div>'
+    hdrs = '<tr>'
+    if multi:
+        hdrs += '<th class="td-base">Base</th>'
+    hdrs += '<th>File</th><th>Parameter</th><th>Base Value</th></tr>'
+    trs = ""
+    for base_name, entry in rows:
+        key = entry.element.split("|")[-1] if "|" in entry.element else entry.element
+        # Strip release dir prefix for display
+        disp_file = entry.file.split("/", 1)[-1] if "/" in entry.file else entry.file
+        trs += "<tr>"
+        if multi:
+            trs += f'<td class="td-base">{_esc(base_name)}</td>'
+        trs += (f'<td>{_esc(disp_file)}</td>'
+                f'<td>{_esc(key)}</td>'
+                f'<td class="td-val">{_esc(entry.new)}</td></tr>')
+    return f'<table class="ref-table">{hdrs}{trs}</table>'
+
+
+def _render_reference_sections(results: List[MergeResult], multi: bool) -> str:
+    """Build all five reference sections and return the combined HTML."""
+
+    # ── Base-Only Files ──────────────────────────────────────────────────
+    base_only_rows = [
+        (r.base_name, f)
+        for r in results
+        for f in sorted(r.base_only_files)
+    ]
+    base_only_html = _ref_section_html(
+        "ref-base-only-files", "Base-Only Files",
+        "Config files present in base directory only — no matching file in release",
+        len(base_only_rows),
+        _ref_file_table(base_only_rows, multi, "No base-only files found."),
+        start_collapsed=True,
+    )
+
+    # ── Release-Only Files ───────────────────────────────────────────────
+    rel_only_rows = [
+        (r.base_name, f)
+        for r in results
+        for f in sorted(r.release_only_files)
+    ]
+    rel_only_html = _ref_section_html(
+        "ref-rel-only-files", "Release-Only Files",
+        "Config files present in release directory only — no matching file in base",
+        len(rel_only_rows),
+        _ref_file_table(rel_only_rows, multi, "No release-only files found."),
+        start_collapsed=True,
+    )
+
+    # ── File Mappings ────────────────────────────────────────────────────
+    mapping_rows = [
+        (r.base_name, bp, rp)
+        for r in results
+        for bp, rp in r.file_mappings
+    ]
+    mappings_html = _ref_section_html(
+        "ref-file-mappings", "File Mappings",
+        "Base ↔ Release filename mappings loaded from mapping file",
+        len(mapping_rows),
+        _ref_mappings_table(mapping_rows, multi),
+        start_collapsed=True,
+    )
+
+    # ── Excluded Parameters ──────────────────────────────────────────────
+    excl_rows = [
+        (r.base_name, e)
+        for r in results
+        for e in r.excluded_params
+    ]
+    excl_html = _ref_section_html(
+        "ref-excl-params", "Excluded Base-Only Parameters",
+        "Parameters present only in base, skipped via --exclude-params-in-baseonlyconfig",
+        len(excl_rows),
+        _ref_excluded_table(excl_rows, multi),
+        start_collapsed=True,
+    )
+
+    # ── Files Copied As-Is ───────────────────────────────────────────────
+    copy_rows = [
+        (r.base_name, f)
+        for r in results
+        for f in r.copy_only_files
+    ]
+    copy_html = _ref_section_html(
+        "ref-copy-only", "Files Copied As-Is",
+        "Files copied verbatim from base without parameter merging",
+        len(copy_rows),
+        _ref_file_table(copy_rows, multi, "No files copied as-is."),
+        start_collapsed=True,
+    )
+
+    return (
+        '<div class="ref-divider">Reference</div>'
+        + base_only_html
+        + rel_only_html
+        + mappings_html
+        + excl_html
+        + copy_html
     )
 
 
@@ -1041,9 +1497,10 @@ def write_html(
             composite   = f"{result.base_name}/{fname}"
             file_ids[composite] = fid
 
-            n_changes   = len(entries)
+            n_changes       = len(entries)
             out_content     = result.output_contents.get(fname, "")
             release_content = result.release_contents.get(fname, "")
+            base_content    = result.base_contents.get(fname, "")
             has_content     = bool(out_content)
 
             # ── Full-config diff view (release ↔ output) ──────────────────
@@ -1053,6 +1510,17 @@ def write_html(
                 full_cfg_html = (
                     f'<div class="full-cfg-view" style="display:none">'
                     f'{diff_body}'
+                    f'</div>'
+                )
+
+            # ── Three-way diff view (base | release | output) ─────────────
+            three_way_html = ""
+            if has_content and base_content:
+                tdw_body = _render_three_way_diff(base_content, release_content,
+                                                  out_content)
+                three_way_html = (
+                    f'<div class="three-way-view" style="display:none">'
+                    f'{tdw_body}'
                     f'</div>'
                 )
 
@@ -1091,6 +1559,13 @@ def write_html(
                     f'onclick="event.stopPropagation(); toggleFullConfig(this, \'{fid}\')">'
                     f'Show Full Config</button>'
                 )
+            three_way_btn = ""
+            if three_way_html:
+                three_way_btn = (
+                    f'<button class="three-way-btn" '
+                    f'onclick="event.stopPropagation(); toggleThreeWay(this, \'{fid}\')">'
+                    f'3-Way Diff</button>'
+                )
 
             sections_html_parts.append(
                 f'<div class="file-section" id="{fid}">'
@@ -1100,12 +1575,16 @@ def write_html(
                 f'{base_tag_html}'
                 f'<span class="badge">{n_changes} change{"s" if n_changes != 1 else ""}</span>'
                 f'{toggle_btn}'
+                f'{three_way_btn}'
                 f'</div>'
-                f'<div class="file-body">{changes_view}{full_cfg_html}</div>'
+                f'<div class="file-body">{changes_view}{full_cfg_html}{three_way_html}</div>'
                 f'</div>'
             )
 
     sections_html = "\n".join(sections_html_parts)
+
+    # ── Reference sections (Base-Only Files, Release-Only, Mappings, etc.) ──
+    reference_html = _render_reference_sections(results, multi)
 
     # ── Sidebar (built after IDs are known) ──────────────────────────────
     sidebar_html = _sidebar_html(results, file_ids, config.release_dirs, config.output_dir)
@@ -1169,6 +1648,7 @@ def write_html(
 <div class="main">
 {toolbar_html}
 {sections_html}
+{reference_html}
 {footer_html}
 </div>
 </div>
