@@ -38,7 +38,7 @@ from collections import defaultdict
 from . import register, BaseProcessor
 from ..models import MergeConfig, ReportEntry, EntryType
 from ..logger import log_structured
-from ..utils import ensure_dir
+from ..utils import ensure_dir, open_text
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -61,6 +61,10 @@ class KVDocument:
     # section → ordered list of entries (insertion-ordered dict, Python 3.7+)
     sections: "Dict[str, List[KVEntry]]" = field(default_factory=dict)
     section_order: List[str] = field(default_factory=list)
+
+    # BUG-I: section → original raw header line (e.g. "[App]  # main\n")
+    # so it can be emitted verbatim instead of reconstructed as f"{section}\n"
+    section_raw_lines: Dict[str, str] = field(default_factory=dict)
 
     # duplicate tracking: compound_key → [all values seen]
     duplicate_map: Dict[str, List[str]] = field(default_factory=dict)
@@ -94,18 +98,21 @@ def parse_kv_doc(file_path: str) -> KVDocument:
     comment_buffer: List[str] = []
     lineno = 0
 
-    with open(file_path, encoding="utf-8-sig") as f:  # utf-8-sig strips BOM if present
-        for line in f:
+    # BUG-B: use encoding-aware reader (utf-8-sig → chardet → latin-1 fallback)
+    _raw_text = open_text(file_path)
+    for line in _raw_text.splitlines(keepends=True):
             lineno += 1
             stripped = line.rstrip("\n")
 
             # ── Section header ──────────────────────────────────────────
-            m_sec = re.match(r'^\s*\[(.+)\]\s*$', stripped)
-            if m_sec:
-                current_section = f"[{m_sec.group(1)}]"
+            m_sec = re.match(r'^\s*\[(.+)\]\s*(?:#.*)?$', stripped)
+            if m_sec and stripped.lstrip().startswith('['):
+                current_section = f"[{m_sec.group(1).strip()}]"
                 if current_section not in doc.sections:
                     doc.sections[current_section] = []
                     doc.section_order.append(current_section)
+                    # BUG-I: store original raw line for verbatim emission
+                    doc.section_raw_lines[current_section] = line
                 comment_buffer = []
                 continue
 
@@ -282,9 +289,15 @@ def merge_kv(
     all_sections.extend(_trailing_base_only_secs)
 
     for section in all_sections:
-        # emit section header
+        # BUG-I: emit section header verbatim if raw line was stored, else reconstruct
         if section != "DEFAULT":
-            out_lines.append(f"{section}\n")
+            # Prefer base doc's raw line (base is canonical); fall back to release or reconstruct
+            raw_hdr = (base_doc.section_raw_lines.get(section)
+                       or rel_doc.section_raw_lines.get(section))
+            if raw_hdr:
+                out_lines.append(raw_hdr if raw_hdr.endswith("\n") else raw_hdr + "\n")
+            else:
+                out_lines.append(f"{section}\n")
 
         # Check for shadow base section: if base has #[SectionName] and
         # release has [SectionName], use shadow entries as the effective base.
@@ -744,13 +757,20 @@ def _merge_single_entry(
             section=section,
         )
 
-    # Choose comments: release preferred if non-empty, else base
-    if rel_entry.comments:
+    release_val = rel_entry.value
+
+    # Uncomment case: release has the key commented out, base has it active
+    uncomment_case = rel_entry.is_commented and not base_entry.is_commented
+
+    # Determine whether the value is actually changing
+    value_changing = uncomment_case or base_entry.value != release_val
+
+    # BUG-E: only use release comments when value is actually changing.
+    # For pass-through parameters keep base comments verbatim.
+    if value_changing and rel_entry.comments:
         merged_comments = rel_entry.comments
     else:
         merged_comments = base_entry.comments
-
-    release_val = rel_entry.value
 
     # Empty base override
     if base_entry.value.strip() == "" and not base_entry.is_commented:
@@ -767,11 +787,8 @@ def _merge_single_entry(
         )
         return "", merged_comments, rpt
 
-    # Uncomment case: release has the key commented out, base has it active
-    uncomment_case = rel_entry.is_commented and not base_entry.is_commented
-
     # Values differ or comment state changes
-    if uncomment_case or base_entry.value != release_val:
+    if value_changing:
         rpt = ReportEntry(
             type=(EntryType.UNCOMMENT_REPLACE
                   if uncomment_case else EntryType.BASE_TO_RELEASE_REPLACED),
@@ -795,12 +812,50 @@ def _emit_entry(
     value: str,
     comments: List[str],
 ) -> None:
+    """Emit comments then the key line.
+
+    BUG-D fix: preserve original line formatting.
+    - Pass-through (value unchanged, comment state unchanged): emit raw_line verbatim.
+    - Changed value: use raw_line as a template — locate the delimiter in the raw
+      line, keep everything up to and including it, append the new value.
+      This preserves indentation, spaces around '=', and any inline comment
+      after the value that was present in the original line.
+    """
     for c in comments:
         out_lines.append(c if c.endswith("\n") else c + "\n")
-    key_line = f"{entry.key}{entry.delimiter}{value}"
-    if entry.is_commented:
-        key_line = f"#{key_line}"
-    out_lines.append(key_line + "\n")
+
+    raw = entry.raw_line.rstrip("\n")
+
+    # Determine whether this is a pass-through or a changed-value emit
+    # by comparing the target value with what the raw line would produce.
+    if entry.value == value and not entry.is_commented:
+        # Pass-through: emit verbatim
+        out_lines.append(entry.raw_line if entry.raw_line.endswith("\n") else entry.raw_line + "\n")
+        return
+
+    # Changed value (or comment-state flip): use raw_line as template
+    delim_pos = raw.find(entry.delimiter)
+    if delim_pos >= 0:
+        prefix = raw[:delim_pos + len(entry.delimiter)]
+        # Detect any trailing inline comment after the original value
+        # Heuristic: first occurrence of ' #' or ' ;' after the delimiter
+        orig_after_delim = raw[delim_pos + len(entry.delimiter):]
+        inline_comment = ""
+        for marker in (" #", " ;"):
+            idx = orig_after_delim.find(marker)
+            if idx >= 0:
+                inline_comment = orig_after_delim[idx:]
+                break
+        if entry.is_commented:
+            out_lines.append(f"#{prefix}{value}{inline_comment}\n")
+        else:
+            out_lines.append(f"{prefix}{value}{inline_comment}\n")
+    else:
+        # Fallback: reconstruct (should not happen for valid KV)
+        key_line = f"{entry.key}{entry.delimiter}{value}"
+        if entry.is_commented:
+            key_line = f"#{key_line}"
+        out_lines.append(key_line + "\n")
 
 
 def _emit_raw_entry(
@@ -810,9 +865,34 @@ def _emit_raw_entry(
     delimiter: str,
     is_commented: bool,
     comments: List[str],
+    raw_line: str = "",
 ) -> None:
+    """Emit comments then the key line.
+
+    BUG-H fix: same raw_line template approach as _emit_entry.
+    """
     for c in comments:
         out_lines.append(c if c.endswith("\n") else c + "\n")
+
+    if raw_line:
+        raw = raw_line.rstrip("\n")
+        delim_pos = raw.find(delimiter)
+        if delim_pos >= 0:
+            prefix = raw[:delim_pos + len(delimiter)]
+            orig_after_delim = raw[delim_pos + len(delimiter):]
+            inline_comment = ""
+            for marker in (" #", " ;"):
+                idx = orig_after_delim.find(marker)
+                if idx >= 0:
+                    inline_comment = orig_after_delim[idx:]
+                    break
+            if is_commented:
+                out_lines.append(f"#{prefix}{value}{inline_comment}\n")
+            else:
+                out_lines.append(f"{prefix}{value}{inline_comment}\n")
+            return
+
+    # Fallback when no raw_line available
     key_line = f"{key}{delimiter}{value}"
     if is_commented:
         key_line = f"#{key_line}"
@@ -893,7 +973,7 @@ class KVProcessor(BaseProcessor):
 
         if not config.dry_run:
             ensure_dir(out_file)
-            with open(out_file, "w", encoding="utf-8") as f:
+            with open(out_file, "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(out_lines)
 
         # Attach excluded back so engine can route them to MergeResult.excluded_params

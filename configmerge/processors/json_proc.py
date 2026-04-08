@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from . import register, BaseProcessor
 from ..models import MergeConfig, ReportEntry, EntryType
 from ..logger import log_structured
-from ..utils import ensure_dir
+from ..utils import ensure_dir, open_text
 
 
 # ---------------------------------------------------------------------------
@@ -29,8 +29,7 @@ def _safe_load_json(
     file_path: str, role: str, rel_file: str, logger: logging.Logger
 ) -> Optional[Any]:
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
+        content = open_text(file_path).strip()  # BUG-B: encoding-aware read
         if not content:
             log_structured(logger, "ERROR", "JSON", "EMPTY_FILE",
                            file_path, "", f"{role} file is empty")
@@ -43,6 +42,17 @@ def _safe_load_json(
     except Exception as e:
         log_structured(logger, "ERROR", "JSON", "READ_ERROR", file_path, "", str(e))
         return None
+
+
+def _detect_indent(text: str) -> int:
+    """Detect the indentation width used in a JSON file (2 or 4 spaces, default 2)."""
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if stripped and line != stripped:
+            indent = len(line) - len(stripped)
+            if indent in (2, 4, 8):
+                return indent
+    return 2
 
 
 def _detect_duplicates(
@@ -64,8 +74,7 @@ def _detect_duplicates(
         return dict(pairs)
 
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
+        content = open_text(file_path).strip()  # BUG-B: encoding-aware read
         if content:
             json.loads(content, object_pairs_hook=hook)
     except Exception:
@@ -153,8 +162,19 @@ class JSONProcessor(BaseProcessor):
         logger.info(f"[JSON] {rel_file}")
         report: List[ReportEntry] = []
 
+        # MOD-2: warn if multiple base files supplied (not yet supported for JSON)
+        if len(base_files) > 1:
+            logger.warning(
+                f"[JSON] {rel_file}: multi-base merge not fully supported for JSON — "
+                f"using base_files[0] only; {len(base_files) - 1} additional base(s) ignored"
+            )
+
+        # BUG-G: detect original indent width for fidelity-preserving output
+        rel_raw  = open_text(rel_file)
+        rel_indent = _detect_indent(rel_raw)
+
         base = _safe_load_json(base_files[0], "BASE", rel_file, logger)
-        rel  = _safe_load_json(rel_file, "RELEASE", rel_file, logger)
+        rel  = json.loads(rel_raw) if rel_raw.strip() else None
 
         if base is None or rel is None:
             return report
@@ -182,7 +202,9 @@ class JSONProcessor(BaseProcessor):
 
         if not config.dry_run:
             ensure_dir(out_file)
-            with open(out_file, "w", encoding="utf-8") as f:
-                json.dump(rel, f, indent=2)
+            with open(out_file, "w", encoding="utf-8", newline="\n") as f:
+                # BUG-G: preserve original indent width instead of hard-coding 2
+                json.dump(rel, f, indent=rel_indent, ensure_ascii=False)
+                f.write("\n")
 
         return report

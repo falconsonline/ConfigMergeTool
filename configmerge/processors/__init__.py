@@ -54,3 +54,4 @@ from . import xml_proc    # noqa: E402, F401
 from . import json_proc   # noqa: E402, F401
 from . import logrotate   # noqa: E402, F401
 from . import generic     # noqa: E402, F401
+from . import sstp        # noqa: E402, F401  — Phase 8: .sstp copy-only processor (MOD-5)

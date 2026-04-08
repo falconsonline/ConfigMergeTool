@@ -17,10 +17,12 @@ Multi-base:
     results = MergeEngine(config).run()
 """
 
-from .models import BaseDirConfig, MergeConfig, MergeResult, ReportEntry, EntryType
+from .models import BaseDirConfig, MergeConfig, MergeResult, ReportEntry, EntryType, RemoteConfig
 from .engine import MergeEngine
 
+__version__ = "2.0.0"
+
 __all__ = [
-    "MergeEngine", "MergeConfig", "BaseDirConfig",
+    "MergeEngine", "MergeConfig", "BaseDirConfig", "RemoteConfig",
     "MergeResult", "ReportEntry", "EntryType",
 ]

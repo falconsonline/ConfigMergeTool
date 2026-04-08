@@ -1,12 +1,18 @@
 ================================================================================
- ConfigMergeTool — User Guide
+ ConfigMergeTool v2.0 — User Guide
 ================================================================================
 
 WHAT IT DOES
 ------------
-ConfigMergeTool merges configuration files from a base (production/site)
-directory into a release (new software release) directory, producing a merged
-output directory.
+ConfigMergeTool has two operating modes:
+
+  MERGE MODE   Merge config files from a base (production/site) directory
+               into a release (new software release) directory, producing a
+               merged output directory ready for deployment.
+
+  AUDIT MODE   Compare config files across multiple production nodes to detect
+               configuration drift, flag mismatches, and produce an interactive
+               HTML report with per-node resolution controls.
 
 Merge rule:  BASE VALUES WIN.
   - If a key/element exists in both base and release → use the BASE value.
@@ -18,27 +24,60 @@ Typical use case:
   A new software release ships updated default configs (release/).
   This tool creates merged configs (output/) that carry the site's
   customisations forward onto the new release baseline.
+  After deployment, run audit mode to verify all nodes are consistent.
 
 
-REQUIREMENTS
+================================================================================
+ REQUIREMENTS & INSTALLATION
+================================================================================
+
+Requirements
 ------------
   Python 3.9+
-  pip install openpyxl
+
+Installation option A — pip (recommended after wheel distribution):
+
+  pip install configmergetool-2.0.0-py3-none-any.whl
+
+  # With optional auto-encoding detection (recommended for non-UTF-8 sites):
+  pip install "configmergetool-2.0.0-py3-none-any.whl[encoding]"
+
+  # With all optional extras:
+  pip install "configmergetool-2.0.0-py3-none-any.whl[all]"
+
+  After pip install, the command is:  configmergetool [args]
+
+Installation option B — run from source (no install needed):
+
+  pip install openpyxl        # only hard dependency
+  pip install chardet         # optional but recommended for encoding detection
+  python3 ConfigMergeTool.py [args]
+
+  Both invocation forms produce identical behaviour.
+
+Optional extras:
+  [encoding]  chardet>=5.0   — auto-detect file encoding; fallback to latin-1
+  [ssh]       paramiko>=3.0  — SSH/SFTP remote node fetching (Phase 11, stub)
+  [email]     imapclient>=2.3 — email-triggered audit (Phase 12, stub)
+  [all]       all of the above
+  [dev]       pytest, build, twine — development tools
+
+Verify installation:
+  configmergetool --help
+  configmergetool --version
+  python -c "import configmerge; print(configmerge.__version__)"
+
+Virtual environment (recommended):
+  python -m venv ~/.venvs/configmergetool
+  source ~/.venvs/configmergetool/bin/activate     # Linux/Mac
+  pip install configmergetool-2.0.0-py3-none-any.whl
 
 
-QUICK START
------------
-  python3 ConfigMergeTool.py \
-    --base-dir base \
-    --release-dirs release \
-    --output-dir output \
-    --verbose
+================================================================================
+ FULL CLI REFERENCE — MERGE MODE
+================================================================================
 
-
-FULL CLI REFERENCE
-------------------
-
-  python3 ConfigMergeTool.py
+  configmergetool
       --base-dir BASE_DIR
       --release-dirs RELEASE_DIR [RELEASE_DIR ...]
       --output-dir OUTPUT_DIR
@@ -48,6 +87,8 @@ FULL CLI REFERENCE
       [--exclude-params-in-baseonlyconfig]
       [--dry-run]
       [--verbose]
+      [--quiet]
+      [--version]
 
 Option details:
 
@@ -91,13 +132,233 @@ Option details:
       Print all INFO-level log events to the console in addition to the
       log file. Default: only summary lines are printed.
 
+  --quiet
+      Suppress MATCH lines from console; print only DIFF, WARN, ERROR, and
+      the final SUMMARY line. Useful for large runs or scheduled/CI jobs.
+      All events still go to the log file regardless of this flag.
+
+  --version
+      Print the installed version number and exit.
+
 
 ================================================================================
- SINGLE-BASE EXAMPLE
+ FULL CLI REFERENCE — AUDIT MODE
+================================================================================
+
+  configmergetool
+      --audit-config-file AUDIT_CONFIG_FILE
+      [--filter-file FILTER_FILE]
+      [--quiet]
+      [--version]
+
+  configmergetool
+      --apply-audit-patch PATCH_JSON_FILE
+      --audit-config-file AUDIT_CONFIG_FILE
+      --output-dir OUTPUT_DIR
+
+  configmergetool
+      --feedback-summary
+
+Option details:
+
+  --audit-config-file PATH
+      JSON file listing production nodes to compare.
+      Each entry specifies a base_dir and optional display name.
+      Runs audit mode — no merge is performed.
+      See "AUDIT CONFIG FILE FORMAT" section below.
+
+  --filter-file PATH
+      Optional filter file restricting which file types are audited.
+      If omitted, all files are audited except binary archives.
+      See "FILTER FILE FORMAT" section below.
+
+  --apply-audit-patch PATCH_JSON_FILE
+      Apply an audit patch JSON (exported from the HTML report) to source
+      files, writing corrected configs to --output-dir.
+      --audit-config-file is required to locate source files.
+      --output-dir specifies where corrected files are written.
+
+  --feedback-summary
+      Print a summary of all past audit runs recorded in the feedback
+      accumulator (~/.configmergetool/feedback_history.json).
+      Does not run an audit.
+
+
+================================================================================
+ QUICK START — MERGE MODE
+================================================================================
+
+  configmergetool \
+    --base-dir base \
+    --release-dirs release \
+    --output-dir output \
+    --verbose
+
+
+================================================================================
+ QUICK START — AUDIT MODE
+================================================================================
+
+  configmergetool \
+    --audit-config-file audit.json
+
+Audit config file (audit.json):
+  [
+    { "base_dir": "prod/node1", "name": "APP-01" },
+    { "base_dir": "prod/node2", "name": "APP-02" }
+  ]
+
+Result:
+  reports/
+    audit_20260401_143022/
+      audit_report.html          <- interactive HTML report (single or multi-part)
+      audit.log                  <- full audit log
+      audit.xlsx                 <- Excel summary
+      feedback/
+        skipped_backups.json     <- backup files detected and skipped
+        filtered_files.json      <- files excluded by --filter-file
+        logical_diff_summary.json
+        log_name_warnings.json
+
+
+================================================================================
+ AUDIT CONFIG FILE FORMAT
+================================================================================
+
+JSON array; each entry is one production node.
+
+Minimal (local paths):
+  [
+    { "base_dir": "prod/APP-01", "name": "APP-01" },
+    { "base_dir": "prod/APP-02", "name": "APP-02" }
+  ]
+
+Full example (all optional fields):
+  [
+    {
+      "base_dir":      "prod/APP-01",
+      "name":          "APP-01",
+      "no_skip_files": ["fsmapp.properties_couchbase"]
+    },
+    {
+      "base_dir":      "prod/APP-02",
+      "name":          "APP-02"
+    }
+  ]
+
+Fields:
+  base_dir       (required)  Path to this node's config directory.
+  name           (optional)  Display name in the HTML report.
+                             Defaults to the folder's basename.
+                             Must be unique across entries.
+  no_skip_files  (optional)  List of filenames to exempt from backup
+                             auto-detection even if they look like backups.
+                             Example: ["fsmapp.properties_couchbase"]
+
+Security note:
+  Never put passwords in this file.  For remote nodes, use "password_env"
+  (an env variable name) rather than a literal "password" field.
+  The tool will reject entries with a literal "password" key.
+
+
+================================================================================
+ FILTER FILE FORMAT
+================================================================================
+
+Use --filter-file to restrict which files are audited.
+If not provided, all files are included (except binary archives).
+
+Format — plain text, one rule per line.  # lines are ignored.
+
+  # --- Include rules ---
+
+  # a) Suffix only — include ALL files with this extension
+  json
+  xml
+  cfg
+  properties
+
+  # b) Suffix::filename(s) — only named files with this suffix
+  conf::sysctl.conf,sctp.conf,spread.conf
+  txt::config.txt,system.txt
+
+  # c) Suffix::directory — only files in directories matching pattern
+  html::runtime,test
+
+  # --- Exclude rules ---
+
+  # d) Explicit name excludes (leading !)
+  !nohup.out
+  !*.tmp
+
+  # e) Always-excluded binary extensions (built-in defaults — always active)
+  !*.tar   !*.tar.gz  !*.gz    !*.rpm
+  !*.zip   !*.jar     !*.war   !*.ear
+  !*.jks   !*.keystore !*.p12  !*.pem
+
+Logic:
+  - Binary archive extensions are ALWAYS excluded regardless of this file.
+  - If the filter file contains include rules, ONLY matching files are
+    included; all others are skipped and recorded in
+    <run_dir>/feedback/filtered_files.json.
+  - Explicit excludes (!) take priority over include rules.
+  - Filename matching is case-insensitive for cross-platform safety.
+
+Example filter file for a Roamware GTP Proxy site:
+  # Include only well-known config types
+  properties
+  cfg
+  xml
+  json
+  conf::sysctl.conf,sctp.conf
+  !nohup.out
+
+
+================================================================================
+ BACKUP FILE AUTO-DETECTION
+================================================================================
+
+The auditor automatically detects and skips backup files based on their
+filename patterns and whether an active counterpart exists in the same
+directory.
+
+Auto-detected suffixes / patterns:
+  _bkp            _bkp_*         _backup        _backup_*
+  _org            _orig          _old           _old_*
+  _save           .bak           .bkp
+  _DDMMYYYY       _DDMMYYYY_*    _YYYYMMDD      _YYYYMMDD_*
+  _YYYYMMDDHHmmss .properties_DDMMYYYY
+  _v[0-9]*        .properties_bkp
+
+Heuristic:
+  A file is only skipped as a backup when BOTH conditions are true:
+    1. Its filename matches a backup suffix pattern.
+    2. The canonical stem (the filename without the backup suffix) exists
+       as an active file in the same directory.
+  This prevents legitimate files with numeric suffixes from being skipped.
+
+Example:
+  GTPProxy.cfg              <- active file (processed normally)
+  GTPProxy.cfg_bkp_27072024 <- detected as backup, skipped
+  GTPProxy.cfg_20240727     <- detected as backup, skipped
+
+Whitelist (opt out of auto-detection):
+  In the audit config JSON, add "no_skip_files" to any node entry:
+    { "base_dir": "prod/APP-01", "no_skip_files": ["fsmapp.properties_couchbase"] }
+
+  The named file will NOT be skipped even if it matches a backup pattern.
+
+Feedback:
+  All skipped files are recorded in:
+    <run_dir>/feedback/skipped_backups.json
+  Review this file after each run to confirm no legitimate configs were skipped.
+
+
+================================================================================
+ SINGLE-BASE MERGE EXAMPLE
 ================================================================================
 
 Directory layout:
-
   base/
     config/
       app.properties        <- production customisations
@@ -112,15 +373,13 @@ Directory layout:
   output/                   <- created by the tool
 
 Command:
-
-  python3 ConfigMergeTool.py \
+  configmergetool \
     --base-dir base \
     --release-dirs release \
     --output-dir output \
     --verbose
 
 Result:
-
   output/
     config/
       app.properties        <- merged: base values + release-only keys
@@ -147,19 +406,15 @@ Format:
 
   One mapping per line.  Lines starting with # are ignored.
 
-PATH FORMAT (important — paths are relative to the working directory):
+PATH FORMAT (paths are relative to the working directory):
 
   Preferred:
     base/config/fsmapp.cfg = release/config/app.properties
-
-    Use the full path from the working directory for both sides.
-    This makes mappings unambiguous regardless of the base_dir name.
 
   Also accepted (backward compatible):
     config/fsmapp.cfg = config/app.properties   <- bare path within each dir
 
 Example — mapping-file.txt:
-
   # Production uses "fsmapp.cfg", release renamed it "app.properties"
   base/config/fsmapp.cfg = release/config/app.properties
 
@@ -169,19 +424,6 @@ Example — mapping-file.txt:
   # Many-to-One: two base files merge into one release file
   base/config/db-primary.properties = release/config/database.properties
   base/config/db-replica.properties = release/config/database.properties
-
-Command:
-
-  python3 ConfigMergeTool.py \
-    --base-dir base \
-    --release-dirs release \
-    --output-dir output \
-    --mapping-file mapping-file.txt
-
-Without a mapping file:
-  Files are matched by filename only (e.g. both called "app.properties").
-  If a filename exists in multiple base locations the match is ambiguous
-  and the file is skipped with a WARNING.
 
 Many-to-One mapping:
   Multiple base files can map to a single release file.  All base files
@@ -205,21 +447,11 @@ Format:
   One file path per line.
   Lines starting with # are ignored.
 
-PATH FORMAT (important — paths are relative to the working directory):
+PATH FORMAT:
+  Preferred:  base/config/ssl/server.keystore   (full path from working dir)
+  Also accepted: config/ssl/server.keystore      (bare path within base dir)
 
-  Preferred:
-    base/config/ssl/server.keystore
-
-    Use the full path from the working directory.  If the base_dir is
-    "base", the path starts with "base/".  If the base_dir is
-    "singtel/Singtel-APP-01", the path starts with
-    "singtel/Singtel-APP-01/".
-
-  Also accepted (backward compatible):
-    config/ssl/server.keystore   <- bare path relative to within base dir
-
-Example — copy-only.txt (base_dir = "base"):
-
+Example — copy-only.txt:
   # Certificates - always use production versions
   base/config/ssl/server.keystore
   base/config/ssl/truststore.jks
@@ -227,28 +459,9 @@ Example — copy-only.txt (base_dir = "base"):
   # Licence file
   base/config/licence.dat
 
-  # Shell script with site-specific paths hardcoded
-  base/bin/start.sh
-
-Example — copy-only.txt (base_dir = "singtel/Singtel-APP-01"):
-
-  singtel/Singtel-APP-01/config/InterfaceConfig.xml
-  singtel/Singtel-APP-01/config/ssl/server.keystore
-
-Command:
-
-  python3 ConfigMergeTool.py \
-    --base-dir base \
-    --release-dirs release \
-    --output-dir output \
-    --copy-baseonlyconfigfile copy-only.txt
-
-These files appear in the "BaseConfigAsIs" sheet of the Excel report and
-are listed separately from merged files.
-
 
 ================================================================================
- MULTI-BASE USAGE (multiple production nodes)
+ MULTI-BASE MERGE USAGE (multiple production nodes)
 ================================================================================
 
 When you have several production nodes with different base configs, use
@@ -261,7 +474,6 @@ Each node gets:
   - One shared log:               reports/run_YYYYMMDD_HHMMSS/log_merge_config.log
 
 JSON format — base-configs.json:
-
   [
     {
       "base_dir":       "base/node1",
@@ -270,98 +482,33 @@ JSON format — base-configs.json:
       "copy_only_file": "mappings/node1-copy-only.txt"
     },
     {
-      "base_dir":       "base/node2",
-      "name":           "prod-us",
-      "mapping_file":   "mappings/node2-mapping.txt"
-    },
-    {
-      "base_dir":       "base/node3",
-      "name":           "prod-ap"
+      "base_dir": "base/node2",
+      "name":     "prod-us"
     }
   ]
 
-Fields:
-  base_dir       (required)  Path to this node's base config directory
-  name           (optional)  Display name; defaults to the directory's folder name
-  mapping_file   (optional)  Per-node mapping file
-  copy_only_file (optional)  Per-node copy-only list
-
-  Paths in mapping_file and copy_only_file must use the full working-directory
-  path format (e.g. "base/node1/config/file.properties"), not paths relative
-  to within the base_dir.
-
 Command:
-
-  python3 ConfigMergeTool.py \
+  configmergetool \
     --base-config-file base-configs.json \
     --release-dirs release \
-    --output-dir output \
-    --verbose
-
-Output structure:
-
-  output/
-    prod-eu/
-      config/app.properties
-      config/server.xml
-    prod-us/
-      config/app.properties
-      config/server.xml
-    prod-ap/
-      config/app.properties
-      config/server.xml
-
-  reports/
-    run_20260401_143022/
-      merge_report_prod-eu.xlsx
-      merge_report_prod-us.xlsx
-      merge_report_prod-ap.xlsx
-      merge_diff.html           <- all nodes in one HTML file
-      log_merge_config.log
+    --output-dir output
 
 
 ================================================================================
- DRY-RUN EXAMPLE
+ DRY RUN
 ================================================================================
 
 Preview what will change without writing any output config files.
 The full report (Excel + HTML) is still generated.
 
-  python3 ConfigMergeTool.py \
+  configmergetool \
     --base-dir base \
     --release-dirs release \
     --output-dir output \
-    --dry-run \
-    --verbose
+    --dry-run --verbose
 
 Output files are NOT written.
 Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
-
-
-================================================================================
- EXCLUDE BASE-ONLY PARAMETERS
-================================================================================
-
-By default, parameters that exist only in the base file (no release
-counterpart) are inserted into the merged output.
-
-Use --exclude-params-in-baseonlyconfig to suppress this.
-
-Example:
-  base/config/app.properties contains:
-    legacy.timeout=30000      <- not in release
-
-  Without flag:  output/config/app.properties includes  legacy.timeout=30000
-  With flag:     output/config/app.properties does NOT include legacy.timeout
-
-The excluded parameters are recorded in the ExcludedBaseOnlyParams sheet
-of the Excel report so they can be reviewed.
-
-  python3 ConfigMergeTool.py \
-    --base-dir base \
-    --release-dirs release \
-    --output-dir output \
-    --exclude-params-in-baseonlyconfig
 
 
 ================================================================================
@@ -373,15 +520,22 @@ of the Excel report so they can be reviewed.
   Sections ([section]) are tracked independently.
   For each key in base:
     - If key exists in release (active) -> output gets BASE value.
-    - If key only in base               -> inserted into output (unless --exclude flag).
-    - If base value is empty            -> release value is forced empty (EMPTY_BASE_OVERRIDE).
+    - If key only in base               -> inserted into output
+                                          (unless --exclude flag).
+    - If base value is empty            -> release value is forced empty
+                                          (EMPTY_BASE_OVERRIDE).
   For each key only in release:
     - Kept as-is in output.
 
+  Line fidelity:
+    Unchanged parameters are emitted with their original raw line verbatim —
+    indentation, delimiter spacing (`db.host = x` stays `db.host = x`),
+    and any inline comments are preserved exactly.
+
   Comment handling:
-    - Comment/blank lines above a key are preserved.
-    - If both files have different comments for the same key, release comment
-      is preferred in output.
+    - Comments above a key (base) are preserved for unchanged parameters.
+    - Comments are only replaced by release comments when the value itself
+      is changing.
 
   Annotation handling:
     - A commented line before an active key is a PRE-ANNOTATION:
@@ -391,210 +545,169 @@ of the Excel report so they can be reviewed.
     - A commented line AFTER an active key is a POST-ANNOTATION:
         event.list=UCM           <- active key
         #event.list=UCGDMLS      <- post-annotation: alternative value
-        #event.list=UCGDMLug     <- post-annotation: another alternative
       Post-annotations are preserved verbatim after the active entry.
 
   Shadow sections:
-    - If base has an entire section commented out:
-        #[DBHandler]
-        #PostgreSQL=...
-        #Oracle=...
-      AND release has the same section active:
-        [DBHandler]
-        PostgreSQL=...
-      THEN output keeps all entries commented (base comment-state wins):
-        [DBHandler]
-        #PostgreSQL=...
-        #Oracle=...
+    - If base has an entire section commented out AND release has the same
+      section active, output keeps all entries commented (base state wins).
 
   Indexed group handling:
-    - Keys matching prefix.N.subkey (e.g. schedule.1.name, schedule.2.name)
-      form indexed groups.
-    - Base groups are retained in order.
-    - Release-only groups are appended after base groups with renumbered indices.
-    - prefix.count is updated to the final group total.
-    - Comma-separated header values (e.g. schedule.registry) are merged as a
-      union of base + release values.
+    - Keys matching prefix.N.subkey (e.g. schedule.1.name) form indexed groups.
+    - Base groups retained; release-only groups appended and renumbered.
+    - prefix.count updated to the final group total.
+    - Comma-separated header values merged as a union of base + release.
 
   Section ordering:
-    - Sections follow the release file order.
-    - Base-only sections are inserted at their natural relative position
-      (immediately before the release section that follows them in base),
-      NOT appended at the end.
+    - Sections follow release file order.
+    - Base-only sections are inserted at their natural relative position.
 
   Duplicate key detection:
-    - Only ACTIVE duplicate keys in the release file are flagged (DUPLICATE_KEY).
-    - Commented entries alongside active entries are treated as annotations,
-      not duplicates, and are never flagged.
-    - Base duplicate keys are resolved silently (last value wins) without
-      appearing in the HTML or Excel report.
-
-  Example:
-    base/app.properties:      release/app.properties:
-      db.host=prod-db-01        db.host=localhost
-      db.port=5432              db.port=5432
-      db.pool.size=20           db.pool.size=10
-                                db.timeout=30
-
-    output/app.properties:
-      db.host=prod-db-01        <- base value wins
-      db.port=5432              <- same in both
-      db.pool.size=20           <- base value wins
-      db.timeout=30             <- release-only, kept as-is
+    - Only ACTIVE duplicate keys in the release file are flagged.
+    - Commented entries alongside active entries are treated as annotations.
 
 .xml / .xsd  (XML files)
 ------------------------
-  Elements are matched by tag name + "name" attribute.
+  Elements matched by tag name + "name" attribute.
   For each element in base:
     - If element exists in release -> output gets BASE element block verbatim.
     - If element only in base      -> inserted into output.
-    - If base element is empty     -> release element forced empty (EMPTY_BASE_OVERRIDE_XML).
-  For each element only in release:
-    - Kept as-is.
-  Release namespace declarations are preserved exactly in output.
-  XML comments are captured and associated with the following element.
-
-  Example:
-    base/server.xml:                 release/server.xml:
-      <Connector port="8443"           <Connector port="8080"
-        scheme="https"                   scheme="http"
-        SSLEnabled="true"/>              SSLEnabled="false"/>
-
-    output/server.xml:
-      <Connector port="8443"           <- entire base element used
-        scheme="https"
-        SSLEnabled="true"/>
+    - If base element is empty     -> release element forced empty.
+  Release namespace declarations preserved exactly.
 
 .json  (JSON files)
 -------------------
   Deep recursive merge: base values overwrite matching release values at any
-  nesting depth.  Release-only keys at any depth are preserved.
-
-  Example:
-    base/config.json:            release/config.json:
-      {                            {
-        "server": {                  "server": {
-          "host": "prod-host",         "host": "localhost",
-          "port": 9090                 "port": 8080,
-        }                              "timeout": 30
-      }                            }
-                                 }
-
-    output/config.json:
-      {
-        "server": {
-          "host": "prod-host",    <- base value wins
-          "port": 9090,           <- base value wins
-          "timeout": 30           <- release-only, preserved
-        }
-      }
+  nesting depth.  Release-only keys preserved.
+  Original file indent width is detected and preserved in the output.
 
 .logrotate  (Logrotate files)
 ------------------------------
-  Entire base file is copied to output verbatim.
-  If the base file is empty, output is written as empty (LOGROTATE_EMPTY_BASE_OVERRIDE).
+  Entire base file copied to output verbatim.
+  If base file is empty, output written as empty (LOGROTATE_EMPTY_BASE_OVERRIDE).
+
+.sstp  (Roamware Smart-STP routing rule files)
+----------------------------------------------
+  Auto-generated files — NOT hand-edited configs.
+  In merge mode: release copy is always authoritative and copied as-is.
+  In audit mode: semantic diff is performed; differences are categorised as
+    VALUE DIFF (red), ORDER DIFF (orange), STRUCT EQUIV (yellow), MATCH (green).
+  See "SSTP AUDIT DIFF" section below.
 
 All other extensions  (Generic)
 --------------------------------
-  File is copied from the release directory as-is.
-  No merge is performed.  A log entry is written.
+  File copied from release directory as-is.  A log entry is written.
+
+
+================================================================================
+ SSTP AUDIT DIFF (Smart-STP routing rule files)
+================================================================================
+
+.sstp files contain named routing blocks:
+  MAPTIMEOUT [...]
+  GCT (0x33) [...]
+  GCT (0x17,0x27) [...]
+
+The auditor parses each block's parameters and categorises differences:
+
+  VALUE DIFF   — parameter value differs between nodes
+                 (e.g. SRC=0x53 vs SRC=0x51)
+                 Shown in RED; requires review.
+
+  ORDER DIFF   — route or digit list order differs
+                 (e.g. ROUTE APP 0x27 OR ROUTE APP 0x17 vs reversed)
+                 Shown in ORANGE; may be functionally significant.
+
+  STRUCT EQUIV — structurally equivalent but written differently
+                 (e.g. SET CDPA (A) AND SET CDPA (B)  vs  SET CDPA (A,B))
+                 Shown in YELLOW; treated as a logical diff; not flagged.
+
+  MATCH        — identical block bodies (after whitespace normalisation)
+                 Shown in GREEN.
+
+Whitespace and comment differences are always ignored.
 
 
 ================================================================================
  OUTPUT STRUCTURE PER RUN
 ================================================================================
 
-All report artifacts for a run land in one timestamped directory so
-they can be archived together.
-
+Merge mode:
   reports/
-    run_YYYYMMDD_HHMMSS/        <- one folder per run
+    run_YYYYMMDD_HHMMSS/
       merge_diff.html           <- interactive HTML diff report
       merge_report_<base>.xlsx  <- Excel report (one per base dir)
-      log_merge_config.log      <- full debug log for this run
+      log_merge_config.log      <- full debug log
 
-To archive a run:
-  zip -r run_20260401_143022.zip reports/run_20260401_143022/
-
-
-================================================================================
- EXCEL REPORT -- 6 SHEETS
-================================================================================
-
-Sheet 1: MergeChanges
-  All parameter-level changes.
-  Columns: File | MergeCategory | ParameterName | ReleaseValue | BaseValue | Detail
-  Colour coding:
-    Red    -- EMPTY_BASE_OVERRIDE, DUPLICATE_KEY, INVALID_JSON (require review)
-    Yellow -- BASE_ONLY_PARAMETER_ADDED (parameter added from base)
-    Orange -- RELEASE_ONLY_PARAMETER_ADDED (release parameter kept as-is)
-
-Sheet 2: BaseOnlyFiles
-  Config files found in base dir with no release counterpart.
-  These files are not merged or copied unless listed in --copy-baseonlyconfigfile.
-
-Sheet 3: ReleaseOnlyFiles
-  Config files found in release dir with no base counterpart.
-  These files are passed through to output unchanged.
-
-Sheet 4: FileMappings
-  Explicit base <-> release file mappings that were applied from --mapping-file.
-  Columns: BaseConfigFileName | ReleaseConfigFileName
-
-Sheet 5: ExcludedBaseOnlyParams
-  Parameters that exist only in base and were excluded from output due to
-  --exclude-params-in-baseonlyconfig.
-  Columns: File | Parameter | BaseValue
-
-Sheet 6: BaseConfigAsIs
-  Files that were copied from base without merge processing, listed in
-  --copy-baseonlyconfigfile.
-  Column: FilePath
+Audit mode:
+  reports/
+    audit_YYYYMMDD_HHMMSS/
+      audit_report.html         <- interactive HTML report (or index page
+                                   + audit_report_p01.html, p02.html …
+                                   if report exceeds 22 MB)
+      audit.log                 <- full audit log
+      audit.xlsx                <- Excel summary
+      feedback/
+        skipped_backups.json    <- files auto-detected as backups
+        filtered_files.json     <- files excluded by --filter-file
+        logical_diff_summary.json  <- parameters flagged as logical diffs
+        log_name_warnings.json  <- log file prefix uniqueness warnings
 
 
 ================================================================================
- HTML REPORT
+ EXCEL REPORT
+================================================================================
+
+Merge mode — 6 sheets (header row frozen, auto-filter enabled on all sheets):
+
+  Sheet 1: MergeChanges
+    All parameter-level changes.
+    Columns: File | MergeCategory | ParameterName | ReleaseValue | BaseValue | Detail
+    Colour coding:
+      Red    -- EMPTY_BASE_OVERRIDE, DUPLICATE_KEY, INVALID_JSON (require review)
+      Yellow -- BASE_ONLY_PARAMETER_ADDED
+      Orange -- RELEASE_ONLY_PARAMETER_ADDED
+
+  Sheet 2: BaseOnlyFiles
+    Config files in base dir with no release counterpart.
+
+  Sheet 3: ReleaseOnlyFiles
+    Config files in release dir with no base counterpart.
+
+  Sheet 4: FileMappings
+    Explicit base <-> release file mappings applied from --mapping-file.
+
+  Sheet 5: ExcludedBaseOnlyParams
+    Parameters excluded by --exclude-params-in-baseonlyconfig.
+
+  Sheet 6: BaseConfigAsIs
+    Files copied from base without merge (--copy-baseonlyconfigfile).
+
+
+================================================================================
+ MERGE HTML REPORT
 ================================================================================
 
 Opens in any browser.  Self-contained (no internet connection needed).
 
 Left sidebar:
-  File-system tree of all processed files.
-  Click a file name to jump to its section.
-    -> The file HEADER is scrolled into view (not the body), so the
-       "Show Full Config" and "3-Way Diff" buttons are immediately
-       visible without further scrolling.
-  Search box to filter files by name.
-  Collapse/expand directories.
+  File-system tree of all processed files.  Click a file name to jump to it.
+  Search box to filter files.  Collapse/expand directories.
 
 File sections (right panel):
   Each processed file has a collapsible section showing all changes.
-  Click the file header to expand or collapse.
 
   "Show Full Config" button:
-  Toggles between:
-    - Changes-only view: lists each changed parameter with old/new values.
-    - Full Config Diff:  shows the entire merged output file side-by-side
-      with the release file.  Left = release (before), Right = output (after).
-
-  Full Config Diff colours:
-    White  -- line unchanged between release and output
-    Yellow -- line differs: release value replaced by base value
-    Green  -- line added in output (base-only parameter, not in release)
-    Red    -- line in release not carried to output
+    Toggles between changes-only view and full two-column diff:
+      Left = release (before merge), Right = output (after merge).
+    Colour coding:
+      White  -- line unchanged
+      Yellow -- line differs (base value replaced release value)
+      Green  -- line added (base-only parameter)
+      Red    -- line in release not carried to output
 
   "3-Way Diff" button:
-    Three-column view: Base (left) | Release (centre) | Merged Output (right).
-    Useful for verifying that base values were correctly applied over release.
-
-  Duplicate Key entries:
-    Only release-file duplicates are shown (base duplicates resolved silently).
-    Shows all duplicate values found and which final value was used.
-
-  Legend bar (bottom of screen -- always visible):
-    Colour meanings shown in a fixed bar at the bottom of the browser window
-    regardless of scroll position.  Hover over any legend item to see a full
-    explanation.
+    Three-column view: Base | Release | Merged Output.
+    Verifies base values were correctly applied.
 
 Toolbar:
   Filter buttons: All Changes | Empty Override | Base-Only | Release-Only
@@ -602,8 +715,168 @@ Toolbar:
 
 
 ================================================================================
- CHANGE CATEGORIES (MergeCategory in Excel / HTML)
+ AUDIT HTML REPORT
 ================================================================================
+
+Self-contained interactive report.  Opens in any browser.
+For large audit runs (> 22 MB), the report is split into multiple part files
+with an index page (audit_report.html → audit_report_p01.html, p02.html …).
+
+Index page (multi-part runs):
+  Opens automatically when there are multiple part files.
+  Features:
+    - "Files with differences" quick-list at top — all diff files in one
+      place, sorted by mismatch count, with direct links to the correct part.
+    - Collapsible directory tree showing diff/ok/absent status per directory.
+    - "Show diffs only" toggle collapses all all-match directories.
+    - Clicking a file link opens the correct part and jumps directly to that
+      file (deep-link via URL hash).
+
+Left sidebar (per-part pages):
+  Recursive directory tree.  Directories with diffs auto-expand; all-match
+  directories auto-collapse.  Per-directory badge shows diff count or ✓.
+
+  At top of sidebar: collapsible "Files with differences" quick-list showing
+  only files with mismatches.
+
+  When most files match (< 50% have diffs), the sidebar "Diffs only" filter
+  auto-enables on page load — only files with diffs are shown immediately.
+
+  Click any file to load its parameter table in the right panel.
+  Search box filters the sidebar tree.
+
+Right panel — parameter table:
+  One row per parameter; one column per node.  Table fills full page width.
+  Rows are colour-coded:
+    White  -- all nodes match
+    Yellow -- mismatch (values differ between nodes)
+    Teal   -- instance-specific value (log file name, instance number, etc.)
+               auto-detected; shown separately; not counted as an error
+    Blue   -- pending change (user has applied a resolution)
+    Purple -- logical diff (expected to differ; not flagged as error)
+    Striped -- file absent from this node (FILE ABSENT cell)
+
+  Files absent from some nodes are flagged with a MISSING badge in the
+  sidebar and appear in the "files with differences" lists.
+
+  For many-node sites (> 4 nodes):
+    - Horizontal scroll bar appears; parameter column stays frozen at left.
+    - Node selector chips above the table let you hide/show individual nodes.
+    - Columns are resizable by dragging the column header divider.
+    - Column widths are persisted in browser localStorage.
+
+Mismatch navigation:
+  "◀ Prev" and "Next ▶" buttons in the panel toolbar navigate between all
+  mismatch rows across all files.
+  Counter shows current position: "Mismatch 7 / 37"
+  "Show differences only" toggle state is preserved when navigating between
+  files — turning it on once keeps it on for the whole session.
+
+Resolution controls (per mismatch row):
+  Use for all   -- apply this node's value to all other nodes (pending)
+  Override      -- type a custom value to apply to all nodes (pending)
+  Add           -- for keys missing from some nodes: add the key
+  Skip          -- mark this parameter as intentionally different;
+                   excluded from patch export and per-node download
+  Revert        -- undo pending change on individual node
+
+Panel toolbar (sticky — always visible while scrolling):
+  Show diffs only        -- hide all matched rows; show only mismatches
+  Show instance-specific -- toggle teal instance-specific rows
+  Show expected diffs    -- toggle purple logical-diff rows
+  ◀ Prev / Next ▶        -- navigate between mismatch rows (cross-file)
+  Export Patch           -- download audit_patch.json with all pending
+                            changes and skipped parameters
+  Download (per node)    -- reconstruct and download corrected config for
+                            a specific node
+
+Change Log panel:
+  Tracks all pending changes in real time.
+  Click to open/close the log modal.
+
+Summary bar:
+  Shows full-run totals: Files | With Diffs | Mismatches | Binary Diff |
+  Absent Files | Errors.
+  For paginated reports, a sub-bar shows this-part counts alongside run totals.
+
+Skipped Files panel (bottom):
+  Collapsible section listing all files that were skipped:
+    Backup files auto-detected (with backup-suffix matched)
+    Files excluded by --filter-file
+  Each entry has a "📋 Copy rule" button that copies a JSON snippet to
+  clipboard — paste into audit config's no_skip_files or filter file to
+  include that file in future runs.
+
+Print / PDF:
+  Use browser Print — sidebar is hidden in print layout; only the main
+  content panel is printed.
+
+
+================================================================================
+ APPLYING AN AUDIT PATCH
+================================================================================
+
+After resolving mismatches in the HTML report, export a patch file and apply it:
+
+Step 1 — Export the patch from the HTML report:
+  Click "Export Patch" in the panel toolbar.
+  Save the downloaded  audit_patch.json.
+
+Step 2 — Apply the patch:
+  configmergetool \
+    --apply-audit-patch audit_patch.json \
+    --audit-config-file audit.json \
+    --output-dir corrections/
+
+  The tool writes corrected config files to  corrections/<node>/<file>.
+  A  corrections.log  lists every change applied.
+
+Exit codes:
+  0  -- patch applied successfully with no warnings
+  1  -- mismatches remain after applying patch (review corrections.log)
+  2  -- patch file invalid or no changes to apply
+
+
+================================================================================
+ FEEDBACK ACCUMULATOR
+================================================================================
+
+Every audit run appends a summary to:
+  ~/.configmergetool/feedback_history.json
+
+This records: timestamp, site name, nodes, backup files skipped, logical
+diffs found, log-name warnings, and filtered files.
+
+View a summary across all past runs:
+  configmergetool --feedback-summary
+
+The feedback file can be sent to the tool developer to help improve built-in
+backup-detection patterns and logical-diff heuristics.
+
+
+================================================================================
+ LOG FILE PREFIX UNIQUENESS DETECTION
+================================================================================
+
+After every audit run, the tool checks whether any log-related config keys
+share the same value across multiple nodes.  If two nodes use the same log
+file prefix, they may write to the same file on a shared filesystem.
+
+Keys checked (pattern-based):
+  log.file, log.prefix, *.log, *.prefix, *.logfile,
+  snmp.trap-file.prefix, kpi.stats.prefix, etc.
+
+Warnings are written to:
+  <run_dir>/feedback/log_name_warnings.json
+
+and shown in the HTML report with an orange badge.
+
+
+================================================================================
+ CHANGE CATEGORIES
+================================================================================
+
+Merge mode (MergeCategory in Excel / HTML):
 
   BASE_TO_RELEASE_REPLACED       KV key: release value replaced by base value
   XML_BASE_TO_RELEASE_REPLACED   XML element: release element replaced by base
@@ -619,7 +892,7 @@ Toolbar:
   JSON_EMPTY_BASE_OVERRIDE       *** JSON: base value "" -- review required ***
   LOGROTATE_EMPTY_BASE_OVERRIDE  *** Logrotate: base file empty -- review required ***
 
-  DUPLICATE_KEY                  Duplicate ACTIVE key in release file -- last value used
+  DUPLICATE_KEY                  Duplicate ACTIVE key in release file
   INVALID_JSON                   Input file contains invalid JSON
   INVALID_OUTPUT_JSON            Merged JSON output failed validation
   FILE_MAPPING                   Explicit mapping from --mapping-file applied
@@ -627,12 +900,33 @@ Toolbar:
   UNCOMMENT_REPLACE              Commented-out key uncommented and set from base
   NAMESPACE_ADAPTED              XML namespace updated to match release
   INDEXED_GROUP_RENUMBERED       Indexed group entries renumbered
-  INDEXED_GROUP_APPENDED         Release-only indexed groups appended after base groups
+  INDEXED_GROUP_APPENDED         Release-only indexed groups appended
   COMMA_VALUE_UNION              Comma-separated group header value merged as union
+  SSTP_RELEASE_COPIED            .sstp routing rule: release file copied as-is
+  PROCESSOR_ERROR                Processor encountered an error (review log)
 
 
 ================================================================================
- COMPLETE EXAMPLE WITH ALL OPTIONS
+ EXIT CODES
+================================================================================
+
+Merge mode:
+  0  -- merge completed; no EMPTY_BASE_OVERRIDE or critical errors
+  1  -- one or more critical issues found (EMPTY_BASE_OVERRIDE, INVALID_JSON,
+         PROCESSOR_ERROR); review the Excel report
+
+Audit mode:
+  0  -- audit completed; all nodes match (or all differences are logical diffs)
+  1  -- one or more mismatches found between nodes; review audit_report.html
+
+Patch mode:
+  0  -- patch applied successfully
+  1  -- residual mismatches after patch
+  2  -- patch invalid or nothing to apply
+
+
+================================================================================
+ COMPLETE MERGE EXAMPLE WITH ALL OPTIONS
 ================================================================================
 
 Directory layout:
@@ -647,7 +941,6 @@ Directory layout:
       application.properties  <- different name from base app.properties
       server.xml
       openapi.json
-  output/                     <- created by tool
 
 mapping-file.txt:
   base/config/app.properties = release/config/application.properties
@@ -656,7 +949,7 @@ copy-only.txt:
   base/config/ssl/server.keystore
 
 Command:
-  python3 ConfigMergeTool.py \
+  configmergetool \
     --base-dir base \
     --release-dirs release \
     --output-dir output \
@@ -667,7 +960,7 @@ Command:
 Output:
   output/
     config/
-      application.properties  <- merged (base app.properties + release application.properties)
+      application.properties  <- merged
       server.xml               <- merged
       openapi.json             <- merged
       ssl/server.keystore      <- copied as-is from base
@@ -677,3 +970,148 @@ Output:
       merge_report_base.xlsx
       merge_diff.html
       log_merge_config.log
+
+
+================================================================================
+ COMPLETE AUDIT EXAMPLE
+================================================================================
+
+audit.json:
+  [
+    {
+      "base_dir": "prod/GTPProxy-APP-01",
+      "name":     "APP-01",
+      "no_skip_files": ["fsmapp.properties_couchbase"]
+    },
+    {
+      "base_dir": "prod/GTPProxy-APP-02",
+      "name":     "APP-02"
+    }
+  ]
+
+filters.txt:
+  properties
+  cfg
+  xml
+  json
+  conf::sysctl.conf,sctp.conf
+  !nohup.out
+
+Command:
+  configmergetool \
+    --audit-config-file audit.json \
+    --filter-file filters.txt \
+    --quiet
+
+Results:
+  Console shows only DIFF / WARN / ERROR / SUMMARY lines.
+  reports/audit_20260401_143022/
+    audit_report.html          <- open in browser
+    audit.xlsx
+    audit.log
+    feedback/
+      skipped_backups.json     <- review for false positives
+      filtered_files.json
+      logical_diff_summary.json
+      log_name_warnings.json
+
+Apply corrections:
+  # 1. Open audit_report.html in browser
+  # 2. Resolve mismatches using Use-for-all / Override / Skip
+  # 3. Click "Export Patch" → save audit_patch.json
+  # 4. Apply:
+  configmergetool \
+    --apply-audit-patch audit_patch.json \
+    --audit-config-file audit.json \
+    --output-dir corrections/
+
+
+================================================================================
+ ENGINEER DO'S AND DON'TS
+================================================================================
+
+DO:
+  - Install into a virtual environment to avoid polluting system Python.
+  - Keep audit.json in version control — it is configuration, not disposable.
+  - Store audit output reports by date (tool does this automatically).
+  - Run --feedback-summary periodically to spot recurring patterns.
+  - Review feedback/skipped_backups.json after every audit run.
+  - Use --quiet for scheduled / CI jobs to keep logs clean.
+  - Use --dry-run before the first merge against a new site to preview changes.
+
+DON'T:
+  - Do NOT install with sudo pip install (system-wide install risks breaking OS tools).
+  - Do NOT put passwords in audit.json — use "password_env" fields only.
+  - Do NOT delete reports/ and logs/ before backing up — they are change evidence.
+  - Do NOT use --output-dir pointing to a live production directory.
+  - Do NOT run multiple concurrent jobs targeting the same --output-dir.
+  - Do NOT ignore the exit code in CI pipelines — exit 1 means action is required.
+  - Do NOT upgrade mid-audit — complete and apply the patch before upgrading.
+
+
+================================================================================
+ VERSION HISTORY
+================================================================================
+
+v2.0.1 (2026-04-07) — Audit report UX improvements
+  + Index page "Files with differences" quick-list above directory tree
+  + Deep-link navigation from index page to specific files in part pages
+  + Sidebar "Diffs only" filter auto-enables when diffs are a minority of files
+  + "Show differences only" panel toggle now persists across file navigation
+  + Sticky toolbar layout fix — visible regardless of pagination bars (no
+    more hardcoded 108px offset; uses CSS flex column layout)
+  + Per-part sub-bar showing this-part file/diff/mismatch counts
+  + Instance-specific value auto-detection (log paths, instance numbers)
+    shown in teal — separate toggle; not counted as errors
+  + Absent-file mismatch fix: KV and JSON files missing from some nodes now
+    correctly appear in the "files with differences" list (was broken for
+    KV/JSON; binary/text/SSTP already worked)
+  + Full-width table layout: removed double table-wrap; XML raw content
+    no longer capped at 500px height
+  + Skipped files panel: "Copy rule" clipboard button per skipped file
+  + HTML sanity check before write: DOCTYPE/script-tag balance/parse validation;
+    warns to stderr if issues detected
+
+v2.0.0 (2026-04-06)
+  + Audit mode: multi-node configuration drift detection
+  + Interactive HTML audit report with Use-for-all / Override / Skip / Revert
+  + Audit patch export and --apply-audit-patch patcher
+  + Backup file auto-detection and skipping
+  + File/directory filter (--filter-file)
+  + HTML report pagination for large audits (> 22 MB split into parts)
+  + Next/Prev mismatch navigation with position counter
+  + Resizable table columns with localStorage persistence
+  + Node visibility chip controls for many-node sites
+  + Sticky parameter column on horizontal scroll
+  + Log file prefix uniqueness detection
+  + Logical diff summary JSON
+  + Cross-run feedback accumulator (~/.configmergetool/feedback_history.json)
+  + SSTP routing rule semantic diff (VALUE / ORDER / STRUCT_EQUIV / MATCH)
+  + .sstp copy-only processor for merge mode
+  + Shared _open_text() encoding helper (utf-8-sig → chardet → latin-1)
+  + SHA-256 binary file comparison in audit mode
+  + Excel: freeze_panes, auto_filter, auto row heights on all sheets
+  + --quiet flag to suppress MATCH lines in console output
+  + --feedback-summary subcommand
+  + --version flag
+  + pip-installable wheel (configmergetool entry point)
+  + pyproject.toml with optional extras [encoding] [ssh] [email] [all]
+  + KV line fidelity: unchanged lines emitted verbatim (spacing preserved)
+  + Comment merge policy: base comments kept for unchanged parameters
+  + Section header raw line fidelity
+  + Audit patcher preserves inline comments after changed values
+  + Exit code 1 from audit mode when mismatches exist (was always 0)
+  + Path-traversal guard in audit _scan_dir() via safe_realpath()
+  + NodeFetcher abstraction for Phase 11 SSH/Phase 12 email (stubs)
+
+v1.x
+  + Merge mode: KV, XML, JSON, logrotate, generic processors
+  + Multi-base merge (one pass per node via --base-config-file)
+  + Mapping file and copy-only file support
+  + 3-way diff HTML report (Base | Release | Output)
+  + Interactive HTML merge report with sidebar and file tree
+  + 6-sheet Excel report
+  + --exclude-params-in-baseonlyconfig
+  + --dry-run
+  + Indexed group renumbering, comma-value union, shadow section handling
+  + Duplicate key detection (release-file active keys only)

@@ -1,6 +1,6 @@
 # ConfigMergeTool — Features Reference
 
-> Developer reference. Describes every feature implemented in the current codebase.
+> Developer reference. Describes every feature implemented in the current codebase (v2.0.0).
 > Update this file whenever features are added, changed, or removed.
 
 ---
@@ -9,20 +9,33 @@
 1. [Architecture](#architecture)
 2. [CLI Arguments](#cli-arguments)
 3. [File Format Support](#file-format-support)
-4. [Feature Details](#feature-details)
+4. [Feature Details — Merge Mode](#feature-details--merge-mode)
    - [File Discovery & Matching](#file-discovery--matching)
    - [Multi-Base Execution](#multi-base-execution)
    - [Key-Value Processing](#key-value-processing)
    - [XML Processing](#xml-processing)
    - [JSON Processing](#json-processing)
    - [Logrotate Processing](#logrotate-processing)
+   - [SSTP Processing (Merge Mode)](#sstp-processing-merge-mode)
    - [Generic Processing](#generic-processing)
    - [Excel Report](#excel-report)
-   - [HTML Report](#html-report)
-   - [Run Output Structure](#run-output-structure)
+   - [Merge HTML Report](#merge-html-report)
+   - [Run Output Structure (Merge)](#run-output-structure-merge)
    - [Logging](#logging)
-5. [Report Entry Types](#report-entry-types)
-6. [Changelog](#changelog)
+5. [Feature Details — Audit Mode](#feature-details--audit-mode)
+   - [Audit Engine](#audit-engine)
+   - [Backup File Detection](#backup-file-detection)
+   - [File Filter](#file-filter)
+   - [Audit HTML Report](#audit-html-report)
+   - [Audit Report UX](#audit-report-ux)
+   - [Audit Intelligence](#audit-intelligence)
+   - [SSTP Semantic Diff](#sstp-semantic-diff)
+   - [Audit Patcher](#audit-patcher)
+   - [Extensibility Architecture](#extensibility-architecture)
+   - [Run Output Structure (Audit)](#run-output-structure-audit)
+6. [Packaging & Distribution](#packaging--distribution)
+7. [Report Entry Types](#report-entry-types)
+8. [Changelog](#changelog)
 
 ---
 
@@ -30,12 +43,19 @@
 
 ```
 ConfigMergeTool/
-├── ConfigMergeTool.py          — CLI shim: argparse → MergeConfig → MergeEngine.run()
+├── ConfigMergeTool.py          — Backward-compat shim: calls configmerge.cli.main()
+├── pyproject.toml              — Build system; "configmergetool" entry point; optional extras
+├── requirements.txt            — Core runtime deps (openpyxl)
+├── requirements-dev.txt        — Dev/test deps (pytest, build, twine, chardet)
 └── configmerge/
-    ├── __init__.py             — Public API: MergeEngine, MergeConfig, BaseDirConfig, MergeResult
-    ├── models.py               — Dataclasses: BaseDirConfig, MergeConfig, MergeResult, ReportEntry, EntryType
-    ├── logger.py               — setup_logging(), important(), log_structured()
-    ├── utils.py                — ensure_dir(), copy_file()
+    ├── __init__.py             — Public API + __version__ = "2.0.0"
+    ├── __main__.py             — Enables: python -m configmerge
+    ├── cli.py                  — main() / _main() / parse_args() — pip entry point
+    ├── models.py               — BaseDirConfig, RemoteConfig, MergeConfig, MergeResult,
+    │                             ReportEntry, EntryType
+    ├── logger.py               — setup_logging(), important() (thread-safe), log_structured()
+    ├── utils.py                — open_text() (encoding-aware), file_sha256(), ensure_dir(),
+    │                             safe_realpath(), file_md5(), copy_file()
     ├── matcher.py              — FileMatcher: file discovery, name matching, mapping resolution
     ├── engine.py               — MergeEngine: orchestrates one pass per base dir
     ├── processors/
@@ -44,10 +64,25 @@ ConfigMergeTool/
     │   ├── xml_proc.py         — XMLProcessor (.xml/.xsd)
     │   ├── json_proc.py        — JSONProcessor (.json)
     │   ├── logrotate.py        — LogrotateProcessor (.logrotate)
+    │   ├── sstp.py             — SstpProcessor (.sstp) — copy-only in merge mode
     │   └── generic.py          — GenericProcessor (all other extensions)
-    └── reporter/
-        ├── excel.py            — write_excel(): 6-sheet .xlsx report
-        └── html_reporter.py    — write_html(): self-contained HTML diff report
+    ├── reporter/
+    │   ├── excel.py            — write_excel(): 6-sheet .xlsx with freeze/filter/row heights
+    │   └── html_reporter.py    — write_html(): self-contained HTML diff report
+    ├── auditor/
+    │   ├── __init__.py         — AuditEngine, AuditResult, AuditPatcher, FileFilter
+    │   ├── engine.py           — AuditEngine: multi-node config drift detection
+    │   ├── html_report.py      — write_audit_html(): interactive audit report (paginated)
+    │   ├── patch.py            — AuditPatcher: apply audit patch JSON to source files
+    │   ├── fetcher.py          — NodeFetcher ABC + LocalNodeFetcher
+    │   ├── file_filter.py      — FileFilter: include/exclude rules from filter file
+    │   ├── sstp_parser.py      — SstpParser: SSTP block parser + diff categoriser
+    │   └── feedback.py         — Cross-run feedback accumulator (load_history, print_summary)
+    └── workflows/
+        ├── __init__.py         — exports WorkflowBase
+        ├── base.py             — WorkflowBase ABC (run, deliver)
+        ├── remote.py           — SSHNodeFetcher stub (Phase 11)
+        └── email_workflow.py   — EmailAuditWorkflow stub (Phase 12)
 ```
 
 **Public API usage:**
@@ -67,11 +102,19 @@ config  = MergeConfig(
     ],
 )
 results = MergeEngine(config).run()
+
+# Audit mode
+from configmerge.auditor import AuditEngine
+nodes  = [BaseDirConfig(base_dir="APP-01", name="App01"),
+          BaseDirConfig(base_dir="APP-02", name="App02")]
+result = AuditEngine(nodes, report_dir="reports").run()
 ```
 
 ---
 
 ## CLI Arguments
+
+### Merge Mode
 
 | Argument | Required | Description |
 |---|---|---|
@@ -85,6 +128,55 @@ results = MergeEngine(config).run()
 | `--dry-run` | No | Skip writing output files; still generates full report |
 | `--verbose` | No | Print INFO-level log events to console |
 
+### Audit Mode
+
+| Argument | Required | Description |
+|---|---|---|
+| `--audit-config-file` | Yes | JSON array of node directories to compare |
+| `--filter-file` | No | Filter file controlling which file types/names are audited |
+| `--quiet` | No | Suppress MATCH lines; print only DIFF/WARN/ERROR/SUMMARY |
+| `--report-dir` | No | Directory for audit report output (default: `reports/`) |
+
+### Apply-Patch Mode
+
+| Argument | Required | Description |
+|---|---|---|
+| `--apply-audit-patch` | Yes | Path to patch JSON exported from audit report |
+| `--output-dir` | Yes | Directory to write corrected config files |
+
+### Other Flags
+
+| Argument | Description |
+|---|---|
+| `--feedback-summary` | Print cross-run feedback history and exit |
+| `--version` | Print version and exit |
+| `--log-dir` | Directory for log files (default: `logs/`) |
+| `--remote-audit` | *(Coming Phase 11)* Fetch files via SSH |
+| `--email-config` | *(Coming Phase 12)* Email-triggered audit mode |
+
+**`--audit-config-file` JSON format:**
+```json
+[
+  {
+    "base_dir": "/opt/app/config",
+    "name": "APP-01",
+    "no_skip_files": ["fsmapp.properties_couchbase"]
+  },
+  {
+    "base_dir": "/opt/app/config",
+    "name": "APP-02",
+    "remote": {
+      "host": "10.0.0.2",
+      "port": 22,
+      "username": "admin",
+      "key_file": "~/.ssh/id_rsa"
+    }
+  }
+]
+```
+
+Fields: `base_dir` (required), `name`, `no_skip_files` (filenames exempt from backup skipping), `remote` (SSH config for Phase 11).
+
 **`--base-config-file` JSON format:**
 ```json
 [
@@ -94,56 +186,26 @@ results = MergeEngine(config).run()
     "mapping_file":   "mappings/node1-mapping.txt",
     "copy_only_file": "mappings/node1-copy-only.txt"
   },
-  {
-    "base_dir": "base/node2",
-    "name":     "prod-us"
-  }
+  { "base_dir": "base/node2", "name": "prod-us" }
 ]
 ```
-All fields except `base_dir` are optional. `name` defaults to the directory's folder name.
-
-**`--mapping-file` format:**
-```
-# Paths are relative to the working directory (preferred).
-base/config/fsmapp.cfg = release/config/app.properties
-base/config/db-primary.xml = release/config/database.xml
-base/config/db-replica.xml = release/config/database.xml
-```
-
-Path resolution for the base side (checked in order):
-1. Full path from working directory: `base_dir/subdir/file.cfg`  ← preferred
-2. Base dir name prefix: `base_dirname/subdir/file.cfg`
-3. Bare path relative to within base dir: `subdir/file.cfg`  ← legacy, still accepted
-
-Many-to-One is supported: multiple base paths can map to one release path.
-
-**`--copy-baseonlyconfigfile` format:**
-```
-# Paths are relative to the working directory (preferred).
-base/config/ssl/server.keystore
-base/config/licence.dat
-```
-
-Path resolution (checked in order):
-1. Full path from working directory: `base_dir/subdir/file`  ← preferred
-2. Base dir name prefix: `base_dirname/subdir/file`
-3. Bare path relative to within base dir: `subdir/file`  ← legacy, still accepted
 
 ---
 
 ## File Format Support
 
-| Extension(s) | Processor | Merge Strategy |
-|---|---|---|
-| `.properties`, `.cfg`, `.ini`, `.conf`, `.sh` | KVProcessor | Key-level per section; base wins; release-only preserved |
-| `.xml`, `.xsd` | XMLProcessor | Element-level; base wins; release namespace retained |
-| `.json` | JSONProcessor | Deep recursive merge; base wins; release-only keys preserved |
-| `.logrotate` | LogrotateProcessor | Whole base file copied to output |
-| All others | GenericProcessor | Copied as-is from release; no merge |
+| Extension(s) | Processor | Merge Mode | Audit Mode |
+|---|---|---|---|
+| `.properties`, `.cfg`, `.ini`, `.conf`, `.sh` | KVProcessor | Key-level per section; base wins | Semantic KV comparison |
+| `.xml`, `.xsd` | XMLProcessor | Element-level; base wins | Normalised text comparison |
+| `.json` | JSONProcessor | Deep recursive merge; base wins | Deep JSON comparison |
+| `.logrotate` | LogrotateProcessor | Whole base file copied | Text comparison |
+| `.sstp` | SstpProcessor | Copy-only (release wins) | Semantic block diff |
+| All others | GenericProcessor | Copied as-is from release | Text comparison |
 
 ---
 
-## Feature Details
+## Feature Details — Merge Mode
 
 ### File Discovery & Matching
 
@@ -152,14 +214,14 @@ Path resolution (checked in order):
 | F-01 | Recursive walk | Both `base_dir` and all `release_dirs` are walked recursively |
 | F-02 | Relative-path match | Release file matched to base file first by identical relative path |
 | F-03 | Filename-only fallback | If relative paths differ, matched by filename alone |
-| F-04 | Ambiguity detection | If the same filename appears in multiple base locations, the file is flagged ambiguous and skipped with a WARNING |
-| F-05 | Explicit mapping | `--mapping-file` maps base paths to differently-named release paths; mapped files bypass filename matching |
-| F-06 | Many-to-One mapping | Multiple base paths may map to one release path; all base files merged in order |
-| F-07 | Copy-only bypass | Files listed in `--copy-baseonlyconfigfile` are copied from base without processing |
-| F-08 | Path traversal guard | Paths from mapping and copy-only files are canonicalised with `os.path.realpath`; must remain within `base_dir` |
-| F-09 | Output dir cleanup | Output dir is removed and recreated before each run (skipped in `--dry-run`) |
-| F-10 | Release-only detection | Release files with no base counterpart are noted in the ReleaseOnlyFiles Excel sheet |
-| F-11 | Flexible path format | Both mapping-file and copy-only-file accept full working-directory paths (`base_dir/path`), base-dir-name-prefixed paths (`basename/path`), or bare paths (`path`); all resolve to the same internal relative path |
+| F-04 | Ambiguity detection | Same filename in multiple base locations → flagged ambiguous, skipped with WARNING |
+| F-05 | Explicit mapping | `--mapping-file` maps base paths to differently-named release paths |
+| F-06 | Many-to-One mapping | Multiple base paths may map to one release path; all merged in order |
+| F-07 | Copy-only bypass | Files in `--copy-baseonlyconfigfile` copied from base without processing |
+| F-08 | Path traversal guard | Paths canonicalised with `safe_realpath()`; must remain within `base_dir` |
+| F-09 | Output dir cleanup | Output dir removed and recreated before each run (skipped in `--dry-run`) |
+| F-10 | Release-only detection | Release files with no base counterpart noted in ReleaseOnlyFiles sheet |
+| F-11 | Flexible path format | Mapping and copy-only files accept full working-directory paths, base-dir-name-prefixed paths, or bare paths |
 
 ---
 
@@ -169,10 +231,10 @@ Path resolution (checked in order):
 |---|---|---|
 | M-01 | Independent pass per base | Each `BaseDirConfig` runs a completely independent `FileMatcher` + processor pass |
 | M-02 | Per-base output subdirs | Multi-base: output goes to `output/<base_name>/`; single-base: directly to `output/` |
-| M-03 | Per-base Excel report | Each base produces its own Excel file named `merge_report_<base_name>.xlsx` |
-| M-04 | Combined HTML report | All bases appear in one HTML report; sidebar groups files by base name |
+| M-03 | Per-base Excel report | Each base produces its own Excel file |
+| M-04 | Combined HTML report | All bases appear in one HTML report; sidebar groups by base name |
 | M-05 | Per-base mapping & copy-only | Each `BaseDirConfig` can specify its own `mapping_file` and `copy_only_file` |
-| M-06 | Single run directory | All run artifacts (logs, Excel, HTML) land in `reports/run_YYYYMMDD_HHMMSS/` so one zip captures a complete run |
+| M-06 | Single run directory | All run artifacts land in `reports/run_YYYYMMDD_HHMMSS/` |
 
 ---
 
@@ -180,89 +242,93 @@ Path resolution (checked in order):
 
 Handles: `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`
 
-**Parser — `KVDocument`:**
-- Section-aware (`[section]` headers tracked; global keys go in `DEFAULT` section)
-- Shadow sections: a line like `#[SectionName]` (entire section header commented out) is parsed as its own section keyed `#[SectionName]`; during merge it is reconciled with the corresponding active section from release
-- Each entry captures: key, value, comment lines above it, whether it is commented-out (`is_commented`), delimiter (`=` or `:`), and the original raw line
-- `lookup` dict maps `section|key` → entry; active entries always win over commented entries in lookup
-- Duplicate tracking: only **active** entries counted; commented entries (annotations) alongside active entries are never flagged as duplicates
-
 | ID | Feature | Behaviour |
 |---|---|---|
-| K-01 | Base value wins | For keys in both base and release (both active), the base value is used in output |
-| K-02 | Comment preservation | Comment/blank lines immediately preceding a key are re-emitted with the key |
-| K-03 | Comment source preference | If both files have a comment for the same key and they differ, the release comment is used in output |
-| K-04 | Commented-out key handling | If a release key is commented out (`# key=value`) but base has an active value for it, the key is uncommented and set to the base value; reported as `UNCOMMENT_REPLACE` |
-| K-05 | Base-only insertion | Keys in base (active) absent from release are inserted into the matching section in output; reported as `BASE_ONLY_PARAMETER_ADDED` |
-| K-06 | Release-only preservation | Keys in release absent from base are kept in output; reported as `RELEASE_ONLY_PARAMETER_ADDED` |
-| K-07 | Exclude flag | `--exclude-params-in-baseonlyconfig` suppresses K-05; excluded params logged as `EXCLUDED_BASE_ONLY_PARAMETER` |
-| K-08 | Empty base override | If the base value is blank/empty, the release value is forced blank; logged as `EMPTY_BASE_OVERRIDE` (requires review) |
-| K-09 | Indexed group handling | Keys matching `prefix.N.subkey` (e.g. `schedule.1.name`) are detected as indexed groups; base groups retained in order; release-only groups appended with renumbered indices; `prefix.count` updated to final total |
-| K-10 | Comma-value union | Group header params with comma-separated values (e.g. `schedule.registry`) get a union of base + release values |
-| K-11 | Active duplicate detection | Multiple **active** occurrences of the same `section|key` in the release file are reported as `DUPLICATE_KEY`; base duplicates are resolved silently (last-wins) and not reported |
-| K-12 | Shadow section handling | If base has `#[SectionName]` (entire section commented out) and release has active `[SectionName]`, output entries keep the base comment-state (all remain commented); base wins on comment-state |
-| K-13 | Pre-annotation preservation | A commented entry `#key=old` that appears before the first active `key=new` in release is emitted verbatim immediately before the merged active entry |
-| K-14 | Post-annotation preservation | A commented entry `#key=alt` that appears after the active `key=val` in release is emitted verbatim after the active entry in output; these are "alternative value" comments (e.g. `#event.list=UCGDMLS`) and must not be suppressed |
-| K-15 | Section interleaving | Base-only sections are interleaved at their natural relative position from the base file order — they appear immediately before the release section that follows them in base, not appended at end |
-| K-16 | Release spine ordering | The combined output walks the release file in order; all base-only insertions (params and sections) are anchored to their nearest successor in the release spine |
+| K-01 | Base value wins | For keys in both files (both active), base value used in output |
+| K-02 | Line fidelity (pass-through) | Unchanged parameters emitted using `entry.raw_line` verbatim — indentation, delimiter spacing, and inline comments all preserved |
+| K-03 | Line fidelity (changed value) | Changed parameters use raw line as template: prefix up to delimiter preserved, new value substituted, trailing inline comment (`# …`) retained |
+| K-04 | Comment source preference | Base comments used for unchanged params; release comments used only when value is changing |
+| K-05 | Commented-out key handling | Release commented key + active base value → uncommented and set to base value (`UNCOMMENT_REPLACE`) |
+| K-06 | Base-only insertion | Keys in base absent from release inserted into output (`BASE_ONLY_PARAMETER_ADDED`) |
+| K-07 | Release-only preservation | Keys in release absent from base kept in output (`RELEASE_ONLY_PARAMETER_ADDED`) |
+| K-08 | Exclude flag | `--exclude-params-in-baseonlyconfig` suppresses K-06 |
+| K-09 | Empty base override | Base value blank → release value forced blank (`EMPTY_BASE_OVERRIDE`) |
+| K-10 | Indexed group handling | `prefix.N.subkey` groups: base groups retained, release-only groups appended with renumbered indices; `prefix.count` updated |
+| K-11 | Comma-value union | Group header params with comma-separated values get a union of base + release values |
+| K-12 | Active duplicate detection | Multiple active occurrences of `section\|key` in release → `DUPLICATE_KEY` |
+| K-13 | Shadow section handling | Base `#[SectionName]` merged with release active `[SectionName]`; all output entries remain commented |
+| K-14 | Pre-annotation preservation | `#key=old` before active `key=new` in release emitted verbatim before merged active entry |
+| K-15 | Post-annotation preservation | `#key=alt` after active `key=val` in release emitted verbatim after active entry |
+| K-16 | Section interleaving | Base-only sections inserted before their successor release section, not appended at end |
+| K-17 | Section header fidelity | Original section header line (`[Application]  # comment`) stored and emitted verbatim — inline comments on headers preserved |
 
 ---
 
 ### XML Processing
 
-Handles: `.xml`, `.xsd`
-
 | ID | Feature | Behaviour |
 |---|---|---|
-| X-01 | Element-level replacement | Each base element (matched by tag + `name` attribute) replaces the corresponding release element verbatim |
-| X-02 | Namespace preservation | Release namespace declarations are captured before any processing; merged output is post-processed to restore the original release root namespace exactly, removing any `ns0:`, `ns1:` prefixes that ElementTree may inject |
-| X-03 | Hyphenated namespace support | Tag and attribute regex patterns use `[\w-]+:` to match namespace prefixes containing hyphens |
-| X-04 | Empty-base override | If a base element has no children and no text content, the release element is forced empty; logged as `EMPTY_BASE_OVERRIDE_XML` |
-| X-05 | Base-only element insertion | Elements in base absent from release are inserted into output; controlled by `--exclude-params-in-baseonlyconfig` |
-| X-06 | Release-only preservation | Elements only in release are kept in output; reported as `RELEASE_ONLY_PARAMETER_ADDED` |
-| X-07 | Duplicate element detection | Duplicate tag+name combinations in base are reported as `DUPLICATE_KEY` |
-| X-08 | BOM handling | Files are read with `encoding="utf-8-sig"` to silently strip UTF-8 BOM |
-| X-09 | Garbage-before-declaration strip | Content before `<?xml` is removed before parsing |
-| X-10 | Safe parse | XML parse errors produce structured log entries; the file is skipped without crashing the run |
-| X-11 | Comment capture | XML comments preceding an element are stored and associated with that element for the HTML report |
+| X-01 | Element-level replacement | Base element (matched by tag + `name` attribute) replaces release element verbatim |
+| X-02 | Namespace preservation | Release namespace declarations restored; no `ns0:`, `ns1:` injection |
+| X-03 | Hyphenated namespace support | Tag/attribute regex uses `[\w-]+:` to match hyphenated prefixes |
+| X-04 | Empty-base override | Base element empty → release element forced empty (`EMPTY_BASE_OVERRIDE_XML`) |
+| X-05 | Base-only element insertion | Elements in base absent from release inserted into output |
+| X-06 | Release-only preservation | Elements only in release kept in output |
+| X-07 | Duplicate detection | Duplicate tag+name in base → `DUPLICATE_KEY` |
+| X-08 | Encoding-aware read | `open_text()` tries utf-8-sig → chardet → latin-1 fallback; ISO-8859 files handled |
+| X-09 | Garbage-before-declaration strip | Content before `<?xml` removed before parsing |
+| X-10 | Safe parse | XML parse errors produce structured log entries; file skipped without crash |
+| X-11 | Comment capture | XML comments preceding an element stored and associated for the HTML report |
+| X-12 | Multi-base warning | `len(base_files) > 1` emits warning — multi-base XML not fully supported |
 
 ---
 
 ### JSON Processing
 
-Handles: `.json`
-
 | ID | Feature | Behaviour |
 |---|---|---|
-| J-01 | Deep recursive merge | `merge(base, release)` recurses into nested objects; base values overwrite matching release values at any depth |
-| J-02 | Release-only preservation | Keys present only in release at any depth are retained; reported as `RELEASE_ONLY_PARAMETER_ADDED` |
-| J-03 | Empty-base override | If base value is `""`, release value is forced to `""`; reported as `JSON_EMPTY_BASE_OVERRIDE` |
-| J-04 | Duplicate key detection | Custom object-pairs hook detects duplicate keys within the same JSON object; last value wins |
-| J-05 | Input validation | Both files are validated before merge; invalid files produce `INVALID_JSON` entries |
-| J-06 | Output validation | Merged JSON is re-parsed after serialisation to confirm validity; invalid output is discarded and reported as `INVALID_OUTPUT_JSON` |
+| J-01 | Deep recursive merge | `merge(base, release)` recurses into nested objects; base values overwrite release at any depth |
+| J-02 | Release-only preservation | Keys only in release at any depth retained |
+| J-03 | Empty-base override | Base value `""` → release forced `""` (`JSON_EMPTY_BASE_OVERRIDE`) |
+| J-04 | Duplicate key detection | Custom object-pairs hook detects duplicate keys; last wins |
+| J-05 | Input validation | Both files validated before merge; invalid → `INVALID_JSON` |
+| J-06 | Output validation | Merged JSON re-parsed; invalid → discarded + `INVALID_OUTPUT_JSON` |
+| J-07 | Indent preservation | Original indent width detected from the release file; output uses the same width (not forced to 2 spaces) |
+| J-08 | Encoding-aware read | `open_text()` tries utf-8-sig → chardet → latin-1 fallback |
+| J-09 | Multi-base warning | `len(base_files) > 1` emits warning — multi-base JSON not fully supported |
 
 ---
 
 ### Logrotate Processing
 
-Handles: `.logrotate`
+| ID | Feature | Behaviour |
+|---|---|---|
+| L-01 | Whole-file replacement | Entire base logrotate file written to output verbatim |
+| L-02 | Empty-base override | Base file blank → output empty (`LOGROTATE_EMPTY_BASE_OVERRIDE`) |
+| L-03 | Encoding-aware read | `open_text()` with latin-1 fallback |
+
+---
+
+### SSTP Processing (Merge Mode)
+
+Handles: `.sstp` (Roamware Smart-STP routing rule scripts)
 
 | ID | Feature | Behaviour |
 |---|---|---|
-| L-01 | Whole-file replacement | The entire base logrotate file is written to output verbatim |
-| L-02 | Empty-base override | If the base file is blank, output is written as empty; reported as `LOGROTATE_EMPTY_BASE_OVERRIDE` |
+| S-01 | Copy-only | Release file is always authoritative; copied as-is to output |
+| S-02 | No line merge | Auto-generated routing rules are never hand-merged |
+| S-03 | Registered | `.sstp` registered in `PROCESSOR_REGISTRY` via `@register('.sstp')` decorator |
+| S-04 | Semantic diff in audit | Full block-level semantic comparison in audit mode (see [SSTP Semantic Diff](#sstp-semantic-diff)) |
 
 ---
 
 ### Generic Processing
 
-Handles: All extensions not matched by a registered processor.
-
 | ID | Feature | Behaviour |
 |---|---|---|
-| G-01 | Copy from release | File is copied as-is from the release directory |
-| G-02 | No merge | No key-level or element-level processing is performed |
-| G-03 | Logged | A `[GENERIC]` log entry is written so unhandled formats are visible |
+| G-01 | Copy from release | File copied as-is from release directory |
+| G-02 | No merge | No key-level or element-level processing |
+| G-03 | Logged | `[GENERIC]` log entry written |
 
 ---
 
@@ -279,94 +345,37 @@ Generated per base directory. Filename: `merge_report_<base_name>.xlsx`
 | **ExcludedBaseOnlyParams** | File, Parameter, BaseValue | — |
 | **BaseConfigAsIs** | FilePath | — |
 
-Colour rules on MergeChanges:
-- **Red** — `EMPTY_BASE_OVERRIDE*`, `DUPLICATE_KEY`, `INVALID_JSON`, `INVALID_OUTPUT_JSON`
-- **Yellow** — `BASE_ONLY_PARAMETER_ADDED`
-- **Orange** — `RELEASE_ONLY_PARAMETER_ADDED`
-- White — all other change types
+**Phase 6 usability improvements:**
+- Header row frozen (`freeze_panes = "A2"`) — scrolling keeps column headers visible
+- Column auto-filter drop-downs on all sheets
+- Row heights auto-adjusted for multi-line cell values (15px per line)
 
 ---
 
-### HTML Report
+### Merge HTML Report
 
-Single self-contained file. Filename: `merge_diff.html`  
-No internet connection required; no external JS or CSS dependencies.
+Single self-contained file: `merge_diff.html`
 
-**Structure:**
 - Fixed top bar: run metadata (base dir, release dir, output dir, timestamp)
 - Summary bar: total counts per change type
-- Left sidebar: collapsible file-system tree + search box
+- Left sidebar: collapsible file tree + search box + click-to-navigate
 - Right panel: toolbar + one collapsible section per processed file
 - Fixed bottom legend bar: always visible, hover for tooltip explanations
-
-**Sidebar:**
-- Tree mirrors the output directory structure
-- Click any file to jump to its section; the file header is scrolled into view so "Show Full Config" and "3-Way Diff" buttons are immediately accessible without further scrolling
-- `scroll-margin-top` on `.file-hdr` accounts for sticky page header and toolbar so the file header lands below fixed elements
-- Search box filters the file list by name
-- Multi-base: sidebar has one top-level group per base name
-- Directories are collapsible
-
-**File sections:**
-- Click header to expand/collapse
-- **"Show Full Config"** button toggles between:
-  - **Changes-only view**: each changed parameter with release vs merged values side-by-side
-  - **Full Config Diff**: entire file shown in two-column layout — Release (left) vs Merged Output (right)
-- **"3-Way Diff"** button: three-column view — Base (left) vs Release (centre) vs Merged Output (right)
-
-**Full Config Diff colour coding:**
-
-| Colour | Meaning |
-|---|---|
-| White | Line identical in release and merged output |
-| Yellow | Line differs — release value was replaced by base value |
-| Green | Line only in merged output — base-only parameter added |
-| Red / strikethrough | Line in release not carried through to merged output |
-
-**Change row colours:**
-
-| Colour | Meaning |
-|---|---|
-| Blue tag | BASE_TO_RELEASE_REPLACED — value replaced by base |
-| Green tag | BASE_ONLY_PARAMETER_ADDED — inserted from base |
-| Orange tag | RELEASE_ONLY_PARAMETER_ADDED — kept from release |
-| Red tag | EMPTY_BASE_OVERRIDE / DUPLICATE_KEY / errors |
-
-**Duplicate Key rows:**
-- Only duplicates found in the **release** file are shown (base duplicates are resolved silently)
-- Left column shows: "Duplicate key in release config: \<all values\> → last value used: \<final\>"
-- Right column shows the merged value with a warning badge
-
-**Legend bar (fixed bottom):**
-- Always visible regardless of scroll position
-- Two sections: Change Row colours and Full Config Diff colours
-- Hover over any item for a tooltip with the full explanation
-
-**Toolbar buttons:**
-- All Changes, Empty Override, Base-Only, Release-Only — filter visible change rows
-- Collapse All / Expand All — toggle all file sections
-
-**JavaScript:** Pure vanilla JS; no external libraries.
+- **"Show Full Config"** toggle: changes-only view ↔ full file diff (release vs output)
+- **"3-Way Diff"**: base | release | merged output in three columns
+- Pure vanilla JS; no external dependencies
 
 ---
 
-### Run Output Structure
-
-All artifacts for one run land in a single timestamped directory:
+### Run Output Structure (Merge)
 
 ```
 reports/
 └── run_YYYYMMDD_HHMMSS/
     ├── log_merge_config.log        ← full DEBUG log
     ├── merge_diff.html             ← combined HTML (all bases)
-    ├── merge_report_<base1>.xlsx   ← Excel per base
+    ├── merge_report_<base1>.xlsx
     └── merge_report_<base2>.xlsx
-```
-
-For single-base runs the Excel file is `merge_report_<base_dir_name>.xlsx`.  
-The run directory can be zipped directly to archive the complete run:
-```bash
-zip -r run_20260401_143022.zip reports/run_20260401_143022/
 ```
 
 ---
@@ -375,12 +384,240 @@ zip -r run_20260401_143022.zip reports/run_20260401_143022/
 
 | ID | Feature | Behaviour |
 |---|---|---|
-| L-01 | File logging | All events at DEBUG level written to `log_merge_config.log` in the run directory |
-| L-02 | Console logging | `--verbose`: INFO+ events; default: WARNING+ events and explicit `important()` calls |
-| L-03 | No duplicate output | `important()` calls `print()` once and writes directly to the FileHandler only, bypassing the StreamHandler to avoid double-printing in verbose mode |
+| L-01 | File logging | All events at DEBUG level written to `log_merge_config.log` |
+| L-02 | Console logging | `--verbose`: INFO+; default: WARNING+ and `important()` calls |
+| L-03 | Thread-safe | `important()` routes through logging handler `emit()` (not `print()`) — safe under `ThreadPoolExecutor` |
 | L-04 | Structured format | `[TYPE][ACTION][SEVERITY][FILE][ELEMENT] message` |
-| L-05 | Unique logger name | Each run gets a logger named `config-merge.YYYYMMDD.HHMMSS.mmm`; prevents handler bleed between runs in tests |
-| L-06 | Dry-run labelled | Every run under `--dry-run` emits `[DRY-RUN] No files will be written` at the start |
+| L-05 | Unique logger name | Logger named `config-merge.YYYYMMDD.HHMMSS.mmm` per run |
+| L-06 | Dry-run labelled | `[DRY-RUN] No files will be written` emitted at start |
+
+---
+
+## Feature Details — Audit Mode
+
+Audit mode compares configuration files across multiple site nodes (base directories) to detect configuration drift without a release directory.
+
+**Invocation:**
+```bash
+configmergetool --audit-config-file audit.json
+configmergetool --audit-config-file audit.json --filter-file filters.txt --quiet
+```
+
+---
+
+### Audit Engine
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| A-01 | Multi-node diff | Compares every file across all nodes; produces per-file, per-parameter diff results |
+| A-02 | KV semantic comparison | Full `parse_kv_doc()` parse; per-section, per-key comparison; active values only |
+| A-03 | JSON comparison | Deep parse and per-key comparison |
+| A-04 | Text/XML comparison | Normalised text comparison (strip BOM, CRLF→LF, trailing whitespace); SHA-256 not used for text |
+| A-05 | Binary comparison | SHA-256 + file size; replaces legacy MD5 |
+| A-05b | Absent-file mismatch (all types) | KV and JSON comparisons now set `mismatch_count ≥ 1` when the file is absent from any node, consistent with binary/text/SSTP behaviour |
+| A-06 | Logical diff patterns | `logical_diff_patterns` regex list marks expected node-specific params as `is_logical_diff=True` — excluded from mismatch count |
+| A-07 | Pre-run validation | Each `node.base_dir` checked before scanning; missing directories abort with clear error |
+| A-08 | Progress indicator | After every 25 files (total > 50, non-quiet): `[PROGRESS] 50/205 files processed (24%)` |
+| A-09 | Quiet mode | `--quiet`: MATCH lines suppressed on console; DIFF/WARN/ERROR/SUMMARY still printed |
+| A-10 | Encoding-aware read | All file reads via `open_text()` — utf-8-sig → chardet → latin-1 |
+| A-11 | Exit code | Exit 0 = no mismatches; exit 1 = mismatches found; exit 2 = configuration error |
+| A-12 | Path traversal guard | `safe_realpath()` applied in `_scan_dir()`; symlinks escaping `base_dir` silently skipped |
+| A-13 | CRLF output | All written files use `newline="\n"` — consistent across Windows/Linux |
+
+---
+
+### Backup File Detection
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| B-01 | Auto-detection | Files matching backup suffix patterns are skipped when their canonical stem exists in the same directory |
+| B-02 | Patterns detected | `_bkp`, `_bkp_*`, `_backup`, `_orig`, `_org`, `_old`, `.bak`, `_DDMMYYYY`, `_YYYYMMDD`, `_DDMMYY`, `_save` (case-insensitive) |
+| B-03 | Stem matching | Only skipped when `GTPProxy.cfg` exists alongside `GTPProxy.cfg_bkp_27072024` — never skips orphaned backup-named files |
+| B-04 | Whitelist | `"no_skip_files": ["fsmapp.properties_couchbase"]` in audit config JSON exempts specific filenames |
+| B-05 | Feedback output | `<run_dir>/feedback/skipped_backups.json` — full list for review |
+| B-06 | Console | `[BACKUP SKIP] 3 backup file(s) skipped — path/to/skipped_backups.json` |
+
+---
+
+### File Filter
+
+Activated with `--filter-file <path>`.
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| FF-01 | Binary archive exclusion | `.tar`, `.gz`, `.rpm`, `.zip`, `.jar`, `.war`, `.ear`, `.jks`, `.p12`, `.pem`, etc. always excluded even without a filter file |
+| FF-02 | Suffix include | Line `cfg` — include all `.cfg` files |
+| FF-03 | Named include | Line `conf::sysctl.conf,sctp.conf` — include only those named files with `.conf` extension |
+| FF-04 | Directory include | Line `html::runtime,test` — include `.html` only in dirs named `runtime` or `test` |
+| FF-05 | Explicit exclude | Line `!nohup.out` — always exclude this filename |
+| FF-06 | Glob exclude | Line `!*.tmp` — glob pattern excludes |
+| FF-07 | Pass-through mode | No filter file → only binary archives excluded; everything else compared |
+| FF-08 | Feedback output | `<run_dir>/feedback/filtered_files.json` — list of excluded files with reason |
+
+---
+
+### Audit HTML Report
+
+Output: `<run_dir>/audit_report.html` (or paginated part files for large runs)
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| R-01 | Self-contained | Full CSS + JS embedded; no internet connection required |
+| R-02 | Interactive sidebar | Recursive directory tree with per-directory diff badges; click to navigate |
+| R-03 | File search | Search box filters sidebar file list |
+| R-04 | Parameter table | One row per parameter; per-node value columns; full page width |
+| R-05 | Sticky key column | Parameter column stays visible on horizontal scroll (many-node runs) |
+| R-06 | Horizontal scroll | `.table-wrap` scrolls horizontally; node columns visible on 16+ node runs |
+| R-07 | Node chip visibility | When nodes > 4: chip buttons above table to hide/show individual node columns |
+| R-08 | Column width scaling | Column width auto-scales: ≤4 nodes → 260px; 5-8 → 220px; 9-16 → 180px; >16 → 160px |
+| R-09 | Pagination | Reports > 22 MB split into `audit_report_p01.html`, `p02.html`… with index page |
+| R-10 | Script injection fix | `</script>` in file content escaped to `<\/script>` before embedding JSON |
+| R-11 | Show diffs only | Toggle hides matched rows and collapses empty section dividers; state persists across file navigation |
+| R-12 | Show expected diffs | Toggle shows/hides logical-diff rows (purple) |
+| R-13 | Per-node download | Reconstructed KV/JSON per node, excluding skipped compounds |
+| R-14 | Export Patch | Downloads `audit_patch.json` with `changes` + `skipped` arrays |
+| R-15 | Change Log panel | Tracks all pending corrections in real time |
+| R-16 | Clear All | Change Log modal has "Clear All" button to revert all pending changes |
+| R-17 | Binary rows | SHA-256 + file size displayed; no Use-for-all/Override buttons on binary rows |
+| R-18 | Diff quick-list (sidebar) | Collapsible "Files with differences" list at top of sidebar; filename + mismatch count |
+| R-19 | Diff quick-list (index) | Prominent red section above directory tree on index page; full path, type, diff count, part link |
+| R-20 | Deep-link navigation | Index page file links use URL-encoded hash (`#<path>`); part pages open that file on load |
+| R-21 | Auto sidebar diffs-only | Sidebar diffs-only filter auto-enables on page load when diff files < 50% of total |
+| R-22 | Sticky toolbar layout | `body` uses flex column + `height:100vh`; `.layout` uses `flex:1;min-height:0` — toolbar stays visible regardless of part-nav or sub-stats bars |
+| R-23 | Per-part stats | Sub-bar below summary shows this-part file/diff/mismatch counts; full-run totals also shown |
+| R-24 | Instance-specific colouring | Parameters auto-detected as instance-specific (log paths, instance numbers) shown in teal |
+| R-25 | Absent-file flagging | Files present on some nodes but absent on others: shown with MISSING badge in sidebar; FILE ABSENT cells in table |
+| R-26 | Skipped files panel | Collapsible section lists backup-detected + filter-excluded files with path, reason, base dir, and "Copy rule" clipboard button |
+| R-27 | Report errors panel | Collapsible section at bottom lists any files that failed to process with error message |
+| R-28 | HTML sanity check | `_validate_html()` called before writing each output file; warns to stderr if DOCTYPE/script balance/parse issues found |
+| R-29 | Full-width tables | Param tables no longer double-wrapped; XML/text raw content uncapped (no 500px max-height) |
+
+---
+
+### Audit Report UX
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| U-01 | Skip button | Mismatch rows have `✗ Skip` button; skipped rows turn grey, italic `[Skipped]` label |
+| U-02 | Unskip | Skipped rows show `↺ Unskip` button to restore |
+| U-03 | Skip state in patch | `exportPatch()` includes `"skipped": [{file, compound}]` array |
+| U-04 | Skip excluded from download | Skipped compounds excluded from per-node KV/JSON reconstruction |
+| U-05 | Next Mismatch | `▶ Next` button in toolbar navigates to next mismatch across all files |
+| U-06 | Prev Mismatch | `◀ Prev` button navigates to previous mismatch |
+| U-07 | Mismatch counter | `Mismatch 7 / 37` counter in toolbar; updates on skip/unskip |
+| U-08 | Cross-file navigation | Automatically switches to correct file and scrolls to target row |
+| U-09 | Pulse highlight | Navigated-to row receives 0.8s CSS pulse animation |
+| U-10 | Resizable columns | Drag handle on column headers resizes width; persisted to `localStorage` |
+| U-11 | Column width restore | Saved column widths restored on page reload (keyed by file + column index) |
+| U-12 | Diffs-only persists | "Show differences only" toggle state preserved when navigating with Prev/Next across files |
+| U-13 | Index diffs filter | "Show diffs only" button on index page collapses all-match directories and hides matched file rows |
+| U-14 | Dir auto-expand/collapse | Sidebar directories with diffs auto-expand on load; all-match directories auto-collapse |
+| U-15 | Copy rule (skipped files) | Each skipped file row has a "📋 Copy rule" button; copies a `no_skip_files` or `include` JSON snippet to clipboard |
+
+---
+
+### Audit Intelligence
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| I-01 | Logical diff summary | All `is_logical_diff=True` parameters written to `feedback/logical_diff_summary.json` |
+| I-02 | Logical diff console | `[LOGICAL DIFFS] 12 parameters skipped — see feedback/logical_diff_summary.json` |
+| I-03 | Log name uniqueness | KV parameters whose key matches log/prefix patterns checked for shared values across nodes |
+| I-04 | Duplicate log warning | Two or more nodes sharing the same log file prefix → `feedback/log_name_warnings.json` |
+| I-05 | Log patterns matched | `log.file`, `log.prefix`, `kpi.stats.prefix`, `snmp.trap-file.prefix`, etc. (regex-based) |
+| I-06 | Feedback accumulator | Every run appends a summary record to `~/.configmergetool/feedback_history.json` |
+| I-07 | Feedback summary CLI | `configmergetool --feedback-summary` prints counts by category across all recorded runs |
+| I-08 | Advisory only | Feedback history is never auto-read or auto-applied; engineer reviews manually |
+
+---
+
+### SSTP Semantic Diff
+
+Handles: `.sstp` (Roamware Smart-STP routing rule scripts)
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| SS-01 | Block parsing | Top-level named blocks (`GCT (0x33) [...]`) parsed by depth-tracking `[`/`]` scanner |
+| SS-02 | Comment stripping | `#` comments stripped before parsing |
+| SS-03 | Body normalisation | `SET CDPA (A) AND SET CDPA (B)` collapsed to `SET CDPA (A,B)`; whitespace collapsed |
+| SS-04 | Parameter extraction | `SRC`, `SPC`, `DIGITS`, `ROUTE`, `SPREAD` extracted per block for detailed diff display |
+| SS-05 | VALUE_DIFF | Parameter values differ (SRC, SPC, different route targets) → red in HTML |
+| SS-06 | ORDER_DIFF | Same route targets in different order, or DIGITS order differs → orange in HTML |
+| SS-07 | STRUCT_EQUIV | Structurally equivalent after normalisation (e.g. multi-SET merge) → treated as logical diff (yellow) |
+| SS-08 | MATCH | Blocks identical → no mismatch |
+| SS-09 | Compound key | Block keyed as `BLOCK|NAME(params)|DIFF_CATEGORY` in AuditParam |
+| SS-10 | Audit integration | `AuditEngine._compare_sstp()` dispatched from `_compare_file()` for `.sstp` extension |
+
+---
+
+### Audit Patcher
+
+Activated with `--apply-audit-patch <patch.json> --output-dir <dir>`.
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| P-01 | JSON patch apply | Reads `audit_patch.json`; applies `changes` to source config files |
+| P-02 | KV patching | Finds delimiter position in original line; replaces value; preserves trailing inline comment (`# …` or `; …`) |
+| P-03 | JSON patching | Deep path substitution into original JSON; preserves file structure |
+| P-04 | Corrections log | Writes `corrections.log` alongside patched files |
+| P-05 | CRLF safe | Output written with `newline="\n"` |
+
+---
+
+### Extensibility Architecture
+
+| ID | Feature | Behaviour |
+|---|---|---|
+| E-01 | NodeFetcher ABC | `fetch(node) -> str` + `cleanup()` — translates `BaseDirConfig` to a local path the engine can scan |
+| E-02 | LocalNodeFetcher | Default: returns `node.local_path` (files already on disk) — zero overhead |
+| E-03 | SSHNodeFetcher stub | Scaffold for Phase 11; raises `NotImplementedError`; checks `paramiko` import |
+| E-04 | RemoteConfig | `host`, `port`, `username`, `key_file`, `password_env`, `remote_path`, `timeout_secs` |
+| E-05 | BaseDirConfig.local_path | Set by fetcher after `fetch()`; engine uses `local_path` internally, `base_dir` for display |
+| E-06 | Local path skipped | `__post_init__` skips `os.path.isdir()` check when `remote` is configured |
+| E-07 | Credential safety | `password_env` pattern enforced; literal `"password"` key in audit config JSON rejected |
+| E-08 | WorkflowBase ABC | `run() -> AuditResult` + `deliver(result, report_path)` — contract for all workflows |
+| E-09 | EmailAuditWorkflow stub | Scaffold for Phase 12; documents IMAP/SMTP interface and zip attachment convention |
+
+---
+
+### Run Output Structure (Audit)
+
+```
+reports/
+└── audit_YYYYMMDD_HHMMSS/
+    ├── audit_report.html           ← interactive audit report (or index page when paginated)
+    ├── audit_report_p01.html       ← part 1 (only when report > 22 MB)
+    ├── audit_report_p02.html       ← part 2 (etc.)
+    ├── audit.log                   ← full audit log
+    └── feedback/
+        ├── skipped_backups.json    ← backup files auto-detected and skipped
+        ├── filtered_files.json     ← files excluded by --filter-file
+        ├── logical_diff_summary.json   ← all logical-diff parameters
+        └── log_name_warnings.json  ← duplicate log prefix warnings
+```
+
+---
+
+## Packaging & Distribution
+
+| Feature | Detail |
+|---|---|
+| Package name | `configmergetool` |
+| Version | `2.0.0` |
+| Entry point | `configmergetool = "configmerge.cli:main"` |
+| Module invocation | `python -m configmerge` |
+| Legacy invocation | `python ConfigMergeTool.py` (backward compatible) |
+| Core dependency | `openpyxl>=3.1` |
+| Optional `[encoding]` | `chardet>=5.0` — auto-detect file encoding; falls back to latin-1 if not installed |
+| Optional `[ssh]` | `paramiko>=3.0` — Phase 11 SSH remote node access |
+| Optional `[email]` | `imapclient>=2.3` — Phase 12 email-triggered audit |
+| Optional `[all]` | All optional extras |
+| Build | `python -m build` → `dist/configmergetool-2.0.0-py3-none-any.whl` |
+| Install | `pip install configmergetool-2.0.0-py3-none-any.whl` |
+| Type hints | `py.typed` marker present (PEP 561) |
+| Python | 3.9+ |
+
+**Version management:** bump in `configmerge/__init__.py` AND `pyproject.toml`; tag with `git tag v2.0.0`.
 
 ---
 
@@ -395,6 +632,7 @@ zip -r run_20260401_143022.zip reports/run_20260401_143022/
 | `UNCOMMENT_REPLACE` | Normal | Commented-out KV key uncommented and set from base |
 | `BASE_ONLY_PARAMETER_ADDED` | Yellow | Parameter only in base — inserted into output |
 | `BASE_ONLY_FILE_COPIED` | Normal | File copied as-is from `--copy-baseonlyconfigfile` |
+| `SSTP_RELEASE_COPIED` | Normal | `.sstp` release file copied as-is (auto-generated routing rules) |
 | `RELEASE_ONLY_PARAMETER_ADDED` | Orange | Parameter only in release — kept as-is |
 | `EXCLUDED_BASE_ONLY_PARAMETER` | Normal | Base-only parameter skipped due to `--exclude-params-in-baseonlyconfig` |
 | `EMPTY_BASE_OVERRIDE` | **Red/ERROR** | KV: base value empty — release value forced empty; review required |
@@ -409,6 +647,7 @@ zip -r run_20260401_143022.zip reports/run_20260401_143022/
 | `INDEXED_GROUP_RENUMBERED` | Normal | Indexed group entries (e.g. `schedule.N.x`) renumbered |
 | `INDEXED_GROUP_APPENDED` | Normal | Release-only indexed groups appended after base groups |
 | `COMMA_VALUE_UNION` | Normal | Comma-separated group header value merged as union of base + release |
+| `PROCESSOR_ERROR` | **Red/ERROR** | Processor encountered a fatal error for this file |
 
 ---
 
@@ -416,23 +655,39 @@ zip -r run_20260401_143022.zip reports/run_20260401_143022/
 
 | Date | Change |
 |---|---|
-| 2026-04-02 | Duplicate key reporting: only release-file duplicates surfaced; base duplicates resolved silently (last-wins) without user-visible noise |
-| 2026-04-02 | Duplicate detection: commented entries (`#key=val`) alongside active entries treated as annotations and never counted as duplicates |
-| 2026-04-02 | HTML: sidebar click scrolls to file header (not section body); `scroll-margin-top` on `.file-hdr` accounts for sticky page header; "Show Full Config" and "3-Way Diff" buttons immediately visible |
-| 2026-04-02 | Copy-only and mapping file path format: now uses full working-directory path (`base_dir/subdir/file`) as preferred format; base-dir-name prefix and bare path still accepted for backward compatibility |
-| 2026-04-02 | Shadow section support: `#[SectionName]` in base (entire section commented out) correctly merged with active `[SectionName]` in release; all output entries keep base comment-state (base wins) |
-| 2026-04-02 | Post-annotation preservation: commented alternatives after an active key (e.g. `#event.list=UCGDMLS` after `event.list=UCM`) emitted verbatim after the active entry |
-| 2026-04-02 | Pre-annotation preservation: `#key=old` before active `key=new` in release emitted verbatim before the merged active entry |
-| 2026-04-02 | Section interleaving: base-only sections inserted at correct relative positions (before their successor release section) rather than appended at end |
-| 2026-04-01 | Fixed bottom legend bar with hover tooltips; always visible regardless of scroll position |
-| 2026-04-01 | All run artifacts (log, Excel, HTML) consolidated into one `reports/run_YYYYMMDD_HHMMSS/` directory per run |
-| 2026-04-01 | Full Config Diff corrected to release ↔ output direction (was base ↔ output); two-column side-by-side layout |
-| 2026-04-01 | 3-Way Diff view added: base ↔ release ↔ merged output in three columns per file section |
-| 2026-04-01 | Multi-base execution: `--base-config-file` JSON option; independent pass per node; per-base output subdirs; combined HTML |
-| 2026-04-01 | HTML sidebar: collapsible file-system tree, file search, click-to-navigate, multi-base grouping |
-| 2026-04-01 | "Show Full Config" toggle per file section; shows complete merged file with diff highlights |
-| 2026-04-01 | XML namespace protection: `_normalize_namespaces()` prevents `ns0:`, `ns1:` injection |
-| 2026-04-01 | HTML report (`merge_diff.html`): self-contained, interactive, no external dependencies |
-| 2026-04-01 | Excel report expanded to 6 sheets: added ExcludedBaseOnlyParams and BaseConfigAsIs |
-| 2026-04-01 | Package restructure: `configmerge/` package with processors, reporter, engine, matcher modules |
-| 2026-03-31 | Initial features, issues, and enhancements document created |
+| 2026-04-07 | P3: HTML sanity check — `_validate_html()` called before every file write; checks DOCTYPE, `</body>`, `</html>`, `<script>` balance; warns to stderr |
+| 2026-04-07 | P2: Absent-file mismatch fix — `_compare_kv()` and `_compare_json()` now set `mismatch_count ≥ 1` when file absent from any node (binary/text/SSTP already did this) |
+| 2026-04-07 | P2: Full-width tables — `renderParamTable` no longer wraps in its own `.table-wrap` (removes double-wrap); `.raw-content` `max-height:500px` cap removed |
+| 2026-04-07 | P2: Skipped files "Copy rule" button — each entry gets a clipboard button copying a `no_skip_files` or `include` JSON rule; `navigator.clipboard` with `execCommand` fallback |
+| 2026-04-07 | P1: Sticky layout — `body` is now `display:flex;flex-direction:column;height:100vh;overflow:hidden`; `.layout` uses `flex:1;min-height:0` — toolbar/navigation always visible regardless of part-nav or sub-stats bars |
+| 2026-04-07 | P1: Diffs-only toggle persists across file navigation — `selectFile()` no longer resets `showDiffsOnly`; checkbox re-synced; filter re-applied |
+| 2026-04-07 | P0: Index page diff-file quick-list — prominent red section above directory tree listing all diff files sorted by mismatch count; full path, type, diff count, absent-nodes, direct part link |
+| 2026-04-07 | P0: Deep-link from index → part — links use `urllib.parse.quote(path)` as URL hash; part pages handle `window.location.hash` on load to open the linked file directly |
+| 2026-04-07 | P0: Sidebar diffs-only auto-enables on load when diff files < 50% of total; "Diffs only" button activates automatically |
+| 2026-04-06 | Phase 8: SSTP routing rule semantic diff — `SstpParser`, `categorise_block_diff()`, `_compare_sstp()` in engine, `SstpProcessor` copy-only in merge mode, `.sstp` registered in PROCESSOR_REGISTRY |
+| 2026-04-06 | Phase 5: Audit intelligence — logical diff summary JSON, log name uniqueness detection (orange warnings), cross-run feedback accumulator (`~/.configmergetool/feedback_history.json`), `--feedback-summary` flag |
+| 2026-04-06 | Phase 4: Audit report UX — Skip/Unskip button on mismatch rows; Next/Prev mismatch navigation with counter; resizable columns with localStorage persistence |
+| 2026-04-06 | Phase 3.1: HTML report pagination — 25 MB cap per part file; `audit_report_p01.html`, `p02.html`…; lightweight index page |
+| 2026-04-06 | Phase 3.2: Backup file auto-detection — `_BACKUP_SUFFIX_RE` patterns; stem-matching heuristic; `no_skip_files` whitelist; `skipped_backups.json` feedback |
+| 2026-04-06 | Phase 3.3: File/directory filter — `FileFilter` with suffix/named/dir/exclude rules; `--filter-file` flag; `filtered_files.json` feedback; binary archives always excluded |
+| 2026-04-06 | Phase 10: Packaging — `pyproject.toml`, `configmerge/cli.py` entry point, `configmerge/__main__.py`, `py.typed`, `requirements.txt`, `requirements-dev.txt`; `--version` flag |
+| 2026-04-06 | Phase 9: Extensibility architecture — `NodeFetcher` ABC, `LocalNodeFetcher`, `SSHNodeFetcher` stub, `EmailAuditWorkflow` stub, `RemoteConfig` dataclass, `BaseDirConfig.local_path`/`remote` fields, `WorkflowBase` ABC |
+| 2026-04-06 | Phase 7: `--quiet` flag (suppress MATCH lines); progress indicator every 25 files; pre-run node directory validation; `--feedback-summary` subcommand |
+| 2026-04-06 | Phase 6: Excel — freeze header row, auto-filter drop-downs, auto row heights on all 6 sheets |
+| 2026-04-06 | Phase 3.0: Audit table layout for many nodes — `overflow-x:auto` on `.table-wrap`, `width:max-content` on table, `position:sticky;left:0` on key column; node chip visibility controls |
+| 2026-04-06 | BUG-I: Section header fidelity — `KVDocument.section_raw_lines` stores original header line; emitted verbatim preserving inline comments |
+| 2026-04-06 | BUG-G: JSON indent fidelity — `_detect_indent()` detects original indent width; merged output uses same width |
+| 2026-04-06 | BUG-F: Patcher inline comment preservation — `_apply_kv()` detects trailing ` #` / ` ;` on changed lines; appended after new value |
+| 2026-04-06 | BUG-E: KV comment merge policy — `_merge_single_entry()` uses release comments only when value is actually changing; unchanged params use base comments |
+| 2026-04-06 | BUG-D/H: KV line fidelity — `_emit_entry()` and `_emit_raw_entry()` use `entry.raw_line` verbatim for pass-through; as template (delimiter pos + inline comment) for changed values |
+| 2026-04-06 | BUG-C: Audit exit code — `return 1 if result.total_mismatches > 0 else 0` (was unconditional 0) |
+| 2026-04-06 | BUG-B: ISO-8859 encoding — shared `open_text()` helper in `utils.py`; tries utf-8-sig → chardet → latin-1; applied to all processors and auditor |
+| 2026-04-06 | BUG-A: HTML script injection — `</script>` in embedded AUDIT_DATA JSON escaped to `<\/script>` |
+| 2026-04-06 | MOD-6: `file_sha256()` added to `utils.py`; audit binary comparison uses SHA-256 (was MD5) |
+| 2026-04-06 | MOD-4: Path-traversal guard — `safe_realpath()` applied in `_scan_dir()`; symlinks escaping `base_dir` skipped |
+| 2026-04-06 | MOD-3: Thread-safe logger — `important()` routes through handler `emit()` not `print()`; `ensure_dir()` wrapped in `try/except FileExistsError` |
+| 2026-04-06 | MOD-2: Multi-base warning for XML/JSON — `logger.warning()` when `len(base_files) > 1`; extra files not silently discarded |
+| 2026-04-02 | K-13/K-14: Pre-/post-annotation preservation; K-12 shadow section handling; K-15/K-16 section interleaving and ordering |
+| 2026-04-02 | Duplicate key reporting: only release-file duplicates surfaced; base duplicates resolved silently |
+| 2026-04-01 | Multi-base execution, HTML sidebar, 3-Way Diff, XML namespace protection, Excel 6 sheets |
+| 2026-03-31 | Initial features document |

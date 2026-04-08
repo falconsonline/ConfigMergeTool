@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "configmergetool"
+version = "2.0.0"
+description = "Config merge and multi-node audit tool for any production environments"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Proprietary" }
+authors = [{ name = "Shiju Abraham" }]
+
+# Core dependencies — always required
+dependencies = [
+    "openpyxl>=3.1",          # Excel report generation
+]
+
+[project.optional-dependencies]
+# Auto-detect file encoding (fallback: latin-1 when not installed)
+encoding = [
+    "chardet>=5.0",
+]
+# Phase 11: SSH/SFTP remote node access
+ssh = [
+    "paramiko>=3.0",
+]
+# Phase 12: Email-triggered audit workflow
+email = [
+    "imapclient>=2.3",
+]
+# All optional features in one shot
+all = [
+    "chardet>=5.0",
+    "paramiko>=3.0",
+    "imapclient>=2.3",
+]
+# Development / testing
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "build>=1.0",
+    "twine>=5.0",
+]
+
+[project.scripts]
+configmergetool = "configmerge.cli:main"
+
+[tool.setuptools.packages.find]
+# Includes configmerge, configmerge.processors, configmerge.auditor, etc.
+include = ["configmerge*"]
+
+[tool.setuptools.package-data]
+"configmerge" = ["py.typed"]

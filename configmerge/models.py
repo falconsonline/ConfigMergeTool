@@ -11,6 +11,39 @@ from typing import Dict, List, Optional, Set, Tuple
 
 
 # ---------------------------------------------------------------------------
+# Remote node connection configuration (Phase 9 — SSH support)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RemoteConfig:
+    """SSH/SFTP connection parameters for a remote production node.
+
+    Passwords/secrets are NEVER stored here.  Use *password_env* to name
+    the environment variable that holds the password.
+
+    Example audit config JSON entry with remote node::
+
+        {
+          "base_dir": "/opt/app/config",
+          "name": "APP-01",
+          "remote": {
+            "host": "10.0.0.1",
+            "port": 22,
+            "username": "roamware",
+            "key_file": "~/.ssh/prod_key"
+          }
+        }
+    """
+    host: str
+    port: int = 22
+    username: str = ""
+    key_file: str = ""          # path to SSH private key
+    password_env: str = ""      # name of env var holding password (never stored directly)
+    remote_path: str = ""       # override remote path if different from base_dir
+    timeout_secs: int = 30
+
+
+# ---------------------------------------------------------------------------
 # Per-base-directory configuration
 # ---------------------------------------------------------------------------
 
@@ -22,11 +55,17 @@ class BaseDirConfig:
     Multiple BaseDirConfig entries can be supplied to MergeConfig.base_configs
     to run an independent merge pass per node/environment, with each base
     having its own optional mapping file and copy-only list.
+
+    For remote nodes (Phase 11), set *remote* to a RemoteConfig.  In that
+    case *base_dir* is interpreted as the remote path and *local_path* will
+    be set by the NodeFetcher after it copies files locally.
     """
     base_dir: str
     mapping_file: Optional[str] = None
     copy_only_file: Optional[str] = None
     name: str = ""   # display name; auto-derived from base_dir basename if empty
+    remote: Optional[RemoteConfig] = None   # Phase 9: set for SSH-fetched nodes
+    local_path: str = ""  # Phase 9: set by NodeFetcher; engine always uses this
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -34,7 +73,8 @@ class BaseDirConfig:
         errors: List[str] = []
         if not self.base_dir or not self.base_dir.strip():
             errors.append("base_dir must not be empty")
-        elif not os.path.isdir(self.base_dir):
+        elif not self.remote and not os.path.isdir(self.base_dir):
+            # Only validate as local path when no remote config is set
             errors.append(
                 f"base_dir does not exist or is not a directory: {self.base_dir!r}"
             )
@@ -46,6 +86,10 @@ class BaseDirConfig:
             raise ValueError(
                 "BaseDirConfig validation failed:\n  " + "\n  ".join(errors)
             )
+        # local_path defaults to base_dir for local nodes;
+        # NodeFetcher overwrites it for remote nodes after fetching
+        if not self.local_path:
+            self.local_path = self.base_dir
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +283,7 @@ class EntryType:
     COMMA_VALUE_UNION                   = "COMMA_VALUE_UNION"
     NAMESPACE_ADAPTED                   = "NAMESPACE_ADAPTED"
     PROCESSOR_ERROR                     = "PROCESSOR_ERROR"
+    SSTP_RELEASE_COPIED                 = "SSTP_RELEASE_COPIED"
 
     # All types that should trigger a non-zero exit code in CI
     CRITICAL_TYPES: Set[str] = {

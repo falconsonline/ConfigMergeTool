@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from . import register, BaseProcessor
 from ..models import MergeConfig, ReportEntry, EntryType
 from ..logger import log_structured
-from ..utils import ensure_dir, get_tag
+from ..utils import ensure_dir, get_tag, open_text
 
 
 # ---------------------------------------------------------------------------
@@ -35,8 +35,7 @@ def _parse_xml_safe(
     file_path: str, logger: logging.Logger, label: str
 ) -> Tuple[Optional[ET.Element], Optional[str]]:
     try:
-        with open(file_path, "r", encoding="utf-8-sig") as f:
-            content = f.read().strip()
+        content = open_text(file_path).strip()  # BUG-B: encoding-aware read
         if "<?xml" in content:
             content = content[content.index("<?xml"):]
         root = ET.fromstring(content)
@@ -408,7 +407,12 @@ class XMLProcessor(BaseProcessor):
         logger.info(f"[XML] {rel_file}")
         report: List[ReportEntry] = []
 
-        # Use first base file as primary; additional bases add extra elements
+        # MOD-2: warn if multiple base files supplied (not yet supported for XML)
+        if len(base_files) > 1:
+            logger.warning(
+                f"[XML] {rel_file}: multi-base merge not fully supported for XML — "
+                f"using base_files[0] only; {len(base_files) - 1} additional base(s) ignored"
+            )
         base_file = base_files[0]
         base_root, base_text = _parse_xml_safe(base_file, logger, rel_file)
         rel_root,  rel_text  = _parse_xml_safe(rel_file,  logger, rel_file)
@@ -464,7 +468,7 @@ class XMLProcessor(BaseProcessor):
 
         if not config.dry_run:
             ensure_dir(out_file)
-            with open(out_file, "w", encoding="utf-8") as f:
+            with open(out_file, "w", encoding="utf-8", newline="\n") as f:
                 f.write(rel_text)
 
         return report

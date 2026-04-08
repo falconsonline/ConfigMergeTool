@@ -12,7 +12,7 @@ from typing import List
 from . import register, BaseProcessor
 from ..models import MergeConfig, ReportEntry, EntryType
 from ..logger import log_structured
-from ..utils import ensure_dir
+from ..utils import ensure_dir, open_text
 
 
 @register(".logrotate")
@@ -29,8 +29,7 @@ class LogrotateProcessor(BaseProcessor):
         logger.info(f"[LOGROTATE] {rel_file}")
         report: List[ReportEntry] = []
 
-        with open(base_files[0], encoding="utf-8") as f:
-            base_content = f.read()
+        base_content = open_text(base_files[0])  # BUG-B: encoding-aware read
 
         if not base_content.strip():
             log_structured(logger, "ERROR", "LOGROTATE", "EMPTY_BASE",
@@ -58,7 +57,7 @@ class LogrotateProcessor(BaseProcessor):
         ))
         if not config.dry_run:
             ensure_dir(out_file)
-            with open(out_file, "w", encoding="utf-8") as f:
+            with open(out_file, "w", encoding="utf-8", newline="\n") as f:
                 f.write(base_content)
 
         return report

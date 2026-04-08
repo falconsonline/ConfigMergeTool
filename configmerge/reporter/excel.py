@@ -190,6 +190,10 @@ def _add_sheet(
             if fill_color:
                 cell.fill = PatternFill("solid", fgColor=fill_color)
 
+    # Phase 6: freeze header row and enable auto-filter
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
     # Auto-size columns (capped at 80)
     for col in ws.columns:
         max_len = 0
@@ -199,6 +203,16 @@ def _add_sheet(
                 for line in str(cell.value).split("\n"):
                     max_len = max(max_len, len(line))
         ws.column_dimensions[col_letter].width = min(max_len + 2, 80)
+
+    # Phase 6: auto-adjust row heights for wrapped multi-line cells
+    for row_idx in range(2, ws.max_row + 1):
+        max_lines = 1
+        for cell in ws[row_idx]:
+            if cell.value:
+                lines = str(cell.value).count("\n") + 1
+                max_lines = max(max_lines, lines)
+        if max_lines > 1:
+            ws.row_dimensions[row_idx].height = max(15, 15 * max_lines)
 
 
 # ---------------------------------------------------------------------------

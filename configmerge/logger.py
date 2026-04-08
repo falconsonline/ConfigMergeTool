@@ -61,20 +61,18 @@ def setup_logging(verbose: bool = False, log_dir: str = "logs") -> logging.Logge
 
 
 def important(msg: str, logger: logging.Logger) -> None:
-    """Print to console AND write to log file regardless of verbose/log level.
+    """Write *msg* to console AND log file regardless of verbose/log level.
 
-    Uses print() for guaranteed console visibility, then writes directly to
-    file handlers only — avoiding double-printing when the console handler is
-    also at INFO level (--verbose mode).
+    Uses the console StreamHandler (stdout) and file handler directly so
+    output is thread-safe (logging handlers use an internal lock) and avoids
+    double-printing when --verbose is active.
     """
-    print(msg)
     record = logging.LogRecord(
-        name=logger.name, level=logging.INFO,
+        name=logger.name, level=logging.WARNING,
         pathname="", lineno=0, msg=msg, args=(), exc_info=None,
     )
     for h in logger.handlers:
-        if isinstance(h, logging.FileHandler):
-            h.emit(record)
+        h.emit(record)
 
 
 _LEVEL_MAP = {
