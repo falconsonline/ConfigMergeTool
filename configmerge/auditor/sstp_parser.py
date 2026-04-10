@@ -155,7 +155,6 @@ class SstpParser:
             new = _RE_MULTI_SETCDPA.sub(
                 lambda m: f"SET {m.group(1).upper()} ({m.group(2).strip()},{m.group(3).strip()})",
                 norm,
-                flags=re.IGNORECASE,
             )
             changed = new != norm
             norm = new

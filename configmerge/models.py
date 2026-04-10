@@ -284,6 +284,8 @@ class EntryType:
     NAMESPACE_ADAPTED                   = "NAMESPACE_ADAPTED"
     PROCESSOR_ERROR                     = "PROCESSOR_ERROR"
     SSTP_RELEASE_COPIED                 = "SSTP_RELEASE_COPIED"
+    API_VERSION_UPGRADED                = "API_VERSION_UPGRADED"
+    JAVA_CLASS_NAME_FROM_RELEASE        = "JAVA_CLASS_NAME_FROM_RELEASE"
 
     # All types that should trigger a non-zero exit code in CI
     CRITICAL_TYPES: Set[str] = {

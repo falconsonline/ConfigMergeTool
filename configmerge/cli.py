@@ -127,9 +127,10 @@ def _get_version() -> str:
 def _load_base_configs(path: str):
     """Load a JSON file describing multiple base-directory configurations.
 
-    Returns ``(configs, no_skip_files)`` where *no_skip_files* is a flat list
-    of filenames that should never be classified as backups, collected from
-    all ``"no_skip_files"`` arrays in the entries.
+    Returns ``(configs, no_skip_files, output_dir)`` where *no_skip_files* is a
+    flat list of filenames that should never be classified as backups, collected
+    from all ``"no_skip_files"`` arrays in the entries, and *output_dir* is the
+    optional patch output directory (from an ``{"output_dir": "..."}`` entry).
 
     Raises ConfigMergeError on any validation failure.
     """
@@ -145,9 +146,18 @@ def _load_base_configs(path: str):
     names_seen: set = set()
     configs = []
     no_skip_files: list = []
+    output_dir: str = ""
 
     for i, item in enumerate(data):
-        if not isinstance(item, dict) or "base_dir" not in item:
+        if not isinstance(item, dict):
+            raise ConfigMergeError(f"Entry {i} in {path!r} is not a JSON object.")
+
+        # Special entry: {"output_dir": "..."} — no base_dir
+        if "output_dir" in item and "base_dir" not in item:
+            output_dir = item["output_dir"].strip()
+            continue
+
+        if "base_dir" not in item:
             raise ConfigMergeError(f"Entry {i} in {path!r} missing 'base_dir'.")
 
         # Security: reject literal "password" key (must use "password_env")
@@ -184,24 +194,35 @@ def _load_base_configs(path: str):
                     f"Entry {i} in {path!r}: use 'password_env' in remote config "
                     "instead of a literal 'password'."
                 )
+            try:
+                port         = int(r.get("port", 22))
+                timeout_secs = int(r.get("timeout_secs", 30))
+            except (ValueError, TypeError) as e:
+                raise ConfigMergeError(
+                    f"Entry {i} in {path!r}: 'port' and 'timeout_secs' must be "
+                    f"integers: {e}"
+                )
             remote = RemoteConfig(
                 host         = r["host"],
-                port         = int(r.get("port", 22)),
+                port         = port,
                 username     = r.get("username", ""),
                 key_file     = r.get("key_file", ""),
                 password_env = r.get("password_env", ""),
                 remote_path  = r.get("remote_path", ""),
-                timeout_secs = int(r.get("timeout_secs", 30)),
+                timeout_secs = timeout_secs,
             )
 
-        configs.append(BaseDirConfig(
-            base_dir       = item["base_dir"],
-            mapping_file   = item.get("mapping_file"),
-            copy_only_file = item.get("copy_only_file"),
-            name           = name,
-            remote         = remote,
-        ))
-    return configs, no_skip_files
+        try:
+            configs.append(BaseDirConfig(
+                base_dir       = item["base_dir"],
+                mapping_file   = item.get("mapping_file"),
+                copy_only_file = item.get("copy_only_file"),
+                name           = name,
+                remote         = remote,
+            ))
+        except ValueError as e:
+            raise ConfigMergeError(f"Entry {i} in {path!r}: {e}")
+    return configs, no_skip_files, output_dir
 
 
 def main(argv=None) -> int:
@@ -239,17 +260,18 @@ def _main(argv=None) -> int:
 
     # ── Apply-patch mode ────────────────────────────────────────────────
     if args.apply_audit_patch:
-        if not args.output_dir:
-            print("[ERROR] --output-dir is required with --apply-audit-patch.",
-                  file=sys.stderr)
-            return 2
-        patcher = AuditPatcher(args.apply_audit_patch, args.output_dir)
+        # output_dir: CLI flag wins; fallback to audit config; fallback to patch JSON
+        patch_output_dir = args.output_dir or ""
+        if not patch_output_dir and args.audit_config_file:
+            _, _, patch_output_dir = _load_base_configs(args.audit_config_file)
+        # If still empty, AuditPatcher will read output_dir from the patch JSON itself
+        patcher = AuditPatcher(args.apply_audit_patch, patch_output_dir)
         written = patcher.apply()
         return 0 if written >= 0 else 1
 
     # ── Audit mode ──────────────────────────────────────────────────────
     if args.audit_config_file:
-        nodes, no_skip_files = _load_base_configs(args.audit_config_file)
+        nodes, no_skip_files, cfg_output_dir = _load_base_configs(args.audit_config_file)
 
         if args.remote_audit:
             # Phase 11: SSHNodeFetcher — not yet implemented
@@ -266,10 +288,13 @@ def _main(argv=None) -> int:
             quiet=args.quiet,
             no_skip_files=no_skip_files,
             filter_file=getattr(args, 'filter_file', None),
+            output_dir=cfg_output_dir,
         )
         result = engine.run()
-        # BUG-C: propagate non-zero exit when mismatches were found
-        return 1 if result.total_mismatches > 0 else 0
+        # Exit 1 when mismatches found OR when any file failed to process
+        if result.total_mismatches > 0 or result.render_errors:
+            return 1
+        return 0
 
     # ── Merge mode: validate required args ─────────────────────────────
     if not args.release_dirs:
@@ -283,7 +308,7 @@ def _main(argv=None) -> int:
 
     # Build base_configs
     if args.base_config_file:
-        base_configs, _ = _load_base_configs(args.base_config_file)
+        base_configs, _, _ = _load_base_configs(args.base_config_file)
         config = MergeConfig(
             release_dirs      = args.release_dirs,
             output_dir        = args.output_dir,

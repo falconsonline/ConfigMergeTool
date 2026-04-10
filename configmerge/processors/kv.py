@@ -38,7 +38,7 @@ from collections import defaultdict
 from . import register, BaseProcessor
 from ..models import MergeConfig, ReportEntry, EntryType
 from ..logger import log_structured
-from ..utils import ensure_dir, open_text
+from ..utils import ensure_dir, open_text, detect_api_version_upgrade, is_java_fqcn
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -65,6 +65,15 @@ class KVDocument:
     # BUG-I: section → original raw header line (e.g. "[App]  # main\n")
     # so it can be emitted verbatim instead of reconstructed as f"{section}\n"
     section_raw_lines: Dict[str, str] = field(default_factory=dict)
+
+    # Comments (blank/comment lines) that appear BEFORE a section header.
+    # These would otherwise be lost when comment_buffer is cleared on section entry.
+    section_preamble: Dict[str, List[str]] = field(default_factory=dict)
+
+    # Comments / unrecognised lines that appear after the last KV entry of a section
+    # (or the entire file when no KV entries exist at all).  Emitted verbatim after
+    # all entries of that section have been output.
+    section_trailing: Dict[str, List[str]] = field(default_factory=dict)
 
     # duplicate tracking: compound_key → [all values seen]
     duplicate_map: Dict[str, List[str]] = field(default_factory=dict)
@@ -113,6 +122,10 @@ def parse_kv_doc(file_path: str) -> KVDocument:
                     doc.section_order.append(current_section)
                     # BUG-I: store original raw line for verbatim emission
                     doc.section_raw_lines[current_section] = line
+                    # Preserve comments that appeared before this section header;
+                    # they would be lost when comment_buffer is cleared below.
+                    if comment_buffer:
+                        doc.section_preamble[current_section] = comment_buffer[:]
                 comment_buffer = []
                 continue
 
@@ -131,7 +144,7 @@ def parse_kv_doc(file_path: str) -> KVDocument:
                     comment_buffer = []
                     continue
 
-                if _is_kv_line(stripped_inner):
+                if _is_kv_line(stripped_inner) and _has_valid_kv_key(stripped_inner):
                     # This is a commented key — parse as entry with is_commented=True
                     key, value, delim = _split_kv(stripped_inner)
                     if key:
@@ -182,7 +195,15 @@ def parse_kv_doc(file_path: str) -> KVDocument:
                     continue
 
             # ── Unrecognised ────────────────────────────────────────────
-            comment_buffer = []
+            # Preserve the line verbatim — it will attach to the next KV entry
+            # as a comment, or be stored as section trailing content if no
+            # further KV entry appears (e.g. comma-delimited data lines).
+            comment_buffer.append(line)
+
+    # Any comment/unrecognised lines remaining after the last KV entry are
+    # stored as trailing content for the current section so they can be emitted.
+    if comment_buffer:
+        doc.section_trailing[current_section] = comment_buffer[:]
 
     _detect_groups(doc)
     return doc
@@ -190,6 +211,33 @@ def parse_kv_doc(file_path: str) -> KVDocument:
 
 def _is_kv_line(s: str) -> bool:
     return "=" in s or ":" in s
+
+
+def _is_comma_list_value(v: str) -> bool:
+    """Return True if *v* looks like a comma-separated name/class list
+    (at least two items, no whitespace within individual items).
+
+    Used to identify group-header "registry" parameters such as
+    ``schedule.registry=ClassA,ClassB,ClassC`` whose correct merged value
+    is the release list (release adds new registrations) rather than the
+    base list.  Simple scalars (``3``, ``yes``, ``INFO``) return False.
+    """
+    parts = v.split(",")
+    if len(parts) < 2:
+        return False
+    return all(p.strip() and " " not in p.strip() for p in parts)
+
+
+def _has_valid_kv_key(s: str) -> bool:
+    """Return True only if the key portion of s (before the first = or :) contains
+    no whitespace.  Prevents comment lines like '# Description   : some text' from
+    being misidentified as commented KV entries.  Real keys such as 'trap.version'
+    or 'log.max.size' never have spaces before the delimiter."""
+    for delim in ("=", ":"):
+        if delim in s:
+            key_part = s.split(delim, 1)[0]
+            return bool(key_part) and " " not in key_part and "\t" not in key_part
+    return False
 
 
 def _split_kv(s: str) -> Tuple[str, str, str]:
@@ -289,8 +337,27 @@ def merge_kv(
     all_sections.extend(_trailing_base_only_secs)
 
     for section in all_sections:
+        _sec_start_pos = len(out_lines)   # track whether this section emits anything
+
         # BUG-I: emit section header verbatim if raw line was stored, else reconstruct
         if section != "DEFAULT":
+            # Emit comments that appeared before this section header in either file.
+            # Prefer release preamble (more up-to-date); fall back to base preamble.
+            preamble = (rel_doc.section_preamble.get(section)
+                        or base_doc.section_preamble.get(section)
+                        or [])
+            _preamble_first_blank_skipped = False
+            for _pc in preamble:
+                # Deduplicate: skip only the FIRST blank preamble line when the
+                # previous section's separator already provided a blank.  Allow
+                # additional blank lines through so triple-blank separators in the
+                # source file are faithfully reproduced.
+                if (not _preamble_first_blank_skipped and not _pc.strip()
+                        and out_lines and not out_lines[-1].strip()):
+                    _preamble_first_blank_skipped = True
+                    continue
+                out_lines.append(_pc if _pc.endswith("\n") else _pc + "\n")
+
             # Prefer base doc's raw line (base is canonical); fall back to release or reconstruct
             raw_hdr = (base_doc.section_raw_lines.get(section)
                        or rel_doc.section_raw_lines.get(section))
@@ -391,13 +458,28 @@ def merge_kv(
         emitted_r_groups: Dict[str, set] = defaultdict(set)
 
         # Base annotations: compound → [commented base KVEntry]
-        # An annotation is a commented base entry whose key is also ACTIVE in base.
-        # It is emitted verbatim just before the merged active entry, but ONLY
-        # when the release does not already supply its own annotation for the key.
+        # A PRE-annotation is a commented base entry whose key is also ACTIVE in base
+        # AND whose first commented occurrence comes BEFORE the first active occurrence.
+        # POST-annotations (commented after the active key) must NOT be emitted as
+        # pre-annotations or they appear in the wrong position.
+        _base_first_active_pos: Dict[str, int] = {}
+        _base_first_commented_pos: Dict[str, int] = {}
+        for _bi, _be in enumerate(base_entries):
+            _bc = f"{section}|{_be.key}"
+            if not _be.is_commented and _bc not in _base_first_active_pos:
+                _base_first_active_pos[_bc] = _bi
+            elif _be.is_commented and _bc not in _base_first_commented_pos:
+                _base_first_commented_pos[_bc] = _bi
+        base_pre_annotation_keys = {
+            c for c in _base_first_commented_pos
+            if c in _base_first_active_pos
+            and _base_first_commented_pos[c] < _base_first_active_pos[c]
+        }
+
         base_annotations: Dict[str, List[KVEntry]] = defaultdict(list)
         for entry in base_entries:
             compound = f"{section}|{entry.key}"
-            if entry.is_commented and compound in base_active_compounds:
+            if entry.is_commented and compound in base_pre_annotation_keys:
                 base_annotations[compound].append(entry)
 
         # ── Anchor map: base-only regular params ─────────────────────────
@@ -508,6 +590,12 @@ def merge_kv(
                             file=rel_file, element=ge_compound,
                             old=rel_ge.value, new=rel_ge.value, section=section,
                         ))
+                    else:
+                        # Commented-only in both base and release — no active counterpart.
+                        # Emit verbatim to preserve commented-out alternative configs /
+                        # documentation.  Prefer release entry so release comments are used.
+                        src = rel_doc.lookup.get(ge_compound) or ge
+                        _emit_verbatim(src.raw_line, src.comments)
                     emitted_keys.add(ge_compound)
                     continue
 
@@ -545,6 +633,9 @@ def merge_kv(
             merged_idx = renumber_map[prefix][r_idx]
             for ge in r_grps.get(r_idx, []):
                 if ge.is_commented:
+                    # Emit commented-only release group entries verbatim (no renumbering)
+                    _emit_verbatim(ge.raw_line, ge.comments)
+                    emitted_keys.add(f"{section}|{ge.key}")
                     continue
                 new_key = re.sub(
                     rf'^({re.escape(prefix)}\.)(\d+)(\.)',
@@ -634,12 +725,32 @@ def merge_kv(
                     ))
                 else:
                     rel_hdr = entry if not entry.is_commented else None
-                    merged_val, merged_comments, rpt = _merge_single_entry(
-                        base_hdr, rel_hdr, rel_file, config, section
-                    )
-                    if rpt:
-                        report.append(rpt)
-                    _emit_entry(out_lines, base_hdr, merged_val, merged_comments)
+                    # Comma-separated registry headers (e.g. schedule.registry):
+                    # prefer release value when it differs — release adds new class
+                    # registrations and the full release list is authoritative.
+                    # All other group headers (e.g. schedule.count) follow the
+                    # standard base-wins strategy.
+                    if (rel_hdr is not None
+                            and base_hdr.value != rel_hdr.value
+                            and _is_comma_list_value(base_hdr.value)
+                            and _is_comma_list_value(rel_hdr.value)):
+                        merged_comments = rel_hdr.comments or base_hdr.comments
+                        report.append(ReportEntry(
+                            type=EntryType.BASE_TO_RELEASE_REPLACED,
+                            file=rel_file, element=compound,
+                            old=base_hdr.value, new=rel_hdr.value,
+                            base_comment="\n".join(base_hdr.comments),
+                            release_comment="\n".join(rel_hdr.comments),
+                            section=section,
+                        ))
+                        _emit_entry(out_lines, rel_hdr, rel_hdr.value, merged_comments)
+                    else:
+                        merged_val, merged_comments, rpt = _merge_single_entry(
+                            base_hdr, rel_hdr, rel_file, config, section
+                        )
+                        if rpt:
+                            report.append(rpt)
+                        _emit_entry(out_lines, base_hdr, merged_val, merged_comments)
                 emitted_keys.add(compound)
                 # NOTE: we do NOT eagerly emit base groups here.
                 # Base groups are emitted on-demand when the release spine
@@ -717,7 +828,27 @@ def merge_kv(
             _emit_entry(out_lines, entry, merged_val, merged_comments)
             emitted_keys.add(compound)
 
-        out_lines.append("\n")   # blank line between sections
+        # ── Section trailing content ──────────────────────────────────────
+        # Emit comment/unrecognised lines that appeared after the last KV
+        # entry in this section (or form the entire section when no KV
+        # entries exist — e.g. comma-delimited files).
+        # Prefer release trailing content; fall back to base.
+        _sec_trailing = (rel_doc.section_trailing.get(section)
+                         or base_doc.section_trailing.get(section)
+                         or [])
+        for _tl in _sec_trailing:
+            out_lines.append(_tl if _tl.endswith("\n") else _tl + "\n")
+
+        # Only add blank separator between sections if this section emitted content.
+        # Skipping it for empty sections (e.g. an empty DEFAULT when the file starts
+        # with a named section like [Defaults]) prevents spurious leading blank lines.
+        if len(out_lines) > _sec_start_pos:
+            out_lines.append("\n")
+
+    # Remove any trailing blank lines generated by the last section's separator.
+    # All content lines are already newline-terminated, so no extra newline is needed.
+    while out_lines and not out_lines[-1].strip():
+        out_lines.pop()
 
     return out_lines, report
 
@@ -765,9 +896,10 @@ def _merge_single_entry(
     # Determine whether the value is actually changing
     value_changing = uncomment_case or base_entry.value != release_val
 
-    # BUG-E: only use release comments when value is actually changing.
-    # For pass-through parameters keep base comments verbatim.
-    if value_changing and rel_entry.comments:
+    # Prefer release comments when present — release config is the authoritative
+    # source for documentation/intent.  Fall back to base comments only when
+    # the release entry carries no comments of its own.
+    if rel_entry.comments:
         merged_comments = rel_entry.comments
     else:
         merged_comments = base_entry.comments
@@ -789,6 +921,38 @@ def _merge_single_entry(
 
     # Values differ or comment state changes
     if value_changing:
+        # API version upgrade: release has a newer version of a third-party
+        # library — use the release (newer) value rather than the base value.
+        if not uncomment_case and detect_api_version_upgrade(base_entry.value, release_val):
+            rpt = ReportEntry(
+                type=EntryType.API_VERSION_UPGRADED,
+                file=rel_file,
+                element=compound,
+                old=base_entry.value,    # old = base (what was there before)
+                new=release_val,         # new = release (newer API version used)
+                base_comment="\n".join(base_entry.comments),
+                release_comment="\n".join(rel_entry.comments),
+                section=section,
+            )
+            return release_val, merged_comments, rpt
+
+        # Java FQCN: when the release value looks like a Java fully-qualified class
+        # name, defer to the release value.  Class names are deployment-specific and
+        # may legitimately differ between environments (different vendor jars, renamed
+        # packages, etc.).  Flag with a dedicated indicator so reviewers can verify.
+        if not uncomment_case and is_java_fqcn(release_val) and is_java_fqcn(base_entry.value):
+            rpt = ReportEntry(
+                type=EntryType.JAVA_CLASS_NAME_FROM_RELEASE,
+                file=rel_file,
+                element=compound,
+                old=base_entry.value,   # what base had
+                new=release_val,        # release value used in output
+                base_comment="\n".join(base_entry.comments),
+                release_comment="\n".join(rel_entry.comments),
+                section=section,
+            )
+            return release_val, merged_comments, rpt
+
         rpt = ReportEntry(
             type=(EntryType.UNCOMMENT_REPLACE
                   if uncomment_case else EntryType.BASE_TO_RELEASE_REPLACED),
@@ -828,28 +992,32 @@ def _emit_entry(
 
     # Determine whether this is a pass-through or a changed-value emit
     # by comparing the target value with what the raw line would produce.
-    if entry.value == value and not entry.is_commented:
-        # Pass-through: emit verbatim
-        out_lines.append(entry.raw_line if entry.raw_line.endswith("\n") else entry.raw_line + "\n")
+    # NOTE: commented entries are included here — their raw_line already starts
+    # with '#', so verbatim emit is always correct for unchanged values.
+    if entry.value == value:
+        # Pass-through: strip trailing spaces/tabs from value portion, keep newline.
+        out_lines.append(raw.rstrip(" \t") + "\n")
         return
 
-    # Changed value (or comment-state flip): use raw_line as template
+    # Changed value: use raw_line as template.
+    # For commented entries, raw_line already starts with '#', so prefix already
+    # contains the '#'.  Do NOT prepend an extra '#' or the output gets '##'.
     delim_pos = raw.find(entry.delimiter)
     if delim_pos >= 0:
         prefix = raw[:delim_pos + len(entry.delimiter)]
-        # Detect any trailing inline comment after the original value
-        # Heuristic: first occurrence of ' #' or ' ;' after the delimiter
-        orig_after_delim = raw[delim_pos + len(entry.delimiter):]
+        # Detect any trailing inline comment after the original value.
+        # Strip trailing spaces/tabs first so they are never treated as part of
+        # the inline comment or the value.
+        # Heuristic: first occurrence of ' #' or ' ;' after the delimiter.
+        orig_after_delim = raw[delim_pos + len(entry.delimiter):].rstrip(" \t")
         inline_comment = ""
         for marker in (" #", " ;"):
             idx = orig_after_delim.find(marker)
             if idx >= 0:
                 inline_comment = orig_after_delim[idx:]
                 break
-        if entry.is_commented:
-            out_lines.append(f"#{prefix}{value}{inline_comment}\n")
-        else:
-            out_lines.append(f"{prefix}{value}{inline_comment}\n")
+        # prefix already encodes whether the line is commented (raw_line has '#')
+        out_lines.append(f"{prefix}{value}{inline_comment}\n")
     else:
         # Fallback: reconstruct (should not happen for valid KV)
         key_line = f"{entry.key}{entry.delimiter}{value}"
@@ -879,7 +1047,8 @@ def _emit_raw_entry(
         delim_pos = raw.find(delimiter)
         if delim_pos >= 0:
             prefix = raw[:delim_pos + len(delimiter)]
-            orig_after_delim = raw[delim_pos + len(delimiter):]
+            # Strip trailing spaces/tabs before inline-comment detection
+            orig_after_delim = raw[delim_pos + len(delimiter):].rstrip(" \t")
             inline_comment = ""
             for marker in (" #", " ;"):
                 idx = orig_after_delim.find(marker)
@@ -923,7 +1092,7 @@ def _report_duplicates(
 # Processor class
 # ---------------------------------------------------------------------------
 
-@register(".cfg", ".ini", ".conf", ".properties", ".sh")
+@register(".cfg", ".ini", ".conf", ".properties", ".sh", ".acl")
 class KVProcessor(BaseProcessor):
 
     def process(
@@ -957,6 +1126,7 @@ class KVProcessor(BaseProcessor):
             base_doc.group_headers.clear()
             _detect_groups(base_doc)
 
+        rel_raw = open_text(rel_file)
         rel_doc = parse_kv_doc(rel_file)
 
         # Only report duplicates found in the RELEASE file — those indicate the
@@ -966,6 +1136,13 @@ class KVProcessor(BaseProcessor):
 
         out_lines, merge_report = merge_kv(base_doc, rel_doc, rel_file, config, logger)
         report.extend(merge_report)
+
+        # Preserve trailing blank line: if the release file ends with a blank line
+        # (i.e. \n\n at EOF), the merged output must too.  merge_kv strips all
+        # trailing blanks to avoid spurious separators, so re-add exactly one
+        # blank line when the release file had one.
+        if rel_raw.endswith("\n\n"):
+            out_lines.append("\n")
 
         # Separate excluded params from the main report
         excluded = [r for r in report if r.type == EntryType.EXCLUDED_BASE_ONLY_PARAMETER]

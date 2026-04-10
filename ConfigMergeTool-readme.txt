@@ -1,5 +1,6 @@
 ================================================================================
- ConfigMergeTool v2.0 — User Guide
+ ConfigMergeTool v2.0.1 — User Guide
+ Author: Shiju Abraham
 ================================================================================
 
 WHAT IT DOES
@@ -35,42 +36,129 @@ Requirements
 ------------
   Python 3.9+
 
-Installation option A — pip (recommended after wheel distribution):
+--------------------------------------------------------------------------------
+ LINUX / macOS INSTALLATION
+--------------------------------------------------------------------------------
 
-  pip install configmergetool-2.0.0-py3-none-any.whl
+Step 1 — Create a virtual environment (recommended):
+
+  python3 -m venv ~/.venvs/configmergetool
+  source ~/.venvs/configmergetool/bin/activate
+
+Step 2 — Install from wheel:
+
+  pip install configmergetool-2.0.1-py3-none-any.whl
 
   # With optional auto-encoding detection (recommended for non-UTF-8 sites):
-  pip install "configmergetool-2.0.0-py3-none-any.whl[encoding]"
+  pip install "configmergetool-2.0.1-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-2.0.0-py3-none-any.whl[all]"
+  pip install "configmergetool-2.0.1-py3-none-any.whl[all]"
 
-  After pip install, the command is:  configmergetool [args]
+Step 3 — Verify:
 
-Installation option B — run from source (no install needed):
+  configmergetool --version
+  configmergetool --help
+
+To deactivate the virtual environment when done:
+  deactivate
+
+--------------------------------------------------------------------------------
+ WINDOWS INSTALLATION
+--------------------------------------------------------------------------------
+
+Step 1 — Install Python 3.9+ from https://www.python.org/downloads/windows/
+  During setup, tick "Add Python to PATH".
+
+Step 2 — Open Command Prompt or PowerShell, create a virtual environment:
+
+  python -m venv C:\venvs\configmergetool
+
+Step 3 — Activate the virtual environment:
+
+  Command Prompt:
+    C:\venvs\configmergetool\Scripts\activate.bat
+
+  PowerShell:
+    C:\venvs\configmergetool\Scripts\Activate.ps1
+
+  If PowerShell blocks script execution, first run (once, as Administrator):
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+Step 4 — Install from wheel (copy the .whl file to a local folder first):
+
+  pip install configmergetool-2.0.1-py3-none-any.whl
+
+  # With optional encoding detection:
+  pip install "configmergetool-2.0.1-py3-none-any.whl[encoding]"
+
+  # With all optional extras:
+  pip install "configmergetool-2.0.1-py3-none-any.whl[all]"
+
+Step 5 — Verify:
+
+  configmergetool --version
+  configmergetool --help
+
+To deactivate when done:
+  deactivate
+
+Note: On Windows, use backslashes or forward slashes in paths. Paths with
+spaces must be quoted:
+  configmergetool --base-dir "C:\configs\prod node" --release-dirs release ...
+
+--------------------------------------------------------------------------------
+ UPGRADING FROM A PREVIOUS VERSION
+--------------------------------------------------------------------------------
+
+To upgrade to a new .whl (e.g. from 2.0.0 to 2.0.1), activate your virtual
+environment and run pip with --upgrade:
+
+  # Linux / macOS
+  source ~/.venvs/configmergetool/bin/activate
+  pip install --upgrade configmergetool-2.0.1-py3-none-any.whl
+
+  # Windows (Command Prompt)
+  C:\venvs\configmergetool\Scripts\activate.bat
+  pip install --upgrade configmergetool-2.0.1-py3-none-any.whl
+
+  # Windows (PowerShell)
+  C:\venvs\configmergetool\Scripts\Activate.ps1
+  pip install --upgrade configmergetool-2.0.1-py3-none-any.whl
+
+Confirm the new version is active:
+  configmergetool --version
+
+To check what is currently installed:
+  pip show configmergetool
+
+To list all installed packages in the environment:
+  pip list
+
+--------------------------------------------------------------------------------
+ INSTALLATION OPTION B — RUN FROM SOURCE (no install needed)
+--------------------------------------------------------------------------------
 
   pip install openpyxl        # only hard dependency
   pip install chardet         # optional but recommended for encoding detection
-  python3 ConfigMergeTool.py [args]
+  python3 ConfigMergeTool.py [args]   # Linux/macOS
+  python  ConfigMergeTool.py [args]   # Windows
 
   Both invocation forms produce identical behaviour.
 
-Optional extras:
-  [encoding]  chardet>=5.0   — auto-detect file encoding; fallback to latin-1
-  [ssh]       paramiko>=3.0  — SSH/SFTP remote node fetching (Phase 11, stub)
+--------------------------------------------------------------------------------
+ OPTIONAL EXTRAS
+--------------------------------------------------------------------------------
+
+  [encoding]  chardet>=5.0    — auto-detect file encoding; fallback to latin-1
+  [ssh]       paramiko>=3.0   — SSH/SFTP remote node fetching (Phase 11, stub)
   [email]     imapclient>=2.3 — email-triggered audit (Phase 12, stub)
   [all]       all of the above
   [dev]       pytest, build, twine — development tools
 
-Verify installation:
-  configmergetool --help
+Verify active version:
   configmergetool --version
   python -c "import configmerge; print(configmerge.__version__)"
-
-Virtual environment (recommended):
-  python -m venv ~/.venvs/configmergetool
-  source ~/.venvs/configmergetool/bin/activate     # Linux/Mac
-  pip install configmergetool-2.0.0-py3-none-any.whl
 
 
 ================================================================================
@@ -209,16 +297,30 @@ Audit config file (audit.json):
   ]
 
 Result:
-  reports/
-    audit_20260401_143022/
-      audit_report.html          <- interactive HTML report (single or multi-part)
-      audit.log                  <- full audit log
-      audit.xlsx                 <- Excel summary
+  reports/                        <- report_dir (default "reports")
+    audit_20260401_143022/        <- one subdirectory per run (YYYYMMDD_HHMMSS)
+      audit_report.html           <- interactive HTML report (index page when paginated)
+      audit_report_p01.html       <- part 1 (only when report > 22 MB)
+      audit_report_p02.html       <- part 2 (etc.)
+      audit.log                   <- full audit log
+      audit_diffs.xlsx            <- 8-sheet Excel diff workbook (auto-generated every run)
       feedback/
-        skipped_backups.json     <- backup files detected and skipped
-        filtered_files.json      <- files excluded by --filter-file
+        skipped_backups.json      <- backup files detected and skipped
+        filtered_files.json       <- files excluded by --filter-file
         logical_diff_summary.json
         log_name_warnings.json
+
+  Each run creates a new timestamped subdirectory; previous runs are preserved.
+
+audit_diffs.xlsx sheets:
+  1. Summary          — run metadata and aggregate counts
+  2. Issues           — all files with diffs or absent nodes (colour-coded)
+  3. Parameter Diffs  — one row per differing parameter; one column per node
+  4. Checksum Check   — files where raw bytes differ despite matched parsed values
+  5. Absent Files     — files missing from one or more nodes
+  6. Node Status      — all audited files with present/absent status per node
+  7. Skipped Backups  — backup files auto-detected and skipped
+  8. Filtered Files   — files excluded by --filter-file with reason
 
 
 ================================================================================
@@ -268,50 +370,124 @@ Security note:
 Use --filter-file to restrict which files are audited.
 If not provided, all files are included (except binary archives).
 
-Format — plain text, one rule per line.  # lines are ignored.
+Format — plain text, one rule per line.  # lines are comments.  Blank lines
+are ignored.  All matching is case-insensitive.
 
-  # --- Include rules ---
+A complete sample filter file is provided in:  sample-filter.txt
 
-  # a) Suffix only — include ALL files with this extension
-  json
-  xml
-  cfg
-  properties
+--------------------------------------------------------------------------------
+ INCLUDE RULES
+--------------------------------------------------------------------------------
 
-  # b) Suffix::filename(s) — only named files with this suffix
-  conf::sysctl.conf,sctp.conf,spread.conf
-  txt::config.txt,system.txt
+  a) Suffix only — include ALL files with this extension
+     json
+     xml
+     cfg
+     properties
 
-  # c) Suffix::directory — only files in directories matching pattern
-  html::runtime,test
+     Special value "noext" — include files that have NO extension at all
+     (e.g. Makefile, Dockerfile, named executables):
+     noext
 
-  # --- Exclude rules ---
+  b) Suffix::filename(s) — include only named files with this suffix
+     conf::sysctl.conf,sctp.conf,spread.conf
+     txt::config.txt,system.txt
 
-  # d) Explicit name excludes (leading !)
-  !nohup.out
-  !*.tmp
+  c) Suffix::directory — include only files in directories matching pattern
+     html::runtime,test
+     (all items after :: must have no "." to be treated as directory names)
 
-  # e) Always-excluded binary extensions (built-in defaults — always active)
-  !*.tar   !*.tar.gz  !*.gz    !*.rpm
-  !*.zip   !*.jar     !*.war   !*.ear
-  !*.jks   !*.keystore !*.p12  !*.pem
+  d) Directory-path include — include everything under a subtree
+     (contains "/" — no leading "!")
+     config/routing
+     app/conf
 
-Logic:
-  - Binary archive extensions are ALWAYS excluded regardless of this file.
-  - If the filter file contains include rules, ONLY matching files are
-    included; all others are skipped and recorded in
-    <run_dir>/feedback/filtered_files.json.
-  - Explicit excludes (!) take priority over include rules.
-  - Filename matching is case-insensitive for cross-platform safety.
+  e) Glob filename include — include filenames matching a glob pattern
+     (contains *, ?, or [ — no leading "!")
+     *.jar.*
+     GTPProxy*
+     jar.[0-9].*
 
-Example filter file for a Roamware GTP Proxy site:
-  # Include only well-known config types
+--------------------------------------------------------------------------------
+ EXCLUDE RULES  (evaluated after force-includes, before include rules)
+--------------------------------------------------------------------------------
+
+  f) Explicit name exclude — always skip this exact filename
+     !nohup.out
+     !.DS_Store
+
+  g) Glob exclude — skip filenames matching a glob pattern
+     !*.tmp
+     !*.swp
+     !*~
+
+  h) Directory-path exclude — skip everything under a subtree
+     (contains "/" after "!")
+     !logs/archive
+     !backup
+     !old
+
+  i) Built-in binary exclusions — ALWAYS active, cannot be overridden
+     .tar  .gz  .bz2  .xz  .tgz  .rpm  .deb
+     .zip  .7z  .rar
+     .jar  .war  .ear
+     .jks  .keystore  .p12  .pfx
+     .pem  .crt  .cer  .der
+     .so   .dll  .exe  .dylib
+     .class  .pyc
+     .bin  .img  .iso
+
+--------------------------------------------------------------------------------
+ FORCE-INCLUDE  (evaluated first — overrides directory excludes)
+--------------------------------------------------------------------------------
+
+  j) Force-include a path within an excluded directory
+     (leading "+")
+     +config/security/certs/active
+     +logs/archive/current-session
+
+     Example: exclude all of "logs/archive" but keep one subtree:
+       !logs/archive
+       +logs/archive/current-session
+
+--------------------------------------------------------------------------------
+ EVALUATION ORDER
+--------------------------------------------------------------------------------
+
+  1. Force-include (+path)     — if matched, INCLUDE immediately
+  2. Explicit excludes (!)     — if matched, EXCLUDE immediately
+  3. Include rules             — if matched, INCLUDE
+  4. Binary archive exclusions — if matched, EXCLUDE (built-in, always)
+  5. Default
+       - No filter file:        pass all files
+       - Filter file with includes:  skip unmatched files
+
+  Skipped files are recorded in:  <run_dir>/feedback/filtered_files.json
+
+--------------------------------------------------------------------------------
+ EXAMPLES
+--------------------------------------------------------------------------------
+
+Minimal — include common config types only:
   properties
   cfg
   xml
   json
   conf::sysctl.conf,sctp.conf
   !nohup.out
+
+Roamware GTP Proxy site with subtree rules:
+  properties
+  cfg
+  xml
+  json
+  conf::sysctl.conf,sctp.conf,spread.conf
+  config/routing
+  !logs/archive
+  +logs/archive/current-session
+  !*.pid
+  !*.lock
+  GTPProxy*
 
 
 ================================================================================
@@ -515,8 +691,8 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
  MERGE BEHAVIOUR BY FILE TYPE
 ================================================================================
 
-.properties / .cfg / .ini / .conf / .sh  (Key-Value files)
------------------------------------------------------------
+.properties / .cfg / .ini / .conf / .sh / .acl  (Key-Value files)
+------------------------------------------------------------------
   Sections ([section]) are tracked independently.
   For each key in base:
     - If key exists in release (active) -> output gets BASE value.
@@ -531,11 +707,23 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
     Unchanged parameters are emitted with their original raw line verbatim —
     indentation, delimiter spacing (`db.host = x` stays `db.host = x`),
     and any inline comments are preserved exactly.
+    Trailing spaces and tabs after a value are always stripped from the output
+    so that `param=value   ` becomes `param=value` regardless of source.
 
   Comment handling:
-    - Comments above a key (base) are preserved for unchanged parameters.
-    - Comments are only replaced by release comments when the value itself
-      is changing.
+    - Release comments are always preferred over base comments.
+    - Base comments are used only when the release entry has no comments of its own.
+    - Blank lines and whitespace within comment blocks are preserved verbatim
+      from whichever source is chosen (release or base).
+
+  Section preamble:
+    Comments appearing before a section header (e.g. before [SNMP]) are
+    preserved in the merged output.  Release preamble is preferred; base
+    preamble used as fallback.
+
+  Trailing blank line:
+    If the release file ends with a blank line, the merged output ends with
+    one blank line too, preventing spurious diff noise.
 
   Annotation handling:
     - A commented line before an active key is a PRE-ANNOTATION:
@@ -546,6 +734,20 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
         event.list=UCM           <- active key
         #event.list=UCGDMLS      <- post-annotation: alternative value
       Post-annotations are preserved verbatim after the active entry.
+
+  Java class name handling:
+    When both the base and release values for a parameter are Java fully-
+    qualified class names (e.g. com.example.pkg.MyClass) but differ, the
+    RELEASE value is used.  Class names are deployment-specific and may
+    legitimately differ between environments (different vendor packages,
+    renamed classes, etc.).
+    These entries are flagged as JAVA_CLASS_NAME_FROM_RELEASE in the report
+    so a reviewer can verify the class name is correct for this environment.
+
+  API version upgrade:
+    When base and release values look like different versions of the same
+    third-party artifact (e.g. log4j-1.2.17.jar vs log4j2-2.17.1.jar),
+    the release (newer) value is used and reported as API_VERSION_UPGRADED.
 
   Shadow sections:
     - If base has an entire section commented out AND release has the same
@@ -572,13 +774,20 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
     - If element exists in release -> output gets BASE element block verbatim.
     - If element only in base      -> inserted into output.
     - If base element is empty     -> release element forced empty.
+    - If both base and release element text are Java FQCNs (e.g.
+      com.example.pkg.MyClass) but differ -> RELEASE value kept, flagged as
+      JAVA_CLASS_NAME_FROM_RELEASE for reviewer attention.
   Release namespace declarations preserved exactly.
 
 .json  (JSON files)
 -------------------
   Deep recursive merge: base values overwrite matching release values at any
   nesting depth.  Release-only keys preserved.
-  Original file indent width is detected and preserved in the output.
+  Original indent style is detected (tab or 2/4/8 spaces) and preserved in the output.
+  If both base and release string values are Java FQCNs but differ -> RELEASE
+  value kept, flagged as JAVA_CLASS_NAME_FROM_RELEASE for reviewer attention.
+  Arrays containing only primitive values (strings, numbers, booleans, null)
+  are written inline: ["oauth2"] rather than expanded to multi-line.
 
 .logrotate  (Logrotate files)
 ------------------------------
@@ -666,6 +875,7 @@ Merge mode — 6 sheets (header row frozen, auto-filter enabled on all sheets):
       Red    -- EMPTY_BASE_OVERRIDE, DUPLICATE_KEY, INVALID_JSON (require review)
       Yellow -- BASE_ONLY_PARAMETER_ADDED
       Orange -- RELEASE_ONLY_PARAMETER_ADDED
+      Purple -- JAVA_CLASS_NAME_FROM_RELEASE (reviewer should verify class name)
 
   Sheet 2: BaseOnlyFiles
     Config files in base dir with no release counterpart.
@@ -691,7 +901,8 @@ Opens in any browser.  Self-contained (no internet connection needed).
 
 Left sidebar:
   File-system tree of all processed files.  Click a file name to jump to it.
-  Search box to filter files.  Collapse/expand directories.
+  Search box (Ctrl+K) to filter files — type to narrow, Enter to navigate,
+  Escape to clear.  Collapse/expand directories.
 
 File sections (right panel):
   Each processed file has a collapsible section showing all changes.
@@ -743,7 +954,14 @@ Left sidebar (per-part pages):
   auto-enables on page load — only files with diffs are shown immediately.
 
   Click any file to load its parameter table in the right panel.
-  Search box filters the sidebar tree.
+
+  File search (sidebar):
+    Type in the search box to filter the file list as you type.
+    A match count badge appears (green = N matches, red = no match).
+    Press Enter to jump directly to the first matching file.
+    Press Escape to clear the search and restore the full list.
+    Press Ctrl+K (or Cmd+K on Mac) from anywhere in the report to focus
+    the search box instantly.
 
 Right panel — parameter table:
   One row per parameter; one column per node.  Table fills full page width.
@@ -785,10 +1003,27 @@ Panel toolbar (sticky — always visible while scrolling):
   Show instance-specific -- toggle teal instance-specific rows
   Show expected diffs    -- toggle purple logical-diff rows
   ◀ Prev / Next ▶        -- navigate between mismatch rows (cross-file)
+  💾 Save All            -- save corrected config for every node with
+                            pending changes to the configured output dir;
+                            prompts for a path if no output dir is set
   Export Patch           -- download audit_patch.json with all pending
                             changes and skipped parameters
   Download (per node)    -- reconstruct and download corrected config for
                             a specific node
+
+Navigation guard:
+  If you navigate away from a file that has unsaved pending changes, a
+  confirmation modal appears:
+    Save & Continue      -- saves to output dir, then navigates (default)
+    Continue Without Saving -- discards unsaved changes and navigates
+    Cancel               -- stays on the current file
+  Pressing Enter in the modal triggers "Save & Continue".
+
+Session persistence:
+  All pending changes, skipped state, change log, and output directory
+  setting are automatically saved to browser localStorage on every
+  mutation.  Refreshing the HTML page restores the full session state —
+  no work is lost on accidental refresh.
 
 Change Log panel:
   Tracks all pending changes in real time.

@@ -1,6 +1,6 @@
 # ConfigMergeTool — Features Reference
 
-> Developer reference. Describes every feature implemented in the current codebase (v2.0.0).
+> Developer reference. Describes every feature implemented in the current codebase (v2.0.1).
 > Update this file whenever features are added, changed, or removed.
 
 ---
@@ -48,7 +48,7 @@ ConfigMergeTool/
 ├── requirements.txt            — Core runtime deps (openpyxl)
 ├── requirements-dev.txt        — Dev/test deps (pytest, build, twine, chardet)
 └── configmerge/
-    ├── __init__.py             — Public API + __version__ = "2.0.0"
+    ├── __init__.py             — Public API + __version__ = "2.0.1"
     ├── __main__.py             — Enables: python -m configmerge
     ├── cli.py                  — main() / _main() / parse_args() — pip entry point
     ├── models.py               — BaseDirConfig, RemoteConfig, MergeConfig, MergeResult,
@@ -196,7 +196,7 @@ Fields: `base_dir` (required), `name`, `no_skip_files` (filenames exempt from ba
 
 | Extension(s) | Processor | Merge Mode | Audit Mode |
 |---|---|---|---|
-| `.properties`, `.cfg`, `.ini`, `.conf`, `.sh` | KVProcessor | Key-level per section; base wins | Semantic KV comparison |
+| `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`, `.acl` | KVProcessor | Key-level per section; base wins | Semantic KV comparison |
 | `.xml`, `.xsd` | XMLProcessor | Element-level; base wins | Normalised text comparison |
 | `.json` | JSONProcessor | Deep recursive merge; base wins | Deep JSON comparison |
 | `.logrotate` | LogrotateProcessor | Whole base file copied | Text comparison |
@@ -240,27 +240,35 @@ Fields: `base_dir` (required), `name`, `no_skip_files` (filenames exempt from ba
 
 ### Key-Value Processing
 
-Handles: `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`
+Handles: `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`, `.acl`
 
 | ID | Feature | Behaviour |
 |---|---|---|
 | K-01 | Base value wins | For keys in both files (both active), base value used in output |
-| K-02 | Line fidelity (pass-through) | Unchanged parameters emitted using `entry.raw_line` verbatim — indentation, delimiter spacing, and inline comments all preserved |
+| K-02 | Line fidelity (pass-through) | Unchanged parameters emitted using original raw line — indentation, delimiter spacing, and inline comments all preserved |
 | K-03 | Line fidelity (changed value) | Changed parameters use raw line as template: prefix up to delimiter preserved, new value substituted, trailing inline comment (`# …`) retained |
-| K-04 | Comment source preference | Base comments used for unchanged params; release comments used only when value is changing |
+| K-04 | Comment source preference | Release comments always preferred; base comments used only when release has none |
 | K-05 | Commented-out key handling | Release commented key + active base value → uncommented and set to base value (`UNCOMMENT_REPLACE`) |
 | K-06 | Base-only insertion | Keys in base absent from release inserted into output (`BASE_ONLY_PARAMETER_ADDED`) |
 | K-07 | Release-only preservation | Keys in release absent from base kept in output (`RELEASE_ONLY_PARAMETER_ADDED`) |
 | K-08 | Exclude flag | `--exclude-params-in-baseonlyconfig` suppresses K-06 |
 | K-09 | Empty base override | Base value blank → release value forced blank (`EMPTY_BASE_OVERRIDE`) |
 | K-10 | Indexed group handling | `prefix.N.subkey` groups: base groups retained, release-only groups appended with renumbered indices; `prefix.count` updated |
-| K-11 | Comma-value union | Group header params with comma-separated values get a union of base + release values |
+| K-11 | Comma-list group header | Group header params whose value is a comma-separated name/class list (e.g. `schedule.registry`) use the release value — release adds new registrations |
 | K-12 | Active duplicate detection | Multiple active occurrences of `section\|key` in release → `DUPLICATE_KEY` |
 | K-13 | Shadow section handling | Base `#[SectionName]` merged with release active `[SectionName]`; all output entries remain commented |
 | K-14 | Pre-annotation preservation | `#key=old` before active `key=new` in release emitted verbatim before merged active entry |
 | K-15 | Post-annotation preservation | `#key=alt` after active `key=val` in release emitted verbatim after active entry |
 | K-16 | Section interleaving | Base-only sections inserted before their successor release section, not appended at end |
 | K-17 | Section header fidelity | Original section header line (`[Application]  # comment`) stored and emitted verbatim — inline comments on headers preserved |
+| K-18 | Section preamble preservation | Comments appearing before a section header in the release (or base if release has none) emitted verbatim before the header line |
+| K-19 | Section trailing preservation | Unrecognised lines / comments after the last KV entry of a section (e.g. comma-delimited data) emitted verbatim after all section entries |
+| K-20 | Trailing-whitespace strip | Trailing spaces and tabs after a parameter value are removed from the output line (both pass-through and changed-value paths) |
+| K-21 | Trailing blank line preservation | If the release file ends with a blank line, the merged output ends with one blank line too — prevents spurious `diff` output |
+| K-22 | Java FQCN from release | When both base and release values are Java fully-qualified class names (e.g. `com.example.pkg.ClassName`) and they differ, the release value is used and flagged as `JAVA_CLASS_NAME_FROM_RELEASE` for reviewer attention |
+| K-23 | API version upgrade | When base and release values look like different versions of the same third-party artifact (e.g. `log4j-1.2.17.jar` vs `log4j2-2.17.1.jar`), the release (newer) value is used (`API_VERSION_UPGRADED`) |
+| K-24 | Multi-release-dir deduplication | If the same relative path exists in multiple release dirs, prefer the one whose directory name matches the base dir name; first otherwise; logs `WARNING` |
+| K-25 | Filename-only fallback disambiguation | When multiple base files share the same filename, prefer the one in the same directory as the release file; use first with `WARNING` if no directory match |
 
 ---
 
@@ -280,6 +288,7 @@ Handles: `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`
 | X-10 | Safe parse | XML parse errors produce structured log entries; file skipped without crash |
 | X-11 | Comment capture | XML comments preceding an element stored and associated for the HTML report |
 | X-12 | Multi-base warning | `len(base_files) > 1` emits warning — multi-base XML not fully supported |
+| X-13 | Java FQCN from release | When both base and release element text are Java FQCNs and differ, the release value is kept and flagged as `JAVA_CLASS_NAME_FROM_RELEASE` |
 
 ---
 
@@ -293,9 +302,11 @@ Handles: `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`
 | J-04 | Duplicate key detection | Custom object-pairs hook detects duplicate keys; last wins |
 | J-05 | Input validation | Both files validated before merge; invalid → `INVALID_JSON` |
 | J-06 | Output validation | Merged JSON re-parsed; invalid → discarded + `INVALID_OUTPUT_JSON` |
-| J-07 | Indent preservation | Original indent width detected from the release file; output uses the same width (not forced to 2 spaces) |
+| J-07 | Indent preservation | Original indent style detected from the release file (tab or 2/4/8 spaces); output uses the same style (not forced to 2 spaces) |
 | J-08 | Encoding-aware read | `open_text()` tries utf-8-sig → chardet → latin-1 fallback |
 | J-09 | Multi-base warning | `len(base_files) > 1` emits warning — multi-base JSON not fully supported |
+| J-10 | Java FQCN from release | When both base and release string values are Java FQCNs and differ, the release value is kept and flagged as `JAVA_CLASS_NAME_FROM_RELEASE` |
+| J-11 | Primitive array inline format | After serialisation, arrays containing only primitive values (strings, numbers, booleans, null) are collapsed back to a single line — matching the inline style used in the source files (e.g. `["oauth2"]`) |
 
 ---
 
@@ -453,6 +464,13 @@ Activated with `--filter-file <path>`.
 | FF-06 | Glob exclude | Line `!*.tmp` — glob pattern excludes |
 | FF-07 | Pass-through mode | No filter file → only binary archives excluded; everything else compared |
 | FF-08 | Feedback output | `<run_dir>/feedback/filtered_files.json` — list of excluded files with reason |
+| FF-09 | No-extension include | Line `noext` — include files with no extension (e.g. `Makefile`, `Dockerfile`); `_normalise_suffix("noext")` returns `""` which is a valid include rule |
+| FF-10 | Directory-path include | Line `config/routing` (contains `/`) — include all files anywhere under that subtree relative to node `base_dir` |
+| FF-11 | Glob filename include | Line `GTPProxy*` or `*.jar.*` (contains `*`/`?`/`[`) — include basenames matching the glob pattern |
+| FF-12 | Directory-path exclude | Line `!logs/archive` (leading `!` + contains `/`) — skip all files under this subtree |
+| FF-13 | Force-include override | Line `+config/security/certs/active` (leading `+`) — include this path even when its parent directory is excluded; evaluated in phase 1, before all other rules |
+| FF-14 | Rule evaluation order | Phase 1: force-include; Phase 2: explicit excludes (name/glob/dir); Phase 3: include rules; Phase 4: binary exclusions; Phase 5: default pass-through or skip |
+| FF-15 | Sample filter file | `sample-filter.txt` in the project root — demonstrates all 10 rule types with inline comments and a real-world example |
 
 ---
 
@@ -464,7 +482,7 @@ Output: `<run_dir>/audit_report.html` (or paginated part files for large runs)
 |---|---|---|
 | R-01 | Self-contained | Full CSS + JS embedded; no internet connection required |
 | R-02 | Interactive sidebar | Recursive directory tree with per-directory diff badges; click to navigate |
-| R-03 | File search | Search box filters sidebar file list |
+| R-03 | File search | Search box in sidebar filters file list as you type; shows match count; Enter jumps to first match; Escape clears; Ctrl+K focuses from anywhere |
 | R-04 | Parameter table | One row per parameter; per-node value columns; full page width |
 | R-05 | Sticky key column | Parameter column stays visible on horizontal scroll (many-node runs) |
 | R-06 | Horizontal scroll | `.table-wrap` scrolls horizontally; node columns visible on 16+ node runs |
@@ -491,6 +509,20 @@ Output: `<run_dir>/audit_report.html` (or paginated part files for large runs)
 | R-27 | Report errors panel | Collapsible section at bottom lists any files that failed to process with error message |
 | R-28 | HTML sanity check | `_validate_html()` called before writing each output file; warns to stderr if DOCTYPE/script balance/parse issues found |
 | R-29 | Full-width tables | Param tables no longer double-wrapped; XML/text raw content uncapped (no 500px max-height) |
+| R-30 | Absent vs diff distinction | `mismatch_count` counts content differences only; `absent_count` counts nodes where file is missing; displayed separately: `(diff)`, `(absent/missing)`, or `(diff / absent/missing)` |
+| R-31 | Absent-only match banner | Files present on some nodes with identical content show an orange "FILE ABSENT ON N NODES" banner rather than a green match banner |
+| R-32 | 8-sheet XLSX auto-generated | `audit_diffs.xlsx` written at the start of every run: Summary, Issues, Parameter Diffs, Checksum Check, Absent Files, Node Status, Skipped Backups, Filtered Files |
+| R-33 | Parameter Diffs XLSX sheet | One row per differing parameter; one column per node; `—absent—` in orange fill for nodes missing the file; header row frozen |
+| R-34 | Checksum Check XLSX sheet | Files where raw SHA-256 bytes differ across nodes despite `mismatch_count == 0` (encoding/CRLF differences); yellow fill |
+| R-35 | Absent Files XLSX sheet | Lists every file with `absent_count > 0`; shows which nodes are missing it |
+| R-36 | Node Status XLSX sheet | All audited files with a ✓/✗ column per node indicating presence |
+| R-37 | Download XLSX button | Static `<a href="audit_diffs.xlsx" download>` link replaces old client-side CSV export |
+| R-38 | Section-level corrections | Section divider rows in the param table have "Skip section" / "Unskip section" / "Add from NodeX" buttons; operate on all params within the section at once |
+| R-39 | Part indicators | Multi-part reports show a per-part badge beside each Part# link: diff count (red), absent count (orange), or ✓ (green) |
+| R-40 | Sticky table headers | `<thead>` sticks to top on vertical scroll; achieved by moving `overflow-x:auto` from `.table-wrap` to `.main` (single scroll container) |
+| R-41 | Node name tooltip | Node column headers show only the short name; full `base_dir` path shown as a `title=""` tooltip on hover |
+| R-42 | Index page search | Search box on the index page (`audit_report.html`) filters the directory tree and diff quick-list in real time |
+| R-43 | Index diffs-only sticky | "Show diffs only" button on the index page remains visible (sticky toolbar) when scrolling through large directory trees |
 
 ---
 
@@ -513,6 +545,17 @@ Output: `<run_dir>/audit_report.html` (or paginated part files for large runs)
 | U-13 | Index diffs filter | "Show diffs only" button on index page collapses all-match directories and hides matched file rows |
 | U-14 | Dir auto-expand/collapse | Sidebar directories with diffs auto-expand on load; all-match directories auto-collapse |
 | U-15 | Copy rule (skipped files) | Each skipped file row has a "📋 Copy rule" button; copies a `no_skip_files` or `include` JSON snippet to clipboard |
+| U-16 | Global column width control | Toolbar **−/+** buttons resize all node columns simultaneously; `_colWidth` state persisted in `localStorage['cm_col_width']`; per-column drag still available for fine-tuning |
+| U-17 | Value text wrap at N chars | Toolbar number input sets `--val-wrap` CSS variable (`max-width: Nch` on `.val-display`); default 80 ch; **∞** button removes limit; setting persisted in `localStorage['cm_val_wrap']` |
+| U-18 | Sticky diffs-only on index | "Show diffs only" control on the index page is part of a sticky top toolbar; remains visible when scrolling long directory trees |
+| U-19 | Index page search | Search input on index page filters both the directory tree and diff quick-list as the user types |
+| U-20 | Section skip/unskip | Section divider row has "✗ Skip section" button; skips all parameters in that section at once; divider shows "↺ Unskip section" to restore |
+| U-21 | Add section from node | "＋ Add from NodeX" dropdown on section dividers; copies the full section from the selected node to all others in the pending change set |
+| U-22 | File search with keyboard navigation | Sidebar search input (Ctrl+K) filters files as you type; displays match count badge (green = N matches, red = no match); pressing Enter navigates to the first matched file; Escape clears the search |
+| U-23 | State persistence across refresh | All pending changes, skipped state, change log, and local output dir saved to `localStorage` on every mutation; automatically restored on page reload — HTML state survives browser refresh |
+| U-24 | Save All Changes button | Header "💾 Save All" button downloads corrected config for every node with pending changes; prompts for output directory if none is configured |
+| U-25 | Navigation guard | Navigating away from a file with unsaved changes shows a modal prompt — "Save & Continue" (default/Enter), "Continue Without Saving", or "Cancel" |
+| U-26 | Output directory prompt | If no `output_dir` is configured and user triggers a save, a prompt modal asks for the path; remembered for the session via `localStorage` |
 
 ---
 
@@ -583,11 +626,12 @@ Activated with `--apply-audit-patch <patch.json> --output-dir <dir>`.
 ### Run Output Structure (Audit)
 
 ```
-reports/
-└── audit_YYYYMMDD_HHMMSS/
-    ├── audit_report.html           ← interactive audit report (or index page when paginated)
+reports/                            ← report_dir (passed via CLI or default "reports")
+└── audit_YYYYMMDD_HHMMSS/          ← one subdirectory per run
+    ├── audit_report.html           ← index page (or single-file report for small runs)
     ├── audit_report_p01.html       ← part 1 (only when report > 22 MB)
     ├── audit_report_p02.html       ← part 2 (etc.)
+    ├── audit_diffs.xlsx            ← 8-sheet Excel workbook (auto-generated every run)
     ├── audit.log                   ← full audit log
     └── feedback/
         ├── skipped_backups.json    ← backup files auto-detected and skipped
@@ -596,6 +640,21 @@ reports/
         └── log_name_warnings.json  ← duplicate log prefix warnings
 ```
 
+Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are preserved.
+
+`audit_diffs.xlsx` sheet summary:
+
+| Sheet | Contents |
+|---|---|
+| Summary | Run metadata: timestamp, node count, file count, total diffs, total absent |
+| Issues | All files with diffs or absent nodes; colour-coded by severity |
+| Parameter Diffs | One row per differing parameter; one column per node; absent nodes in orange |
+| Checksum Check | Files whose raw SHA-256 bytes differ despite matching parsed values (encoding/CRLF) |
+| Absent Files | Files with `absent_count > 0`; which nodes are missing each file |
+| Node Status | All audited files with ✓/✗ present/absent per node |
+| Skipped Backups | Backup files auto-detected and skipped; filename, node, reason |
+| Filtered Files | Files excluded by `--filter-file`; path, reason |
+
 ---
 
 ## Packaging & Distribution
@@ -603,7 +662,7 @@ reports/
 | Feature | Detail |
 |---|---|
 | Package name | `configmergetool` |
-| Version | `2.0.0` |
+| Version | `2.0.1` |
 | Entry point | `configmergetool = "configmerge.cli:main"` |
 | Module invocation | `python -m configmerge` |
 | Legacy invocation | `python ConfigMergeTool.py` (backward compatible) |
@@ -612,8 +671,8 @@ reports/
 | Optional `[ssh]` | `paramiko>=3.0` — Phase 11 SSH remote node access |
 | Optional `[email]` | `imapclient>=2.3` — Phase 12 email-triggered audit |
 | Optional `[all]` | All optional extras |
-| Build | `python -m build` → `dist/configmergetool-2.0.0-py3-none-any.whl` |
-| Install | `pip install configmergetool-2.0.0-py3-none-any.whl` |
+| Build | `python -m build` → `dist/configmergetool-2.0.1-py3-none-any.whl` |
+| Install | `pip install configmergetool-2.0.1-py3-none-any.whl` |
 | Type hints | `py.typed` marker present (PEP 561) |
 | Python | 3.9+ |
 
@@ -647,6 +706,7 @@ reports/
 | `INDEXED_GROUP_RENUMBERED` | Normal | Indexed group entries (e.g. `schedule.N.x`) renumbered |
 | `INDEXED_GROUP_APPENDED` | Normal | Release-only indexed groups appended after base groups |
 | `COMMA_VALUE_UNION` | Normal | Comma-separated group header value merged as union of base + release |
+| `JAVA_CLASS_NAME_FROM_RELEASE` | **Review** | Both base and release values are Java FQCNs but differ; release value used — reviewer should verify the class is correct for this environment |
 | `PROCESSOR_ERROR` | **Red/ERROR** | Processor encountered a fatal error for this file |
 
 ---
@@ -655,6 +715,31 @@ reports/
 
 | Date | Change |
 |---|---|
+| 2026-04-10 | **v2.0.1 released** — patch release covering all KV, JSON, XML, and output-format fixes from 2026-04-09–10 |
+| 2026-04-10 | J-11: Primitive array inline format — `_collapse_primitive_arrays()` post-processes `json.dumps` output; arrays with no nested objects/arrays collapsed to single line (e.g. `["oauth2"]` not expanded to multi-line) |
+| 2026-04-10 | J-10/X-13: Java FQCN from release extended to JSON and XML — `is_java_fqcn()` applied in JSON `_merge()` and XML `_replace_elements()`; both keep release value and emit `JAVA_CLASS_NAME_FROM_RELEASE` |
+| 2026-04-10 | K-20: Trailing-whitespace strip — spaces/tabs after values stripped on all KV emit paths |
+| 2026-04-10 | K-21: Trailing blank line preservation — merged output ends with blank line when release file does |
+| 2026-04-10 | K-22: Java FQCN from release (KV) — `is_java_fqcn()` in `utils.py`; `_merge_single_entry()` uses release value; reported as `JAVA_CLASS_NAME_FROM_RELEASE` |
+| 2026-04-10 | K-18/K-19: Section preamble and trailing content preserved verbatim; release source preferred over base |
+| 2026-04-10 | K-23–K-25: API version upgrade, multi-release-dir deduplication, filename-only fallback disambiguation |
+| 2026-04-10 | J-07 updated: JSON indent detection now handles tab-indented files |
+| 2026-04-10 | KV `.acl` extension registered; empty DEFAULT section no longer emits spurious leading blank; commented-only indexed group entries preserved verbatim |
+| 2026-04-08 | U-22: File search with keyboard navigation — Ctrl+K focuses sidebar search; match count badge; Enter jumps to first match; Escape clears |
+| 2026-04-08 | U-23–U-26: Audit report session UX — localStorage state persistence, Save All button, navigation guard modal, output directory prompt modal |
+| 2026-04-08 | R-42/U-19: Index page search — search box filters directory tree and diff quick-list in real time on `audit_report.html` |
+| 2026-04-08 | R-43/U-18: Sticky diffs-only on index — "Show diffs only" button stays in sticky toolbar when scrolling index page |
+| 2026-04-08 | R-38/U-20/U-21: Section-level corrections — Skip section / Unskip section / Add from NodeX buttons on section divider rows |
+| 2026-04-08 | R-39: Part indicators — per-part diff/absent/ok badge beside each Part# link in multi-part reports |
+| 2026-04-08 | R-40: Sticky table headers — `overflow-x:auto` moved from `.table-wrap` to `.main`; `<thead>` sticks on vertical scroll |
+| 2026-04-08 | R-41: Node name tooltip — full `base_dir` in `title=""` attribute; column header shows short name only |
+| 2026-04-08 | R-30/R-31: Absent vs diff distinction — `absent_count` field on `AuditFile`; badges and banners shown independently; engine no longer conflates absence with content diff |
+| 2026-04-08 | R-32–R-37: 8-sheet `audit_diffs.xlsx` auto-generated each run — replaces client-side CSV export; all sheets formatted with openpyxl PatternFill/Font/Alignment/freeze_panes |
+| 2026-04-08 | FF-09: `noext` filter rule — files with no extension correctly included; removed `if suffix:` guard that silently dropped the rule when `_normalise_suffix` returned `""` |
+| 2026-04-08 | FF-10–FF-15: Extended filter file formats — directory-path include, glob include, directory-path exclude (`!dir/path`), force-include (`+path`); `sample-filter.txt` added |
+| 2026-04-07 | U-16/U-17: Global col width control + value wrap — toolbar −/+ buttons resize all node columns at once; number input sets wrap at N chars (default 80ch via CSS `--val-wrap`); ∞ clears wrap; both persisted to localStorage |
+| 2026-04-07 | Bug: "Show differences only" blanked the panel — `data-expDiff` HTML attribute was lowercased by the parser to `data-expdiff`; JS `dataset.expDiff` expects `data-exp-diff` (hyphen convention); fixed by renaming attribute to `data-exp-diff` in `renderRow()` |
+| 2026-04-07 | Bug: Raw JSON rendered as page text — `</SCRIPT>` / `</Script>` uppercase variants in audited config files terminated the embedded `<script>` block; fixed with `re.sub(r'</(script)', r'<\/\1', ..., re.IGNORECASE)` so all case variants are escaped |
 | 2026-04-07 | P3: HTML sanity check — `_validate_html()` called before every file write; checks DOCTYPE, `</body>`, `</html>`, `<script>` balance; warns to stderr |
 | 2026-04-07 | P2: Absent-file mismatch fix — `_compare_kv()` and `_compare_json()` now set `mismatch_count ≥ 1` when file absent from any node (binary/text/SSTP already did this) |
 | 2026-04-07 | P2: Full-width tables — `renderParamTable` no longer wraps in its own `.table-wrap` (removes double-wrap); `.raw-content` `max-height:500px` cap removed |
@@ -675,6 +760,16 @@ reports/
 | 2026-04-06 | Phase 7: `--quiet` flag (suppress MATCH lines); progress indicator every 25 files; pre-run node directory validation; `--feedback-summary` subcommand |
 | 2026-04-06 | Phase 6: Excel — freeze header row, auto-filter drop-downs, auto row heights on all 6 sheets |
 | 2026-04-06 | Phase 3.0: Audit table layout for many nodes — `overflow-x:auto` on `.table-wrap`, `width:max-content` on table, `position:sticky;left:0` on key column; node chip visibility controls |
+| 2026-04-10 | K-20: Trailing-whitespace strip — spaces and tabs after parameter values stripped on all emit paths (`_emit_entry` pass-through and changed-value, `_emit_raw_entry`) |
+| 2026-04-10 | K-21: Trailing blank line preservation — KVProcessor detects `\n\n` at end of release file and appends one blank line to merged output; prevents spurious `diff` noise |
+| 2026-04-10 | K-22: Java FQCN from release — `is_java_fqcn()` helper in `utils.py`; `_merge_single_entry()` detects when both base and release values are Java FQCNs and uses release value; reported as `JAVA_CLASS_NAME_FROM_RELEASE` |
+| 2026-04-10 | K-18/K-19: Section preamble and trailing content — `KVDocument.section_preamble` / `section_trailing` store comments before section headers and after last KV entry; emitted verbatim preferring release source |
+| 2026-04-10 | K-23: API version upgrade — `detect_api_version_upgrade()` in `_merge_single_entry()` uses release value when both values match artifact-version patterns; reported as `API_VERSION_UPGRADED` |
+| 2026-04-10 | K-24/K-25: Multi-release-dir and filename-only fallback disambiguation — FileMatcher prefers release dir matching base dir name; prefers same-directory base candidate on filename fallback; both log `WARNING` |
+| 2026-04-10 | J-07 updated: JSON indent detection now handles tab-indented files (returns `"\t"`) in addition to 2/4/8-space detection |
+| 2026-04-10 | KV: `.acl` extension registered with KVProcessor (was falling through to GenericProcessor) |
+| 2026-04-10 | KV: Empty-DEFAULT section no longer emits a spurious leading blank line when file starts with a named section |
+| 2026-04-10 | KV: Commented-only indexed group entries preserved verbatim instead of silently dropped |
 | 2026-04-06 | BUG-I: Section header fidelity — `KVDocument.section_raw_lines` stores original header line; emitted verbatim preserving inline comments |
 | 2026-04-06 | BUG-G: JSON indent fidelity — `_detect_indent()` detects original indent width; merged output uses same width |
 | 2026-04-06 | BUG-F: Patcher inline comment preservation — `_apply_kv()` detects trailing ` #` / ` ;` on changed lines; appended after new value |

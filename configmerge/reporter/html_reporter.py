@@ -137,13 +137,17 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px;
 .param-name { font-weight: 600; color: #333; font-family: monospace; font-size: 12px; }
 .tag { padding: 2px 7px; border-radius: 3px; font-size: 10px; font-weight: 600;
        text-transform: uppercase; letter-spacing: .4px; }
-.tag.replaced  { background: #e8f4fd; color: #1565c0; }
-.tag.base-only { background: #e8f5e9; color: #1b5e20; }
-.tag.rel-only  { background: #fff3e0; color: #e65100; }
-.tag.error     { background: #ffebee; color: #b71c1c; }
-.tag.dup       { background: #fce4ec; color: #880e4f; }
-.tag.group     { background: #ede7f6; color: #4527a0; }
-.tag.ns        { background: #fffde7; color: #f57f17; }
+.tag.replaced   { background: #e8f4fd; color: #1565c0; }
+.tag.base-only  { background: #e8f5e9; color: #1b5e20; }
+.tag.rel-only   { background: #fff3e0; color: #e65100; }
+.tag.error      { background: #ffebee; color: #b71c1c; }
+.tag.dup        { background: #fce4ec; color: #880e4f; }
+.tag.group      { background: #ede7f6; color: #4527a0; }
+.tag.ns         { background: #fffde7; color: #f57f17; }
+.tag.api-upgrade{ background: #e8f5e0; color: #1b5e20; border: 1px solid #66bb6a; }
+.api-upgrade-row td { background: #f1f8e9 !important; }
+.api-upgrade-note { font-size: 10px; color: #2e7d32; font-style: italic;
+                    margin-top: 3px; display: block; }
 .sect-label    { color: #888; font-size: 11px; }
 .cbadge { display: inline-block; font-size: 10px; background: #fff3cd; color: #856404;
           border: 1px solid #ffc107; border-radius: 3px; padding: 0 5px; }
@@ -1031,7 +1035,32 @@ _TYPE_CSS = {
     EntryType.INDEXED_GROUP_APPENDED:              "group",
     EntryType.COMMA_VALUE_UNION:                   "group",
     EntryType.NAMESPACE_ADAPTED:                   "ns",
+    EntryType.API_VERSION_UPGRADED:                "api-upgrade",
 }
+
+
+def _render_api_upgrade(entry: ReportEntry) -> str:
+    key = _esc(entry.element.split("|")[-1] if "|" in entry.element else entry.element)
+    tag = _tag_html("api-upgrade", "API Version Upgraded")
+    hdr = _chg_header(key, tag, entry.section)
+    note = ('<span class="api-upgrade-note">'
+            '&#x2714; New release version detected and used automatically '
+            '(release value replaces base value)</span>')
+    old_content = _esc(entry.old)   # base value (older version)
+    new_content = _esc(entry.new)   # release value (newer version, kept in output)
+    tbl = (
+        '<table class="diff-table">'
+        '<tr>'
+        '<td class="col-hdr rel">Base (older version — replaced)</td>'
+        '<td class="col-hdr">Release (newer version — used in output)</td>'
+        '</tr>'
+        f'<tr class="api-upgrade-row">'
+        f'<td class="rel-col" style="text-decoration:line-through;color:#999">{old_content}</td>'
+        f'<td class="mrg-col" style="font-weight:600;color:#2e7d32">{new_content}</td>'
+        '</tr>'
+        '</table>'
+    )
+    return hdr + note + tbl
 
 
 def _render_entry(entry: ReportEntry) -> str:
@@ -1048,6 +1077,7 @@ def _render_entry(entry: ReportEntry) -> str:
     if t == EntryType.NAMESPACE_ADAPTED:                 return _render_namespace(entry)
     if t == EntryType.COMMA_VALUE_UNION:                 return _render_csv_union(entry)
     if t == EntryType.INDEXED_GROUP_APPENDED:            return _render_group_appended(entry)
+    if t == EntryType.API_VERSION_UPGRADED:              return _render_api_upgrade(entry)
     # Generic fallback
     tag = _tag_html(_TYPE_CSS.get(t, "replaced"), t.replace("_", " ").title())
     hdr = _chg_header(entry.element, tag)
@@ -1071,15 +1101,23 @@ def _summary_html(results: List[MergeResult]) -> str:
                 counts[EntryType.XML_BASE_TO_RELEASE_REPLACED] +
                 counts[EntryType.JSON_BASE_TO_RELEASE_REPLACED] +
                 counts[EntryType.LOGROTATE_BASE_TO_RELEASE_REPLACED])
+    api_upgrades = counts[EntryType.API_VERSION_UPGRADED]
     errors   = sum(counts[t] for t in EntryType.CRITICAL_TYPES)
     dups     = counts[EntryType.DUPLICATE_KEY]
 
-    def stat(num, label, err=False):
+    def stat(num, label, err=False, highlight=False):
         cls = "stat err" if err else "stat"
-        return (f'<div class="{cls}"><span class="num">{num}</span>'
+        num_style = ' style="color:#2e7d32"' if highlight else ''
+        return (f'<div class="{cls}"><span class="num"{num_style}>{num}</span>'
                 f'<span class="lbl">{label}</span></div>')
 
     total_changes = sum(len(r.report) for r in results)
+    api_upgrade_stat = ""
+    if api_upgrades:
+        api_upgrade_stat = (
+            f'<div class="stat-div"></div>'
+            f'{stat(api_upgrades, "API Upgraded", highlight=True)}'
+        )
     return (
         f'<div class="summary">'
         f'{stat(len(total_files), "Files Changed")}'
@@ -1089,6 +1127,7 @@ def _summary_html(results: List[MergeResult]) -> str:
         f'{stat(replaced, "Replaced")}'
         f'{stat(counts[EntryType.BASE_ONLY_PARAMETER_ADDED], "Base-Only Added")}'
         f'{stat(counts[EntryType.RELEASE_ONLY_PARAMETER_ADDED], "Release-Only")}'
+        f'{api_upgrade_stat}'
         f'<div class="stat-div"></div>'
         f'{stat(errors, "Errors", err=True)}'
         f'{stat(dups, "Duplicates", err=True)}'
@@ -1599,6 +1638,9 @@ def write_html(
         f'onclick="filterRows(\'{EntryType.BASE_ONLY_PARAMETER_ADDED}\')">Base-Only Added</button>'
         f'<button data-filter="{EntryType.RELEASE_ONLY_PARAMETER_ADDED}" '
         f'onclick="filterRows(\'{EntryType.RELEASE_ONLY_PARAMETER_ADDED}\')">Release-Only</button>'
+        f'<button data-filter="{EntryType.API_VERSION_UPGRADED}" '
+        f'onclick="filterRows(\'{EntryType.API_VERSION_UPGRADED}\')" '
+        f'style="color:#2e7d32;border-color:#81c784">API Upgraded</button>'
         '<div class="spacer"></div>'
         '<button id="expand-all-btn" onclick="toggleAll()">Collapse All</button>'
         '</div>'
@@ -1619,6 +1661,8 @@ def write_html(
           '<span class="lb-sw lb-rel-only"></span>Release-only</span>'
         '<span class="lb" data-tip="Base value is empty so release value was used — review recommended.">'
           '<span class="lb-sw lb-error"></span>Error / Empty override</span>'
+        '<span class="lb" data-tip="New release uses a newer version of a third-party API — release value used in output.">'
+          '<span class="lb-sw" style="background:#e8f5e0;border:1px solid #66bb6a"></span>API version upgraded</span>'
         '<span class="lb-sep"></span>'
         '<span class="lb-title">Full Config Diff</span>'
         '<span class="lb" data-tip="Same in release and merged output — no change.">'

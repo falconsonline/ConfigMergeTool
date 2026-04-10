@@ -29,9 +29,10 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 from datetime import datetime
 from typing import Dict, List, Optional
+
+from ..utils import safe_realpath
 
 
 # ---------------------------------------------------------------------------
@@ -64,9 +65,9 @@ class AuditPatcher:
     write corrected copies to output_dir, and produce corrections.log.
     """
 
-    def __init__(self, patch_file: str, output_dir: str):
+    def __init__(self, patch_file: str, output_dir: str = ""):
         self.patch_file = patch_file
-        self.output_dir = output_dir
+        self.output_dir = output_dir  # may be empty; resolved in apply() from patch JSON
 
     # ------------------------------------------------------------------
 
@@ -77,11 +78,18 @@ class AuditPatcher:
         changes    = [PatchChange(c) for c in patch['changes']]
         audit_run  = patch.get('audit_run', 'unknown')
 
+        # Resolve output_dir: CLI arg wins → config/patch field → default to run_dir/corrections
+        output_dir = self.output_dir or patch.get('output_dir', '').strip()
+        if not output_dir:
+            run_dir = patch.get('run_dir', '').strip()
+            output_dir = os.path.join(run_dir, "corrections") if run_dir else "corrections"
+            print(f"[PATCH] No output_dir specified — defaulting to: {output_dir}")
+
         if not changes:
             print("[PATCH] No changes in patch file — nothing to do.")
             return 0
 
-        os.makedirs(self.output_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
 
         # Group changes by (node, file)
         by_node_file: Dict[tuple, List[PatchChange]] = {}
@@ -89,7 +97,7 @@ class AuditPatcher:
             key = (c.node, c.file)
             by_node_file.setdefault(key, []).append(c)
 
-        log_lines = self._log_header(audit_run, len(changes), len(by_node_file))
+        log_lines = self._log_header(audit_run, len(changes), len(by_node_file), output_dir)
         files_written = 0
 
         for (node, rel_path), file_changes in sorted(by_node_file.items()):
@@ -103,8 +111,17 @@ class AuditPatcher:
                 log_lines.append(warn)
                 continue
 
-            src_path = os.path.join(src_dir, rel_path)
-            dst_path = os.path.join(self.output_dir, node, rel_path)
+            # Guard against path traversal (e.g. rel_path containing "../")
+            if os.path.isabs(rel_path):
+                warn = f"[WARN] Skipping {node}/{rel_path}: rel_path must be relative"
+                print(warn); log_lines.append(warn)
+                continue
+            src_path = safe_realpath(src_dir, rel_path)
+            dst_path = safe_realpath(os.path.join(output_dir, node), rel_path)
+            if src_path is None or dst_path is None:
+                warn = f"[WARN] Skipping {node}/{rel_path}: path traversal detected"
+                print(warn); log_lines.append(warn)
+                continue
             os.makedirs(os.path.dirname(dst_path), exist_ok=True)
 
             try:
@@ -137,19 +154,18 @@ class AuditPatcher:
 
             print(f"[PATCH] Written: {dst_path}  ({len(file_changes)} change(s))")
 
-        # Write corrections.log
-        log_path = os.path.join(self.output_dir, "corrections.log")
+        # Write corrections.log alongside the audit report (run_dir), not inside output_dir.
+        # output_dir contains only corrected config files — nothing else.
+        run_dir = patch.get('run_dir', '').strip()
+        log_dir = run_dir if run_dir and os.path.isdir(run_dir) else output_dir
+        log_path = os.path.join(log_dir, "corrections.log")
         log_lines.append(f"\n{'─'*80}")
-        log_lines.append(f"TOTAL: {files_written} file(s) written to {self.output_dir}")
+        log_lines.append(f"TOTAL: {files_written} file(s) written to {output_dir}")
         with open(log_path, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(log_lines) + "\n")
 
-        # Copy the patch JSON for traceability
-        patch_copy = os.path.join(self.output_dir, "audit_patch.json")
-        shutil.copy2(self.patch_file, patch_copy)
-
         print(f"[PATCH] corrections.log → {log_path}")
-        print(f"[PATCH] {files_written} file(s) written")
+        print(f"[PATCH] {files_written} file(s) written to {output_dir}")
         return files_written
 
     # ------------------------------------------------------------------
@@ -168,7 +184,8 @@ class AuditPatcher:
                 raise SystemExit(f"[ERROR] Patch JSON missing field '{r}'")
         return data
 
-    def _log_header(self, audit_run: str, n_changes: int, n_files: int) -> List[str]:
+    def _log_header(self, audit_run: str, n_changes: int, n_files: int,
+                    output_dir: str) -> List[str]:
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return [
             "ConfigMergeTool — Audit Correction Log",
@@ -176,7 +193,7 @@ class AuditPatcher:
             f"  Audit run    : {audit_run}",
             f"  Applied at   : {now}",
             f"  Patch file   : {self.patch_file}",
-            f"  Output dir   : {self.output_dir}",
+            f"  Output dir   : {output_dir}",
             f"  Total changes: {n_changes} across {n_files} node/file pair(s)",
             f"{'─'*80}",
         ]
@@ -206,7 +223,7 @@ class AuditPatcher:
     def _apply_kv(self, raw: str, changes: List[PatchChange]) -> str:
         # Build a lookup: compound -> corrected_value
         change_map: Dict[str, str] = {c.compound: c.corrected for c in changes}
-        # Track which compound keys have been seen in existing lines
+        # Track which compound keys have been applied
         modified: set = set()
 
         lines          = raw.split('\n')
@@ -232,8 +249,11 @@ class AuditPatcher:
                 continue
 
             key = stripped[:di].strip()
-            if not key or re.search(r'\s', key):
+            if not key:
                 continue
+            # NOTE: keys with embedded whitespace (e.g. shell-script lines like
+            #   "nohup java -Dapp=value") are valid KV compounds in the audit
+            #   engine — do NOT skip them; replace the value in-place.
 
             compound = f"{currentSection}|{key}"
             if compound in change_map:
@@ -251,7 +271,32 @@ class AuditPatcher:
                 lines[i] = line[:line_delim_pos + 1] + new_value + inline_comment
                 modified.add(compound)
 
-        # Append newly added keys (not found in existing file)
+        # Fallback for 'modified' changes whose compound wasn't matched above
+        # (can happen when the line's key structure doesn't survive the delimiter
+        # scan — e.g. the line was commented out).  Try a direct value-match
+        # substitution using the known original value.
+        for c in changes:
+            if c.action != 'modified' or c.compound in modified:
+                continue
+            if not c.original:
+                continue
+            orig_stripped = c.original.strip()
+            for i, line in enumerate(lines):
+                s = line.strip()
+                if s.startswith('#') or s.startswith('!') or not s:
+                    continue
+                for delim in ('=', ':'):
+                    if delim in s:
+                        _, _, val_part = s.partition(delim)
+                        if val_part.strip() == orig_stripped:
+                            dpos = line.find(delim)
+                            lines[i] = line[:dpos + 1] + c.corrected
+                            modified.add(c.compound)
+                        break
+
+        # Append genuinely new keys (file is absent on this node — action='added').
+        # Do NOT append 'modified' changes that were not matched; the line exists
+        # in the file but could not be located — appending would duplicate it.
         adds_by_sec: Dict[str, List[PatchChange]] = {}
         for c in changes:
             if c.action == 'added' and c.compound not in modified:
@@ -260,7 +305,6 @@ class AuditPatcher:
 
         if adds_by_sec:
             lines.append('')
-            lines.append('# Added by ConfigMergeTool Audit')
             for sec, entries in adds_by_sec.items():
                 if sec != 'DEFAULT':
                     lines.append(sec)
@@ -276,7 +320,7 @@ class AuditPatcher:
             sec = c.section or 'DEFAULT'
             by_sec.setdefault(sec, []).append(c)
 
-        lines = ['# Generated by ConfigMergeTool Audit']
+        lines = []
         for sec, entries in by_sec.items():
             lines.append('')
             if sec != 'DEFAULT':

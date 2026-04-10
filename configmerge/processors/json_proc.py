@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from . import register, BaseProcessor
 from ..models import MergeConfig, ReportEntry, EntryType
 from ..logger import log_structured
-from ..utils import ensure_dir, open_text
+from ..utils import ensure_dir, open_text, detect_api_version_upgrade, is_java_fqcn
 
 
 # ---------------------------------------------------------------------------
@@ -44,11 +45,48 @@ def _safe_load_json(
         return None
 
 
-def _detect_indent(text: str) -> int:
-    """Detect the indentation width used in a JSON file (2 or 4 spaces, default 2)."""
+_PRIMITIVE_ARRAY_RE = re.compile(
+    r'\[([^\[\]{}]*?)\]',
+    re.DOTALL,
+)
+
+
+def _collapse_primitive_arrays(text: str) -> str:
+    """Collapse expanded JSON arrays that contain only primitive values back to
+    a single line.
+
+    json.dump() with any indent setting always expands arrays to multi-line,
+    but config files typically write simple arrays inline, e.g.::
+
+        "auth.modes": ["oauth2"]
+
+    This function finds every array whose body contains no nested ``[`` or
+    ``{`` characters (i.e. no nested arrays or objects — only strings, numbers,
+    booleans, and null) and collapses whitespace so it reads on one line.
+
+    Arrays that contain nested structures are left untouched.
+    """
+    def _collapse(m: re.Match) -> str:
+        inner = m.group(1)
+        # Split on commas, strip surrounding whitespace from each item
+        items = [item.strip() for item in inner.split(",")]
+        items = [i for i in items if i]   # drop empty strings (trailing comma)
+        return "[" + ", ".join(items) + "]"
+
+    return _PRIMITIVE_ARRAY_RE.sub(_collapse, text)
+
+
+def _detect_indent(text: str):
+    """Detect the indentation used in a JSON file.
+
+    Returns '\t' for tab-indented files, or an int (2, 4, or 8) for
+    space-indented files.  Defaults to 2 when no indentation is detected.
+    """
     for line in text.splitlines():
         stripped = line.lstrip()
         if stripped and line != stripped:
+            if line[0] == "\t":
+                return "\t"
             indent = len(line) - len(stripped)
             if indent in (2, 4, 8):
                 return indent
@@ -115,14 +153,40 @@ def _merge(
                 ))
                 rel[k] = new_val
             elif old_val != new_val:
-                report.append(ReportEntry(
-                    type=EntryType.JSON_BASE_TO_RELEASE_REPLACED,
-                    file=rel_file,
-                    element=current,
-                    old=json.dumps(old_val),
-                    new=json.dumps(new_val),
-                ))
-                rel[k] = new_val
+                old_s = json.dumps(old_val)
+                new_s = json.dumps(new_val)
+                if isinstance(old_val, str) and isinstance(new_val, str) and \
+                        detect_api_version_upgrade(new_val, old_val):
+                    # Release has a newer API version — keep release value
+                    report.append(ReportEntry(
+                        type=EntryType.API_VERSION_UPGRADED,
+                        file=rel_file,
+                        element=current,
+                        old=new_s,   # old = base value
+                        new=old_s,   # new = release (newer) value kept
+                    ))
+                    # rel[k] already holds old_val (release); leave it unchanged
+                elif isinstance(old_val, str) and isinstance(new_val, str) and \
+                        is_java_fqcn(old_val) and is_java_fqcn(new_val):
+                    # Both values are Java FQCNs — class names are deployment-specific;
+                    # use the release value and flag for reviewer attention.
+                    report.append(ReportEntry(
+                        type=EntryType.JAVA_CLASS_NAME_FROM_RELEASE,
+                        file=rel_file,
+                        element=current,
+                        old=new_s,   # old = base value
+                        new=old_s,   # new = release value used
+                    ))
+                    # rel[k] already holds old_val (release); leave it unchanged
+                else:
+                    report.append(ReportEntry(
+                        type=EntryType.JSON_BASE_TO_RELEASE_REPLACED,
+                        file=rel_file,
+                        element=current,
+                        old=old_s,
+                        new=new_s,
+                    ))
+                    rel[k] = new_val
 
 
 def _find_release_only(
@@ -202,9 +266,12 @@ class JSONProcessor(BaseProcessor):
 
         if not config.dry_run:
             ensure_dir(out_file)
+            out_text = json.dumps(rel, indent=rel_indent, ensure_ascii=False)
+            # Collapse primitive-only arrays back to single line so that simple
+            # arrays like ["oauth2"] are not expanded to multi-line by json.dumps.
+            out_text = _collapse_primitive_arrays(out_text)
             with open(out_file, "w", encoding="utf-8", newline="\n") as f:
-                # BUG-G: preserve original indent width instead of hard-coding 2
-                json.dump(rel, f, indent=rel_indent, ensure_ascii=False)
+                f.write(out_text)
                 f.write("\n")
 
         return report

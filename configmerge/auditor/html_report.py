@@ -70,11 +70,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 
 /* ── LAYOUT ── */
 .layout{display:flex;flex:1;min-height:0;overflow:hidden}
-.sidebar{width:270px;flex-shrink:0;height:100%;
+.sidebar{width:270px;flex-shrink:0;
          background:#fff;border-right:1px solid #dde3ed;
-         display:flex;flex-direction:column;overflow:hidden}
+         display:flex;flex-direction:column;overflow:hidden;
+         /* height derived from flex parent — do not use height:100% (unreliable) */
+         align-self:stretch}
 .sidebar-files{flex:1;overflow-y:auto}
-.main{flex:1;min-width:0;overflow-y:auto}
+.main{flex:1;min-width:0;overflow-y:auto;overflow-x:auto}
 
 /* ── SIDEBAR ── */
 .sidebar-title{padding:7px 12px 5px;font-size:11px;font-weight:700;color:#1e2a3a;
@@ -86,9 +88,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
                    white-space:nowrap;font-weight:400;text-transform:none;letter-spacing:0}
 .diffs-only-toggle.active{background:#c62828;color:#fff;border-color:#c62828}
 .diffs-only-toggle:hover{border-color:#1e2a3a}
-.sidebar-search{padding:5px 9px;border-bottom:1px solid #eef0f4;flex-shrink:0}
-.sidebar-search input{width:100%;padding:4px 8px;border:1px solid #c0c8d8;
+.sidebar-search{padding:5px 9px 6px;border-bottom:1px solid #eef0f4;flex-shrink:0}
+.sidebar-search input{width:100%;padding:4px 24px 4px 8px;border:1px solid #c0c8d8;
                        border-radius:4px;font-size:12px;background:#f9fafc}
+.sidebar-search input:focus{outline:none;border-color:#1565c0;background:#fff}
 
 /* ── DIFF-FILES QUICK LIST ── */
 .diff-quicklist{flex-shrink:0;border-bottom:2px solid #ffcdd2;background:#fff8f8;max-height:200px;overflow-y:auto}
@@ -142,6 +145,17 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
               font-size:12px;color:#1b5e20;display:flex;align-items:center;gap:8px}
 .match-banner .match-icon{font-size:18px}
 
+/* ── CONTENT-SKIPPED BANNER (large identical files) ── */
+.skip-banner{background:#f1f8e9;border:1px solid #aed581;border-radius:6px;
+             margin:20px;padding:18px 22px;display:flex;align-items:flex-start;gap:16px}
+.skip-banner-icon{font-size:28px;line-height:1;flex-shrink:0}
+.skip-banner-body{flex:1;min-width:0}
+.skip-banner-title{font-size:14px;font-weight:700;color:#33691e;margin-bottom:6px}
+.skip-banner-note{font-size:12px;color:#558b2f;margin-bottom:10px}
+.skip-banner-sizes{display:flex;flex-wrap:wrap;gap:10px}
+.skip-size-chip{background:#dcedc8;color:#33691e;border-radius:4px;
+                padding:3px 10px;font-size:11px;font-family:monospace}
+
 /* ── LOGICAL DIFF ── */
 .logical-diff-row td{background:#f3e5f5}
 .logical-diff-row:hover td{background:#e1bee7}
@@ -171,9 +185,33 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
         padding:5px 11px;font-size:12px;cursor:pointer}
 .dl-btn:hover{background:#2e3d52}
 
+/* ── TAB NAVIGATION ── */
+.tab-bar{display:flex;gap:0;background:#fff;border-bottom:2px solid #dde3ed;flex-shrink:0}
+.tab-btn{padding:7px 18px;font-size:12px;font-weight:600;color:#666;border:none;
+         background:none;cursor:pointer;border-bottom:3px solid transparent;
+         margin-bottom:-2px;white-space:nowrap;transition:color .15s,border-color .15s}
+.tab-btn:hover{color:#1e2a3a;background:#f4f6f9}
+.tab-btn.active{color:#1565c0;border-bottom-color:#1565c0;background:#fff}
+.tab-count{background:#e0e6f0;color:#555;border-radius:9px;padding:1px 7px;
+           font-size:10px;margin-left:5px;font-weight:400}
+.tab-count.has-items{background:#c62828;color:#fff}
+.tab-panel{display:none;flex:1;min-height:0;overflow:hidden;flex-direction:column}
+.tab-panel.active{display:flex}
+/* Full-page tab panels (skipped / filtered) */
+.tab-fullpage{flex:1;overflow-y:auto;padding:20px}
+.tab-fullpage-hdr{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.tab-fullpage-title{font-size:15px;font-weight:700;color:#1e2a3a}
+.tab-back-btn{background:#f0f2f6;border:1px solid #c0c8d8;border-radius:4px;
+              padding:4px 12px;font-size:11px;cursor:pointer;color:#1e2a3a}
+.tab-back-btn:hover{background:#dde3ed}
+.tab-section-hdr{font-size:12px;font-weight:700;color:#555;text-transform:uppercase;
+                 letter-spacing:.4px;padding:8px 0 6px;margin-top:12px;
+                 border-bottom:1px solid #dde3ed;margin-bottom:8px}
+.tab-empty{padding:40px 20px;text-align:center;color:#999;font-size:13px}
+
 /* ── AUDIT TABLE ── */
 /* Phase 3.0: horizontal scroll + sticky parameter column for many-node audits */
-.table-wrap{padding:0 0 60px;overflow-x:auto}
+.table-wrap{padding:0 0 60px}
 .audit-table{width:max-content;min-width:100%;border-collapse:collapse;table-layout:fixed}
 .audit-table thead{position:sticky;top:0;z-index:10}
 .audit-table th{background:#1e2a3a;color:#fff;padding:8px 10px;text-align:left;
@@ -199,6 +237,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 .section-divider td{background:#f0f2f6;font-size:11px;font-weight:700;color:#555;
                      padding:5px 10px;letter-spacing:.3px;text-transform:uppercase;
                      border-top:2px solid #dde3ed;position:relative;z-index:0}
+.section-divider-controls{float:right;display:flex;gap:4px}
+.sec-skip-btn{background:#607d8b;color:#fff;border:none;border-radius:3px;
+              padding:2px 7px;font-size:10px;cursor:pointer;text-transform:none;letter-spacing:0}
+.sec-skip-btn:hover{background:#455a64}
+.sec-addfrom-btn{background:#1565c0;color:#fff;border:none;border-radius:3px;
+                 padding:2px 7px;font-size:10px;cursor:pointer;text-transform:none;letter-spacing:0}
+.sec-addfrom-btn:hover{background:#0d47a1}
 .param-row td{border-bottom:1px solid #eef0f4;padding:0;vertical-align:top}
 .param-row:hover td{background:#fafbfc}
 .mismatch-row td{background:#fffde7}
@@ -227,7 +272,20 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 /* ── VALUE CELLS ── */
 .val-cell{padding:6px 10px;border-right:1px solid #eef0f4;font-size:12px}
 .val-cell:last-child{border-right:none}
-.val-display{font-family:monospace;word-break:break-all;margin-bottom:3px}
+.val-display{font-family:monospace;word-break:break-all;white-space:pre-wrap;
+             max-width:var(--val-wrap,80ch);margin-bottom:3px}
+
+/* ── COLUMN WIDTH / WRAP CONTROLS ── */
+.col-width-ctrl{display:flex;align-items:center;gap:4px;font-size:11px;color:#555;
+                border-left:1px solid #dde3ed;padding-left:10px;margin-left:4px}
+.col-adj-btn{background:#f0f2f6;border:1px solid #c8d0dc;border-radius:3px;
+             width:20px;height:20px;line-height:18px;text-align:center;
+             cursor:pointer;font-size:13px;padding:0;color:#333;flex-shrink:0}
+.col-adj-btn:hover{background:#dde3ed}
+.col-width-disp{min-width:32px;text-align:center;font-weight:600;color:#1e2a3a;font-size:11px}
+.wrap-inp{width:44px;font-size:11px;padding:1px 4px;border:1px solid #c8d0dc;
+          border-radius:3px;text-align:center}
+.col-ctrl-sep{color:#bbb;margin:0 4px}
 .cell-mismatch .val-display{color:#b71c1c;font-weight:600}
 .cell-pending .val-display .orig-struck{text-decoration:line-through;color:#999;margin-right:4px}
 .cell-pending .val-display .new-val{color:#1565c0;font-weight:600;
@@ -278,8 +336,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 .raw-hdr{padding:10px 20px 6px;font-size:12px;font-weight:600;color:#555;
          border-top:1px solid #eef0f4;margin-top:10px}
 .raw-table{width:100%;border-collapse:collapse;margin-top:0;table-layout:fixed}
+.raw-table thead{position:sticky;top:0;z-index:10}
 .raw-table th{background:#f0f2f6;padding:6px 14px;font-size:12px;font-weight:600;
-              color:#444;border-bottom:1px solid #dde3ed}
+              color:#444;border-bottom:1px solid #dde3ed;border-right:1px solid #dde3ed}
+.raw-table th:last-child{border-right:none}
 .raw-col{padding:0;vertical-align:top;border-right:1px solid #dde3ed;width:50%}
 .raw-col:last-child{border-right:none}
 .raw-content{padding:10px 14px;font-size:11px;font-family:monospace;
@@ -368,6 +428,14 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 .btn-secondary{background:#fff;border:1px solid #aaa;border-radius:4px;
                padding:6px 14px;font-size:12px;cursor:pointer;color:#444}
 .btn-secondary:hover{background:#f5f5f5}
+.modal-sm{width:min(480px,95vw);max-height:none}
+.modal-sm .modal-body{padding:18px 20px;font-size:13px;color:#333;line-height:1.5}
+.modal-sm .modal-body p{margin-bottom:10px}
+.modal-sm .modal-body input{width:100%;padding:6px 10px;border:1px solid #c0c8d8;
+                             border-radius:4px;font-size:13px;margin-top:6px}
+.btn-default{background:#1565c0;color:#fff;border:none;border-radius:4px;
+             padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600}
+.btn-default:hover{background:#0d47a1}
 
 /* ── LEGEND ── */
 .legend-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;
@@ -413,10 +481,11 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 _JS = r"""
 'use strict';
 
-const NODES    = AUDIT_DATA.nodes;
-const NODE_DIRS = AUDIT_DATA.nodeDirs;
-const FILES    = AUDIT_DATA.files;
-const RUN_AT   = AUDIT_DATA.runAt;
+const NODES      = AUDIT_DATA.nodes;
+const NODE_DIRS  = AUDIT_DATA.nodeDirs;
+const OUTPUT_DIR = AUDIT_DATA.outputDir || '';
+const FILES      = AUDIT_DATA.files;
+const RUN_AT     = AUDIT_DATA.runAt;
 const SKIPPED_BACKUPS = AUDIT_DATA.skippedBackups || [];
 const FILTERED_FILES  = AUDIT_DATA.filteredFiles  || [];
 const RENDER_ERRORS   = AUDIT_DATA.renderErrors   || [];
@@ -425,22 +494,212 @@ let currentFileIdx  = -1;
 let showDiffsOnly   = false;
 let sidebarDiffsOnly = false;
 
+// Column width & wrap state (U-16)
+let _colWidth = null;   // px, null = use _nodeColWidth() default
+let _valWrap  = 80;     // chars; 0 = no wrap
+
 // pending[fileIdx][compound][node] = newValue (string)
 const pending = {};
 
 // changeLog: array of {ts, action, fileIdx, file, compound, key, node, orig, corrected}
 const changeLog = [];
 
+// ── State persistence (localStorage) ─────────────────────────────────
+const _STATE_KEY = 'cm_state_v2_' + (RUN_AT || '');
+let _localOutputDir = '';    // user-set when OUTPUT_DIR not configured
+let _savedFileIdxSet = new Set();
+let _pendingNavTo    = -1;   // target fileIdx during nav-guard prompt
+
+function _effectiveOutputDir() {
+  return (OUTPUT_DIR || _localOutputDir || '').trim();
+}
+
+function _saveState() {
+  try {
+    localStorage.setItem(_STATE_KEY, JSON.stringify({
+      p: pending, s: skipped, c: changeLog, d: _localOutputDir,
+    }));
+  } catch(e) {}
+}
+
+function _restoreState() {
+  try {
+    let raw = localStorage.getItem(_STATE_KEY);
+    if (!raw) return;
+    let st = JSON.parse(raw);
+    if (st.p) Object.keys(st.p).forEach(fi => {
+      let n = parseInt(fi, 10); if (!isNaN(n)) pending[n] = st.p[fi];
+    });
+    if (st.s) Object.keys(st.s).forEach(fi => {
+      let n = parseInt(fi, 10); if (!isNaN(n)) skipped[n] = st.s[fi];
+    });
+    if (st.c && Array.isArray(st.c)) st.c.forEach(e => {
+      e.fileIdx = parseInt(e.fileIdx, 10);
+      changeLog.push(e);
+    });
+    if (st.d) _localOutputDir = st.d;
+  } catch(e) {}
+}
+
+// ── Save helpers ──────────────────────────────────────────────────────
+
+function _saveFileChanges(fi) {
+  let effDir = _effectiveOutputDir();
+  if (!effDir) return false;
+  let file = FILES[fi];
+  if (!file || file.type === 'binary') return false;
+  let saved = false;
+  NODES.forEach(n => {
+    if (!_anyPendingForFileNode(fi, n)) return;
+    let content = reconstructContent(fi, file, n);
+    if (content === null) return;
+    let fname = file.path.split('/').pop();
+    _blobDownload(content, fname, 'text/plain');
+    saved = true;
+  });
+  if (saved) _savedFileIdxSet.add(fi);
+  return saved;
+}
+
+function _hasUnsavedChanges(fi) {
+  return _anyPendingForFile(fi) && !_savedFileIdxSet.has(fi);
+}
+
+function _showSaveStatus(msg) {
+  let el = document.getElementById('save-status-msg');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'inline-block';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// ── Save All Changes ──────────────────────────────────────────────────
+
+function saveAllChanges() {
+  let effDir = _effectiveOutputDir();
+  if (!effDir) { _showOutputDirPrompt('all'); return; }
+  _doSaveAll(effDir);
+}
+
+function _doSaveAll(effDir) {
+  let count = 0;
+  FILES.forEach((file, fi) => {
+    if (file.type === 'binary') return;
+    NODES.forEach(n => {
+      if (!_anyPendingForFileNode(fi, n)) return;
+      let content = reconstructContent(fi, file, n);
+      if (content === null) return;
+      _blobDownload(content, file.path.split('/').pop(), 'text/plain');
+      _savedFileIdxSet.add(fi);
+      count++;
+    });
+  });
+  if (!count) { alert('No changes to save.'); return; }
+  _showSaveStatus('\u2713 Saved ' + count + ' file(s) \u2192 ' + effDir + '/[Node]/[path]');
+}
+
+// ── Output-dir prompt modal ───────────────────────────────────────────
+let _outputDirAction = '';  // 'all' | 'file'
+let _outputDirFileFi = -1;
+
+function _showOutputDirPrompt(action, fi) {
+  _outputDirAction = action || 'all';
+  _outputDirFileFi = (fi !== undefined) ? fi : -1;
+  let inp = document.getElementById('od-input');
+  if (inp) { inp.value = 'corrections'; setTimeout(() => inp.focus(), 50); }
+  let el = document.getElementById('od-modal');
+  if (el) el.classList.add('open');
+}
+
+function outputDirConfirm() {
+  let inp = document.getElementById('od-input');
+  let dir = (inp ? inp.value : '').trim();
+  if (!dir) return;
+  _localOutputDir = dir;
+  _saveState();
+  let el = document.getElementById('od-modal');
+  if (el) el.classList.remove('open');
+  if (_outputDirAction === 'all') {
+    _doSaveAll(dir);
+  } else if (_outputDirAction === 'file' && _outputDirFileFi >= 0) {
+    _saveFileChanges(_outputDirFileFi);
+    if (_pendingNavTo >= 0) { let t = _pendingNavTo; _pendingNavTo = -1; _doSelectFile(t); }
+  }
+}
+
+function outputDirCancel() {
+  let el = document.getElementById('od-modal');
+  if (el) el.classList.remove('open');
+  _pendingNavTo = -1;
+}
+
+// ── Navigation guard modal ────────────────────────────────────────────
+
+function _showNavGuard(fi) {
+  let file = FILES[fi];
+  let fname = file ? file.path : 'this file';
+  let el = document.getElementById('navguard-modal');
+  let msg = document.getElementById('navguard-msg');
+  if (msg) msg.textContent = '\u26A0 Unsaved changes in: ' + fname;
+  let sub = document.getElementById('navguard-sub');
+  let effDir = _effectiveOutputDir();
+  if (sub) sub.textContent = effDir
+    ? 'Files will be saved to: ' + effDir + '/' + (file ? FILES[fi].path.split('/').pop() : '')
+    : 'No output directory configured.';
+  if (el) {
+    el.classList.add('open');
+    // Default focus = Save & Continue button
+    let btn = document.getElementById('navguard-save-btn');
+    if (btn) setTimeout(() => btn.focus(), 50);
+  }
+}
+
+function navGuardSaveAndContinue() {
+  let el = document.getElementById('navguard-modal');
+  if (el) el.classList.remove('open');
+  let fi = currentFileIdx;
+  let effDir = _effectiveOutputDir();
+  if (!effDir) {
+    _showOutputDirPrompt('file', fi);
+    return;
+  }
+  _saveFileChanges(fi);
+  if (_pendingNavTo >= 0) { let t = _pendingNavTo; _pendingNavTo = -1; _doSelectFile(t); }
+}
+
+function navGuardContinue() {
+  let el = document.getElementById('navguard-modal');
+  if (el) el.classList.remove('open');
+  if (_pendingNavTo >= 0) { let t = _pendingNavTo; _pendingNavTo = -1; _doSelectFile(t); }
+}
+
+function navGuardCancel() {
+  let el = document.getElementById('navguard-modal');
+  if (el) el.classList.remove('open');
+  _pendingNavTo = -1;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
+  // Restore state from localStorage (persists across page refreshes)
+  _restoreState();
+
   renderDiffQuickList();
   renderSidebar();
   _buildMismatchIndex();
   renderSkippedPanel();
   renderErrorsPanel();
 
-  // Auto-enable sidebar diffs-only when diffs are a small minority of files
-  let diffCount = FILES.filter(f => f.mismatchCount > 0).length;
+  // Init tab counts so user can see at a glance what's in each tab
+  let skCount  = SKIPPED_BACKUPS.length;
+  let flCount  = FILTERED_FILES.length;
+  let skBadge  = document.getElementById('tab-count-skipped');
+  let flBadge  = document.getElementById('tab-count-filtered');
+  if (skBadge) { skBadge.textContent = skCount; if (skCount) skBadge.classList.add('has-items'); }
+  if (flBadge) { flBadge.textContent = flCount; if (flCount) flBadge.classList.add('has-items'); }
+
+  // Auto-enable sidebar diffs-only when diffs/absent are a small minority of files
+  let diffCount = FILES.filter(f => f.mismatchCount > 0 || (f.absentCount||0) > 0).length;
   if (diffCount > 0 && diffCount < FILES.length * 0.5) {
     sidebarDiffsOnly = true;
     let btn = document.getElementById('sidebar-diffs-toggle');
@@ -450,7 +709,7 @@ document.addEventListener('DOMContentLoaded', function() {
     _applyDiffsOnlyFilter();
   }
 
-  let idx = FILES.findIndex(f => f.mismatchCount > 0);
+  let idx = FILES.findIndex(f => f.mismatchCount > 0 || (f.absentCount||0) > 0);
   if (idx < 0) idx = 0;
 
   // Handle deep-link from index page: hash = URL-encoded file path
@@ -463,27 +722,43 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(e) {}
   }
 
-  if (FILES.length > 0) selectFile(idx);
+  // U-16: init col width and val-wrap from localStorage
+  let savedCW = localStorage.getItem('cm_col_width');
+  _colWidth = savedCW ? parseInt(savedCW, 10) : _nodeColWidth();
+  let savedWrap = localStorage.getItem('cm_val_wrap');
+  _valWrap = savedWrap !== null ? parseInt(savedWrap, 10) : 80;
+  _applyWrapCss(_valWrap);
+
+  // Refresh change counter to reflect restored state
+  updateChangeCounter();
+
+  if (FILES.length > 0) _doSelectFile(idx);
 });
 
-// ── Diff quick-list (files with diffs, shown at top of sidebar) ───────
+// ── Diff quick-list (files with diffs or absent nodes) ────────────────
 function renderDiffQuickList() {
   let ql = document.getElementById('diff-quicklist');
   if (!ql) return;
-  let diffFiles = FILES.map((f, i) => ({f, i})).filter(({f}) => f.mismatchCount > 0);
+  let diffFiles = FILES.map((f, i) => ({f, i}))
+    .filter(({f}) => f.mismatchCount > 0 || (f.absentCount||0) > 0);
   if (!diffFiles.length) { ql.style.display = 'none'; return; }
 
-  let items = diffFiles.map(({f, i}) =>
-    `<div class="diff-qfile" onclick="selectFile(${i})">
+  let items = diffFiles.map(({f, i}) => {
+    let badges = '';
+    if (f.mismatchCount > 0)
+      badges += `<span class="diff-qbadge">${f.mismatchCount}</span>`;
+    if ((f.absentCount||0) > 0)
+      badges += `<span class="diff-qbadge" style="background:#e65100">&#9888;</span>`;
+    return `<div class="diff-qfile" onclick="selectFile(${i})">
        <span class="diff-qname">${esc(f.path.split('/').pop())}</span>
-       <span class="diff-qbadge">${f.mismatchCount}</span>
-     </div>`
-  ).join('');
+       ${badges}
+     </div>`;
+  }).join('');
 
   let hdr = ql.querySelector('.diff-quicklist-hdr');
   if (hdr) hdr.innerHTML =
     `<span class="dir-chev">&#9660;</span>
-     <span style="flex:1">&#9888; ${diffFiles.length} file${diffFiles.length!==1?'s':''} with differences</span>`;
+     <span style="flex:1">&#9888; ${diffFiles.length} file${diffFiles.length!==1?'s':''} with differences or absent nodes</span>`;
 
   let body = ql.querySelector('.diff-quicklist-body');
   if (body) body.innerHTML = items;
@@ -512,13 +787,14 @@ function _buildTree() {
       }
       node = node.dirs[seg];
     }
-    let fname = segs[segs.length-1];
-    let isAbsent = f.presentIn.length < NODES.length;
-    let hasDiff  = f.mismatchCount > 0;
+    let fname    = segs[segs.length-1];
+    let absentCnt = f.absentCount || 0;
+    let isAbsent  = absentCnt > 0;
+    let hasDiff   = f.mismatchCount > 0;
     node.files.push({idx, name:fname, f, hasDiff, isAbsent});
     node.totalCount++;
-    if (hasDiff) node.diffCount++;
-    if (isAbsent && !hasDiff) node.missingCount++;
+    if (hasDiff)   node.diffCount++;
+    if (isAbsent)  node.missingCount++;  // count all absent (incl. diff+absent)
   });
   // Bubble counts up
   function bubble(n) {
@@ -550,11 +826,13 @@ function _renderDirNode(dir, depth) {
   let indent = depth * 12;
   let hasDiffs = dir.diffCount > 0;
   let hasMiss  = dir.missingCount > 0;
-  let badge = hasDiffs
-    ? `<span class="dir-diff-badge">${dir.diffCount} diff${dir.diffCount!==1?'s':''}</span>`
-    : hasMiss
-      ? `<span class="dir-missing-badge">&#9888;</span>`
-      : `<span class="dir-ok-badge">&#10003;</span>`;
+  let badge = (hasDiffs && hasMiss)
+    ? `<span class="dir-diff-badge">${dir.diffCount} diff${dir.diffCount!==1?'s':''}</span><span class="dir-missing-badge">&#9888;</span>`
+    : hasDiffs
+      ? `<span class="dir-diff-badge">${dir.diffCount} diff${dir.diffCount!==1?'s':''}</span>`
+      : hasMiss
+        ? `<span class="dir-missing-badge">&#9888;</span>`
+        : `<span class="dir-ok-badge">&#10003;</span>`;
   // Auto-collapse dirs where everything matches
   let autoOpen = hasDiffs || hasMiss;
   let chevron  = autoOpen ? '&#9660;' : '&#9654;';
@@ -576,7 +854,7 @@ function _renderDirBody(dir, depth) {
   let indent = depth * 12;
   return dir.files.map(({idx, name, f, hasDiff, isAbsent}) => {
     let badge = _sidebarBadge(idx, f);
-    let diffAttr = hasDiff ? '1' : '0';
+    let diffAttr = (hasDiff || isAbsent) ? '1' : '0';  // absent files also shown in diffs-only mode
     return `<div class="tree-file" data-idx="${idx}" data-diff="${diffAttr}"
               style="padding-left:${8+indent}px"
               onclick="selectFile(${idx})">
@@ -586,19 +864,33 @@ function _renderDirBody(dir, depth) {
 }
 
 function _sidebarBadge(fileIdx, f) {
-  let hasPend  = _anyPendingForFile(fileIdx);
-  let isAbsent = f.presentIn.length < NODES.length;
-  let parts    = [];
+  let hasPend    = _anyPendingForFile(fileIdx);
+  let absentCnt  = f.absentCount || 0;
+  let parts      = [];
   if (hasPend)
     parts.push(`<span class="pending-badge">&#9998;</span>`);
+  // Show mismatch badge and absent badge independently so both are visible
   if (f.mismatchCount > 0)
     parts.push(`<span class="mismatch-badge">${f.mismatchCount}</span>`);
-  else if (isAbsent)
-    parts.push(`<span class="missing-file-badge">&#9888; missing</span>`);
+  if (absentCnt > 0)
+    parts.push(`<span class="missing-file-badge">&#9888; ${absentCnt}&nbsp;absent</span>`);
   if ((f.logicalDiffCount||0) > 0)
     parts.push(`<span class="logical-badge">~${f.logicalDiffCount}</span>`);
-  if (!parts.length)
-    parts.push(`<span class="ok-badge">&#10003;</span>`);
+  if (!parts.length) {
+    if (f.contentSkipped) {
+      // Large identical file — show size of first node instead of plain ✓
+      let sizes = f.fileSizes || {};
+      let firstSz = Object.values(sizes)[0] || 0;
+      let szLabel = firstSz >= 1048576
+        ? (firstSz / 1048576).toFixed(1) + ' MB'
+        : firstSz >= 1024
+          ? Math.round(firstSz / 1024) + ' KB'
+          : firstSz + ' B';
+      parts.push(`<span class="ok-badge" title="Identical — diff skipped">&#9989; ${szLabel}</span>`);
+    } else {
+      parts.push(`<span class="ok-badge">&#10003;</span>`);
+    }
+  }
   return parts.join('');
 }
 
@@ -679,13 +971,16 @@ function _applyDiffsOnlyFilter() {
 function filterFiles(val) {
   let q = val.toLowerCase();
   if (!q) {
-    // Restore diffs-only state
     _applyDiffsOnlyFilter();
+    _updateSearchBadge(0, true);
     return;
   }
+  let matchCount = 0;
   document.querySelectorAll('.tree-file').forEach(el => {
     let name = (el.querySelector('.tree-file-name') || el).textContent.toLowerCase();
-    el.style.display = name.includes(q) ? '' : 'none';
+    let vis  = name.includes(q);
+    el.style.display = vis ? '' : 'none';
+    if (vis) matchCount++;
   });
   document.querySelectorAll('.tree-dir').forEach(dirEl => {
     let anyVis = Array.from(dirEl.querySelectorAll('.tree-file'))
@@ -698,10 +993,62 @@ function filterFiles(val) {
       if (chev) chev.innerHTML = '&#9660;';
     }
   });
+  _updateSearchBadge(matchCount, false);
 }
+
+function _updateSearchBadge(count, hidden) {
+  let badge = document.getElementById('search-match-badge');
+  if (!badge) return;
+  if (hidden || count === 0) {
+    badge.textContent = hidden ? '' : 'No matches';
+    badge.style.display = hidden ? 'none' : 'inline';
+    badge.style.background = hidden ? '' : '#c62828';
+  } else {
+    badge.textContent = count + ' match' + (count !== 1 ? 'es' : '');
+    badge.style.display = 'inline';
+    badge.style.background = '#2e7d32';
+  }
+}
+
+function _searchFirstVisible() {
+  let el = document.querySelector('.tree-file[style=""],.tree-file:not([style])');
+  // Find first visible tree-file
+  let all = document.querySelectorAll('.tree-file');
+  for (let i = 0; i < all.length; i++) {
+    if (all[i].style.display !== 'none') {
+      let idx = parseInt(all[i].getAttribute('data-idx'), 10);
+      if (!isNaN(idx)) selectFile(idx);
+      return;
+    }
+  }
+}
+
+function clearFileSearch() {
+  let inp = document.getElementById('sidebar-search-input');
+  if (inp) { inp.value = ''; filterFiles(''); inp.focus(); }
+}
+
+// Global keyboard shortcut: Ctrl+K focuses the sidebar search
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    let inp = document.getElementById('sidebar-search-input');
+    if (inp) { inp.focus(); inp.select(); }
+  }
+});
 
 // ── File selection ─────────────────────────────────────────────────────
 function selectFile(idx) {
+  // Nav guard: if current file has unsaved changes, prompt before leaving
+  if (currentFileIdx >= 0 && currentFileIdx !== idx && _hasUnsavedChanges(currentFileIdx)) {
+    _pendingNavTo = idx;
+    _showNavGuard(currentFileIdx);
+    return;
+  }
+  _doSelectFile(idx);
+}
+
+function _doSelectFile(idx) {
   currentFileIdx = idx;
 
   document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('active'));
@@ -766,7 +1113,13 @@ function renderFilePanel(idx) {
   if (file.type !== 'binary') {
     dlBtns = NODES
       .filter(n => file.presentIn.includes(n) || _anyPendingForFileNode(idx, n))
-      .map(n => `<button class="dl-btn" onclick="downloadConfig(${idx},'${esj(n)}')">&#11015; ${esc(n)}</button>`)
+      .map(n => {
+        let targetPath = OUTPUT_DIR
+          ? OUTPUT_DIR.replace(/\/+$/,'') + '/' + n + '/' + file.path
+          : '';
+        let titleAttr = targetPath ? ` title="Save to: ${esc(targetPath)}"` : '';
+        return `<button class="dl-btn" onclick="downloadConfig(${idx},'${esj(n)}','${esj(targetPath)}')"${titleAttr}>&#11015; ${esc(n)}</button>`;
+      })
       .join('');
   }
 
@@ -777,28 +1130,69 @@ function renderFilePanel(idx) {
     ).join('');
   }
 
-  // Match banner — shown when no mismatches and no logical diffs
-  let matchHtml = '';
-  if (file.mismatchCount === 0 && (file.logicalDiffCount || 0) === 0 && file.type !== 'binary') {
-    matchHtml = `<div class="match-banner">
-      <span class="match-icon">&#10003;</span>
-      <span>All ${file.presentIn.length} nodes agree on every parameter in this file.</span>
-    </div>`;
-  } else if (file.mismatchCount === 0 && (file.logicalDiffCount || 0) > 0) {
-    matchHtml = `<div class="match-banner">
-      <span class="match-icon">&#10003;</span>
-      <span>No actionable mismatches. ${file.logicalDiffCount} parameter(s) differ as expected (node-specific values — shown in purple).</span>
+  // Content-skipped banner — large file, identical across all nodes
+  let skipBannerHtml = '';
+  if (file.contentSkipped) {
+    let sizeChips = Object.entries(file.fileSizes || {}).map(([node, sz]) => {
+      let label = sz >= 1048576
+        ? (sz / 1048576).toFixed(2) + ' MB'
+        : sz >= 1024
+          ? (sz / 1024).toFixed(1) + ' KB'
+          : sz + ' B';
+      return `<span class="skip-size-chip">${esc(node)}: ${label}</span>`;
+    }).join('');
+    let paramNote = file.paramCount > 0
+      ? `<br><span style="font-size:11px;color:#689f38">&#10004; ${file.paramCount} parameter(s) compared — all identical.</span>`
+      : '';
+    skipBannerHtml = `<div class="skip-banner">
+      <div class="skip-banner-icon">&#9989;</div>
+      <div class="skip-banner-body">
+        <div class="skip-banner-title">Content identical across all nodes &mdash; diff display skipped</div>
+        <div class="skip-banner-note">
+          This file exceeds the 512 KB display threshold and is identical on all nodes.
+          Raw diff is omitted to keep the report compact.${paramNote}
+        </div>
+        ${sizeChips ? `<div class="skip-banner-sizes">${sizeChips}</div>` : ''}
+      </div>
     </div>`;
   }
 
+  // Match/absent banner — shown when no content mismatches (non-skipped files)
+  let matchHtml = '';
+  let _absentCnt = file.absentCount || 0;
+  if (!file.contentSkipped) {
+    if (file.mismatchCount === 0 && (file.logicalDiffCount || 0) === 0 && file.type !== 'binary') {
+      if (_absentCnt > 0) {
+        // Content agrees among present nodes but file is missing from some
+        matchHtml = `<div class="match-banner" style="border-left-color:#e65100;background:#fff8f0">
+          <span class="match-icon" style="color:#e65100">&#9888;</span>
+          <span>Content identical across <strong>${file.presentIn.length}</strong> present node(s), but file is <strong>absent from ${_absentCnt} node(s)</strong>.</span>
+        </div>`;
+      } else {
+        matchHtml = `<div class="match-banner">
+          <span class="match-icon">&#10003;</span>
+          <span>All ${file.presentIn.length} nodes agree on every parameter in this file.</span>
+        </div>`;
+      }
+    } else if (file.mismatchCount === 0 && (file.logicalDiffCount || 0) > 0) {
+      let absentNote = _absentCnt > 0 ? ` File also absent from ${_absentCnt} node(s).` : '';
+      matchHtml = `<div class="match-banner">
+        <span class="match-icon">&#10003;</span>
+        <span>No actionable mismatches. ${file.logicalDiffCount} parameter(s) differ as expected (node-specific values — shown in purple).${absentNote}</span>
+      </div>`;
+    }
+  }
+
   let autoExpectedCount = (file.params||[]).filter(p => p.hasMismatch && _isExpectedDiff(p)).length;
-  let tableHtml = file.type === 'binary'
-    ? renderBinaryTable(file)
-    : (file.type === 'xml' || file.type === 'text')
-      ? renderTextCompare(file, idx)
-      : file.type === 'error'
-        ? renderErrorFile(file)
-        : renderParamTable(file, idx);
+  // When content was skipped, no table is needed
+  let tableHtml = file.contentSkipped ? ''
+    : file.type === 'binary'
+      ? renderBinaryTable(file)
+      : (file.type === 'xml' || file.type === 'text')
+        ? renderTextCompare(file, idx)
+        : file.type === 'error'
+          ? renderErrorFile(file)
+          : renderParamTable(file, idx);
 
   let expDiffMeta = autoExpectedCount > 0
     ? `&nbsp;&middot;&nbsp; <span style="color:#00838f">~${autoExpectedCount} instance-specific</span>` : '';
@@ -806,15 +1200,18 @@ function renderFilePanel(idx) {
     ? `&nbsp;&middot;&nbsp; <span class="logical-tag">~${file.logicalDiffCount} expected</span>` : '';
 
   panel.innerHTML = `
-    ${warnHtml}${matchHtml}
+    ${warnHtml}${skipBannerHtml}${matchHtml}
     <div class="panel-sticky-hdr">
       <div class="panel-file-hdr">
         <div class="panel-file-path">${esc(file.path)}</div>
         <div class="panel-file-meta">
           ${presentList}${absentList}
-          &nbsp;&middot;&nbsp; <strong>${file.mismatchCount}</strong> mismatch(es)
+          ${file.mismatchCount > 0 ? `&nbsp;&middot;&nbsp; <strong>${file.mismatchCount}</strong> mismatch(es)` : ''}
+          ${(file.absentCount||0) > 0 ? `&nbsp;&middot;&nbsp; <span style="color:#e65100;font-weight:bold">&#9888; absent from ${file.absentCount} node(s)</span>` : ''}
+          ${file.mismatchCount === 0 && (file.absentCount||0) === 0 ? `&nbsp;&middot;&nbsp; <span style="color:#388e3c">&#10003; all matched</span>` : ''}
           ${expDiffMeta}${logDiffMeta}
           &nbsp;&middot;&nbsp; <em style="color:#888">${esc(file.type.toUpperCase())}</em>
+          ${file.contentSkipped ? `&nbsp;&middot;&nbsp; <span style="color:#558b2f;font-size:11px">&#9989; diff skipped (large identical file)</span>` : ''}
         </div>
       </div>
       <div class="panel-toolbar">
@@ -830,6 +1227,20 @@ function renderFilePanel(idx) {
           <input type="checkbox" id="logical-only-chk" checked onchange="toggleLogicalVisible(this.checked)">
           Show expected diffs
         </label>
+        <div class="col-width-ctrl">
+          <span>Col&nbsp;width:</span>
+          <button class="col-adj-btn" onclick="adjustColWidth(-20)" title="Narrower">&#8722;</button>
+          <span class="col-width-disp" id="col-width-disp">—</span>
+          <button class="col-adj-btn" onclick="adjustColWidth(+20)" title="Wider">&#43;</button>
+          <span class="col-ctrl-sep">|</span>
+          <span>Wrap:</span>
+          <input class="wrap-inp" type="number" id="wrap-chars-inp" value="80" min="1" max="9999"
+                 title="Wrap value text at N characters (leave blank or 0 for no wrap)"
+                 onchange="applyWrap(+this.value)"
+                 onkeydown="if(event.key==='Enter')applyWrap(+this.value)">
+          <span>ch</span>
+          <button class="col-adj-btn" onclick="clearWrap()" title="Remove wrap limit">&#8734;</button>
+        </div>
         <div class="mm-nav">
           <button class="mm-nav-btn" onclick="prevMismatch()">&#9664; Prev</button>
           <span class="mm-nav-counter" id="mm-nav-counter">—</span>
@@ -854,8 +1265,7 @@ function renderBinaryTable(file) {
     }
     let isMismatch = !allSame || !file.presentIn.includes(n);
     return `<tr class="${isMismatch ? 'mismatch-row' : ''}">
-      <td class="node-name-cell">${esc(n)}<br>
-        <small style="font-weight:400;color:#888">${esc(NODE_DIRS[n]||'')}</small></td>
+      <td class="node-name-cell" title="${esc(NODE_DIRS[n]||n)}">${esc(n)}</td>
       <td class="mono">${esc(bi.md5)}</td>
       <td>${fmtBytes(bi.size)}</td>
       <td>${!isMismatch ? '&#10003; Match' : '&#9888; Differs'}</td>
@@ -889,8 +1299,7 @@ function renderTextCompare(file, idx) {
     `<thead><tr><th class="key-th">Parameter</th>` +
     NODES.map(n => {
       let absent = !file.presentIn.includes(n);
-      return `<th class="val-th ${absent?'absent-node-hdr':''}">${esc(n)}
-        <small class="node-dir">${esc(NODE_DIRS[n]||'')}</small></th>`;
+      return `<th class="val-th ${absent?'absent-node-hdr':''}" title="${esc(NODE_DIRS[n]||n)}">${esc(n)}</th>`;
     }).join('') +
     `</tr></thead><tbody>`;
 
@@ -959,8 +1368,7 @@ function renderParamTable(file, idx) {
   let hdrs = `<th class="key-th">Parameter</th>` +
     NODES.map((n, i) => {
       let absent = !file.presentIn.includes(n);
-      return `<th class="val-th col-node-${i} ${absent?'absent-node-hdr':''}" data-idx="${i}" style="min-width:${colW}px">${esc(n)}
-        <small class="node-dir">${esc(NODE_DIRS[n]||'')}</small></th>`;
+      return `<th class="val-th col-node-${i} ${absent?'absent-node-hdr':''}" data-idx="${i}" style="min-width:${colW}px" title="${esc(NODE_DIRS[n]||n)}">${esc(n)}</th>`;
     }).join('');
 
   let rows    = '';
@@ -968,8 +1376,35 @@ function renderParamTable(file, idx) {
   file.params.forEach((param, pi) => {
     if (param.section && param.section !== 'DEFAULT' && param.section !== prevSec) {
       prevSec = param.section;
+      let secName = param.section;
+
+      // Compute which nodes have params in this section (non-null value)
+      let nodesWithSection = NODES.filter(n =>
+        (file.params || []).some(p => p.section === secName &&
+          p.values && p.values[n] !== null && p.values[n] !== undefined)
+      );
+      let nodesMissingSection = NODES.filter(n =>
+        file.presentIn.includes(n) && !nodesWithSection.includes(n)
+      );
+
+      // Build controls
+      let controls = '';
+      // Skip/Unskip section buttons
+      controls += `<button class="sec-skip-btn" onclick="skipSection(${idx},'${esj(secName)}')" title="Skip all params in this section">&#10006; Skip section</button>`;
+      controls += `<button class="sec-skip-btn" style="background:#90a4ae" onclick="unskipSection(${idx},'${esj(secName)}')" title="Unskip all params in this section">&#8635; Unskip section</button>`;
+
+      // Add-from-node buttons for nodes that have this section
+      if (nodesMissingSection.length > 0 && nodesWithSection.length > 0) {
+        nodesWithSection.forEach(srcNode => {
+          controls += `<button class="sec-addfrom-btn" onclick="addSectionFromNode(${idx},'${esj(secName)}','${esj(srcNode)}')" title="Copy all params in this section from ${srcNode} to nodes that lack them">Add from ${esc(srcNode)}</button>`;
+        });
+      }
+
       rows += `<tr class="section-divider">
-        <td colspan="${NODES.length + 1}">${esc(param.section)}</td></tr>`;
+        <td colspan="${NODES.length + 1}">
+          <span class="section-divider-controls">${controls}</span>
+          ${esc(secName)}
+        </td></tr>`;
     }
     rows += renderRow(file, idx, param, pi);
   });
@@ -980,8 +1415,8 @@ function renderParamTable(file, idx) {
     <thead><tr>${hdrs}</tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
-  // Phase 4.4: initialise column resize after rendering (next tick)
-  setTimeout(() => initColResize(tableId), 0);
+  // Phase 4.4 + U-16: initialise column resize and global width after rendering (next tick)
+  setTimeout(() => { initColResize(tableId); _initColWidthControls(); }, 0);
   // Note: caller (renderFilePanel) already wraps tableHtml in .table-wrap, so return unwrapped
   return selector + table;
 }
@@ -1018,7 +1453,7 @@ function renderRow(file, idx, param, pi) {
   let cells = NODES.map((n, ni) => renderCell(file, idx, param, pi, n, ni, isExpDiff)).join('');
   return `<tr class="${cls}" data-pi="${pi}" data-compound="${esa(param.compound)}"
           data-logical="${param.isLogicalDiff ? '1' : '0'}"
-          data-expDiff="${isExpDiff ? '1' : '0'}">
+          data-exp-diff="${isExpDiff ? '1' : '0'}">
     <td class="key-cell">${esc(param.key)}${logicalLbl}${expDiffLbl}${skippedLbl}${skipBtn}${revertAllBtn}</td>${cells}</tr>`;
 }
 
@@ -1220,6 +1655,7 @@ function _setPendingLogged(fileIdx, compound, node, value, param) {
     orig:      isAdd ? null : (origVal !== null && origVal !== undefined ? String(origVal) : null),
     corrected: value,
   });
+  _saveState();
 }
 
 function clearPendingLogged(fileIdx, compound, node, param) {
@@ -1229,6 +1665,7 @@ function clearPendingLogged(fileIdx, compound, node, param) {
     if (!Object.keys(pending[fileIdx][compound]).length) delete pending[fileIdx][compound];
     if (!Object.keys(pending[fileIdx]).length) delete pending[fileIdx];
   }
+  _saveState();
 }
 
 function _removeChangeLogEntry(fileIdx, compound, node) {
@@ -1312,6 +1749,8 @@ function exportPatch() {
     audit_run:   RUN_AT,
     exported_at: new Date().toISOString(),
     node_dirs:   NODE_DIRS,
+    output_dir:  OUTPUT_DIR,
+    run_dir:     AUDIT_DATA.runDir || '',
     changes:     changeLog.map(e => ({
       file:      e.file,
       file_type: FILES[e.fileIdx].type,
@@ -1531,13 +1970,82 @@ function toggleErrorsPanel() {
   if (chev) chev.innerHTML = open ? '&#9654;' : '&#9660;';
 }
 
+// ── Tab navigation ────────────────────────────────────────────────────
+function switchTab(tabName) {
+  // Update tab buttons
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tabName);
+  });
+  // Show/hide panels
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'tab-' + tabName);
+  });
+  // Lazy-render sub-tab content on first visit
+  if (tabName === 'skipped') _renderSkippedTab();
+  if (tabName === 'filtered') _renderFilteredTab();
+}
+
+function _mkSkippedTable(rows, ruleType) {
+  if (!rows.length) return '<p class="tab-empty">None.</p>';
+  let mkRow = r => {
+    let rule = ruleType === 'backup'
+      ? JSON.stringify({"no_skip_files": [r.path]}, null, 2)
+      : JSON.stringify({"include": [r.path]}, null, 2);
+    let ruleLabel = ruleType === 'backup' ? 'no_skip rule' : 'include rule';
+    return `<tr>
+      <td style="font-family:monospace">${esc(r.path)}</td>
+      <td>${esc(r.reason)}</td>
+      <td style="color:#888;font-size:11px">${esc(r.base_dir||'')}</td>
+      <td><button class="skipped-copy-btn"
+            onclick="_copyToClipboard(${JSON.stringify(rule)}, this)">&#128203; Copy ${ruleLabel}</button></td>
+    </tr>`;
+  };
+  return `<table class="skipped-table">
+    <thead><tr><th>Path</th><th>Reason</th><th>Base Dir</th><th>Action</th></tr></thead>
+    <tbody>${rows.map(mkRow).join('')}</tbody>
+  </table>`;
+}
+
+let _skippedTabRendered  = false;
+let _filteredTabRendered = false;
+
+function _renderSkippedTab() {
+  if (_skippedTabRendered) return;
+  _skippedTabRendered = true;
+  let el = document.getElementById('skipped-tab-body');
+  if (!el) return;
+  if (!SKIPPED_BACKUPS.length) {
+    el.innerHTML = '<p class="tab-empty">No backup files were auto-detected and skipped.</p>';
+    return;
+  }
+  el.innerHTML = _mkSkippedTable(SKIPPED_BACKUPS, 'backup');
+}
+
+function _renderFilteredTab() {
+  if (_filteredTabRendered) return;
+  _filteredTabRendered = true;
+  let el = document.getElementById('filtered-tab-body');
+  if (!el) return;
+  if (!FILTERED_FILES.length) {
+    el.innerHTML = '<p class="tab-empty">No files were excluded by the filter.</p>';
+    return;
+  }
+  el.innerHTML = _mkSkippedTable(FILTERED_FILES, 'filter');
+}
+
+// ── Export diffs as CSV ───────────────────────────────────────────────
 // ── Download ──────────────────────────────────────────────────────────
-function downloadConfig(fileIdx, node) {
+function downloadConfig(fileIdx, node, targetPath) {
   let file    = FILES[fileIdx];
   let content = reconstructContent(fileIdx, file, node);
   if (content === null) { alert('No content available to download.'); return; }
+  // Use just the filename for the browser download; target path shown in tooltip
   let fname = file.path.split('/').pop();
   _blobDownload(content, fname, 'text/plain');
+  // If output_dir is configured, show the target path as a confirmation
+  if (targetPath) {
+    console.log('[ConfigMergeTool] Save to:', targetPath);
+  }
 }
 
 function reconstructContent(fileIdx, file, node) {
@@ -1561,7 +2069,7 @@ function reconstructKV(file, node, changes, raw, fileSkipped) {
       if (!bySec[sec]) bySec[sec] = [];
       bySec[sec].push({key: p.key, value: v});
     });
-    let lines = ['# Generated by ConfigMergeTool Audit'];
+    let lines = [];
     Object.entries(bySec).forEach(([sec, params]) => {
       lines.push('');
       if (sec !== 'DEFAULT') lines.push(sec);
@@ -1588,7 +2096,9 @@ function reconstructKV(file, node, changes, raw, fileSkipped) {
     if (di < 0) continue;
 
     let key = stripped.substring(0, di).trim();
-    if (!key || /\s/.test(key)) continue;
+    if (!key) continue;
+    // NOTE: keys with embedded whitespace (e.g. shell-script lines like
+    // "nohup java -Dapp=value") are valid in the audit engine — do NOT skip them.
 
     let compound    = currentSection + '|' + key;
     if (fileSkipped[compound]) continue;  // exclude skipped
@@ -1611,7 +2121,7 @@ function reconstructKV(file, node, changes, raw, fileSkipped) {
     }
   });
   if (Object.keys(addBySec).length) {
-    lines.push('', '# Added by ConfigMergeTool Audit');
+    lines.push('');
     Object.entries(addBySec).forEach(([sec, params]) => {
       if (sec !== 'DEFAULT') lines.push(sec);
       params.forEach(({key, value}) => lines.push(`${key}=${value}`));
@@ -1674,6 +2184,7 @@ function skipRow(fileIdx, compound, pi) {
   refreshRow(fileIdx, pi);
   refreshSidebarBadge(fileIdx);
   _buildMismatchIndex();
+  _saveState();
 }
 
 function unskipRow(fileIdx, compound, pi) {
@@ -1681,6 +2192,58 @@ function unskipRow(fileIdx, compound, pi) {
   refreshRow(fileIdx, pi);
   refreshSidebarBadge(fileIdx);
   _buildMismatchIndex();
+  _saveState();
+}
+
+function skipSection(fileIdx, sectionName) {
+  let file = FILES[fileIdx];
+  (file.params || []).forEach((p, pi) => {
+    if (p.section === sectionName && !isSkipped(fileIdx, p.compound)) {
+      skipParam(fileIdx, p.compound, pi);
+    }
+  });
+}
+
+function unskipSection(fileIdx, sectionName) {
+  let file = FILES[fileIdx];
+  (file.params || []).forEach((p, pi) => {
+    if (p.section === sectionName && isSkipped(fileIdx, p.compound)) {
+      unskipRow(fileIdx, p.compound, pi);
+    }
+  });
+}
+
+function skipParam(fileIdx, compound, pi) {
+  if (!skipped[fileIdx]) skipped[fileIdx] = {};
+  skipped[fileIdx][compound] = true;
+  refreshRow(fileIdx, pi);
+  refreshSidebarBadge(fileIdx);
+  _buildMismatchIndex();
+  _saveState();
+}
+
+function addSectionFromNode(fileIdx, sectionName, sourceNode) {
+  let file = FILES[fileIdx];
+  (file.params || []).forEach((p, pi) => {
+    if (p.section !== sectionName) return;
+    let sourceVal = getPending(fileIdx, p.compound, sourceNode);
+    if (sourceVal === undefined) sourceVal = (p.values || {})[sourceNode];
+    if (sourceVal === null || sourceVal === undefined) return;
+    NODES.forEach(targetNode => {
+      if (targetNode === sourceNode) return;
+      if (!file.presentIn.includes(targetNode)) return;
+      let curVal = getPending(fileIdx, p.compound, targetNode);
+      if (curVal === undefined) curVal = (p.values || {})[targetNode];
+      // Only set for nodes that lack the param (null/undefined)
+      if (curVal === null || curVal === undefined) {
+        _setPendingLogged(fileIdx, p.compound, targetNode, String(sourceVal), p);
+      }
+    });
+    refreshRow(fileIdx, pi);
+  });
+  refreshDlBtns(fileIdx);
+  refreshSidebarBadge(fileIdx);
+  updateChangeCounter();
 }
 
 // ── PHASE 4.3: Mismatch navigation ───────────────────────────────────
@@ -1737,6 +2300,52 @@ function _jumpToMismatch(entry) {
     row.classList.add('mm-nav-pulse');
     setTimeout(() => row.classList.remove('mm-nav-pulse'), 900);
   }, fileIdx !== currentFileIdx ? 150 : 0);
+}
+
+// ── U-16: Global column width & value wrap ────────────────────────────
+function adjustColWidth(delta) {
+  _colWidth = Math.max(80, Math.min(1200, (_colWidth || _nodeColWidth()) + delta));
+  _applyColWidthToTable();
+  let el = document.getElementById('col-width-disp');
+  if (el) el.textContent = _colWidth;
+  try { localStorage.setItem('cm_col_width', _colWidth); } catch(e) {}
+}
+
+function _applyColWidthToTable() {
+  // Apply to every val-th in the currently visible table
+  document.querySelectorAll('.param-table th.val-th').forEach(th => {
+    th.style.width = _colWidth + 'px';
+    th.style.minWidth = _colWidth + 'px';
+  });
+}
+
+function _initColWidthControls() {
+  // Sync the display label and wrap input with current state after renderFilePanel
+  let disp = document.getElementById('col-width-disp');
+  if (disp) disp.textContent = _colWidth || _nodeColWidth();
+  let inp = document.getElementById('wrap-chars-inp');
+  if (inp) inp.value = _valWrap > 0 ? _valWrap : '';
+  _applyColWidthToTable();
+}
+
+function _applyWrapCss(chars) {
+  if (chars > 0) {
+    document.documentElement.style.setProperty('--val-wrap', chars + 'ch');
+  } else {
+    document.documentElement.style.removeProperty('--val-wrap');
+  }
+}
+
+function applyWrap(chars) {
+  _valWrap = (isNaN(chars) || chars <= 0) ? 0 : chars;
+  _applyWrapCss(_valWrap);
+  let inp = document.getElementById('wrap-chars-inp');
+  if (inp) inp.value = _valWrap > 0 ? _valWrap : '';
+  try { localStorage.setItem('cm_val_wrap', _valWrap); } catch(e) {}
+}
+
+function clearWrap() {
+  applyWrap(0);
 }
 
 // ── PHASE 4.4: Resizable columns ─────────────────────────────────────
@@ -1815,11 +2424,15 @@ def _serialise_result(result: "AuditResult") -> dict:
             "type":            af.file_type,
             "presentIn":       af.present_in,
             "mismatchCount":   af.mismatch_count,
+            "absentCount":     af.absent_count,
             "logicalDiffCount": af.logical_diff_count,
             "params":          params_js,
             "rawContent":      af.raw_content if af.file_type not in ("binary", "error") else {},
             "binary":          binary_js,
             "warnings":        af.warnings,
+            "contentSkipped":  af.content_skipped,
+            "paramCount":      af.param_count,
+            "fileSizes":       af.file_sizes,
         })
 
     # Skipped-files and error data for the Skipped Files / Report Errors panels
@@ -1839,6 +2452,8 @@ def _serialise_result(result: "AuditResult") -> dict:
     return {
         "nodes":          result.nodes,
         "nodeDirs":       result.node_dirs,
+        "outputDir":      result.output_dir,
+        "runDir":         result.run_dir,
         "runAt":          result.run_timestamp,
         "files":          files_js,
         "skippedBackups": skipped_js,
@@ -1876,11 +2491,14 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
     if pagination:
         data["pagination"] = pagination
 
-    # BUG-A: Raw file content may contain </script> (any case) which would
-    # terminate the embedded script block prematurely.  Use a case-insensitive
-    # regex so </SCRIPT>, </Script> etc. are all escaped to <\/...>.
+    # BUG-A: Raw file content may contain </script> or <script> (any case)
+    # inside the JSON blob.  Closing tags must be escaped to prevent premature
+    # script-block termination; opening tags must be escaped to keep the HTML
+    # sanity checker (and browsers) from treating them as real tag openers.
+    # \u003c is a JSON-safe unicode escape that JS evaluates back to '<'.
     data_js = json.dumps(data, ensure_ascii=False, indent=2)
     data_js = re.sub(r'</(script)', r'<\/\1', data_js, flags=re.IGNORECASE)
+    data_js = re.sub(r'<(script\b)', r'\\u003c\1', data_js, flags=re.IGNORECASE)
 
     ts_display = (
         result.run_timestamp[:4]   + "-" +
@@ -1897,8 +2515,7 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
     total_mm     = result.total_mismatches
     binary_diff  = sum(1 for f in result.files
                        if f.file_type == "binary" and f.mismatch_count > 0)
-    files_absent = sum(1 for f in result.files
-                       if len(f.present_in) < len(result.nodes))
+    files_absent = sum(1 for f in result.files if f.absent_count > 0)
     render_errors_count = len(result.render_errors or [])
 
     # Warning / error count for summary
@@ -1924,28 +2541,48 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
     if pagination:
         cur   = pagination["current"]
         total = pagination["total"]
-        links = " &nbsp;|&nbsp; ".join(
-            f'<a href="{p["url"]}" class="part-nav-link{"active" if p["url"] == "#" else ""}">'
-            f'{p["label"]}</a>'
-            for p in pagination["parts"]
-        )
+        _nav_link_items = []
+        for p in pagination["parts"]:
+            _is_active = p["url"] == "#"
+            _pdiffs  = p.get("diffs", 0)
+            _pabsent = p.get("absent", 0)
+            if _pdiffs > 0 and _pabsent > 0:
+                _badge = f'<span style="color:#bf360c;font-size:10px;font-weight:700">&#9888;{_pdiffs}d+{_pabsent}a</span>'
+            elif _pdiffs > 0:
+                _badge = f'<span style="color:#c62828;font-size:10px;font-weight:700">&#9888;{_pdiffs}&nbsp;diff{"s" if _pdiffs!=1 else ""}</span>'
+            elif _pabsent > 0:
+                _badge = f'<span style="color:#e65100;font-size:10px;font-weight:700">&#9888;&nbsp;absent</span>'
+            else:
+                _badge = '<span style="color:#388e3c;font-size:10px">&#10003;&nbsp;OK</span>'
+            _nav_link_items.append(
+                f'<a href="{p["url"]}" class="part-nav-link{"active" if _is_active else ""}">'
+                f'{p["label"]}</a>&nbsp;{_badge}'
+            )
+        links = " &nbsp;|&nbsp; ".join(_nav_link_items)
         part_nav_html = (
             f'<div class="part-nav-bar">'
+            f'<a href="audit_report.html" class="part-nav-link" '
+            f'   style="background:#0d47a1;padding:2px 10px;border-radius:3px;'
+            f'          color:#fff;text-decoration:none;margin-right:8px">'
+            f'&#8592; Main Index</a>'
             f'<span class="part-nav-label">Part {cur} of {total}:</span> {links}'
             f'</div>'
         )
         if files_js is not None:
-            part_files  = len(files_js)
-            part_diffs  = sum(1 for f in files_js if f.get("mismatchCount", 0) > 0)
-            part_mm     = sum(f.get("mismatchCount", 0) for f in files_js)
+            part_files   = len(files_js)
+            part_diffs   = sum(1 for f in files_js if f.get("mismatchCount", 0) > 0)
+            part_absent  = sum(1 for f in files_js if (f.get("absentCount") or 0) > 0)
+            part_mm      = sum(f.get("mismatchCount", 0) for f in files_js)
+            _part_absent_note = f' &nbsp;|&nbsp; <strong style="color:#e65100">{part_absent}</strong> absent' if part_absent else ''
             part_stats_html = (
                 f'<div class="summary-sub">'
                 f'<span><span class="lbl">This part:</span>'
                 f' {part_files} files &nbsp;|&nbsp;'
-                f' <strong style="color:#c62828">{part_diffs}</strong> with diffs &nbsp;|&nbsp;'
+                f' <strong style="color:#c62828">{part_diffs}</strong> with diffs'
+                f'{_part_absent_note} &nbsp;|&nbsp;'
                 f' {part_mm} mismatches</span>'
                 f'<span style="margin-left:auto;color:#bbb">Full run: {total_files} files, '
-                f'{files_differ} with diffs, {total_mm} mismatches</span>'
+                f'{files_differ} with diffs, {files_absent} absent, {total_mm} mismatches</span>'
                 f'</div>'
             )
 
@@ -1975,9 +2612,13 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
     </div>
   </div>
   <div class="header-actions">
+    <span id="save-status-msg" style="display:none;font-size:11px;color:#a5d6a7;
+          padding:4px 10px;background:#1b5e20;border-radius:4px;white-space:nowrap"></span>
+    <a class="hdr-btn" href="audit_diffs.xlsx" download title="Download formatted XLSX report of files with differences">&#8659; Export Diffs XLSX</a>
     <button class="hdr-btn" onclick="openChangeLog()">
       &#9998; Change Log <span id="change-count" class="change-counter">0</span>
     </button>
+    <button class="hdr-btn accent" onclick="saveAllChanges()" title="Save all changed configs to output directory">&#128190; Save All</button>
     <button class="hdr-btn accent" onclick="exportPatch()">&#8659; Export Patch</button>
     <button class="hdr-btn" onclick="exportChangeLogText()">&#8659; Export Log</button>
   </div>
@@ -1996,6 +2637,21 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
 </div>
 {part_stats_html}
 
+<!-- Tab navigation -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="files" onclick="switchTab('files')">
+    &#128196; Config Files
+  </button>
+  <button class="tab-btn" data-tab="skipped" onclick="switchTab('skipped')">
+    &#9888; Skipped Backups <span id="tab-count-skipped" class="tab-count">0</span>
+  </button>
+  <button class="tab-btn" data-tab="filtered" onclick="switchTab('filtered')">
+    &#128683; Filtered Files <span id="tab-count-filtered" class="tab-count">0</span>
+  </button>
+</div>
+
+<!-- Tab: Config Files (default) -->
+<div id="tab-files" class="tab-panel active">
 <div class="layout">
   <div class="sidebar">
     <div class="sidebar-title">
@@ -2006,7 +2662,21 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
       </button>
     </div>
     <div class="sidebar-search">
-      <input type="text" placeholder="Search files..." oninput="filterFiles(this.value)">
+      <div style="position:relative">
+        <input type="text" id="sidebar-search-input" placeholder="Search files\u2026 (Ctrl+K)"
+               oninput="filterFiles(this.value)"
+               onkeydown="if(event.key==='Enter'){{event.preventDefault();_searchFirstVisible();}}
+                          else if(event.key==='Escape'){{clearFileSearch();}}">
+        <button onclick="clearFileSearch()" title="Clear search"
+                style="position:absolute;right:4px;top:50%;transform:translateY(-50%);
+                       background:none;border:none;cursor:pointer;color:#aaa;font-size:14px;
+                       line-height:1;padding:0 2px">&#10005;</button>
+      </div>
+      <div style="margin-top:3px;min-height:14px">
+        <span id="search-match-badge"
+              style="display:none;font-size:10px;color:#fff;border-radius:8px;
+                     padding:1px 7px;font-weight:600"></span>
+      </div>
     </div>
     <!-- Diff quick-list at top of sidebar -->
     <div class="diff-quicklist" id="diff-quicklist">
@@ -2019,8 +2689,8 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
     <div class="sidebar-files" id="sidebar-tree"></div>
   </div>
   <div class="main" id="main-panel">
-    <!-- Skipped files panel -->
-    <div class="skipped-panel" id="skipped-panel">
+    <!-- Skipped files panel (legacy inline — kept for backward compat; primary view is now the tab) -->
+    <div class="skipped-panel" id="skipped-panel" style="display:none">
       <div class="skipped-panel-hdr" onclick="toggleSkippedPanel()">
         <span id="skipped-chev">&#9654;</span>
         &#8680; Skipped Files &nbsp;<span class="skipped-count" style="font-weight:400;color:#888"></span>
@@ -2042,6 +2712,41 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
     </div>
     <div class="empty-panel" id="empty-panel">Select a file from the sidebar to begin.</div>
   </div>
+</div><!-- end .layout -->
+</div><!-- end #tab-files -->
+
+<!-- Tab: Skipped Backups -->
+<div id="tab-skipped" class="tab-panel">
+  <div class="tab-fullpage">
+    <div class="tab-fullpage-hdr">
+      <button class="tab-back-btn" onclick="switchTab('files')">&#8592; Back to Config Files</button>
+      <span class="tab-fullpage-title">&#9888; Skipped Backup Files</span>
+    </div>
+    <p style="font-size:12px;color:#666;margin-bottom:12px">
+      Files below were auto-detected as backups and skipped during comparison.
+      Click <strong>Copy no_skip rule</strong> to generate a configuration entry
+      that will force inclusion in future runs.
+    </p>
+    <div class="tab-section-hdr">Backup files detected</div>
+    <div id="skipped-tab-body"></div>
+  </div>
+</div>
+
+<!-- Tab: Filtered Files -->
+<div id="tab-filtered" class="tab-panel">
+  <div class="tab-fullpage">
+    <div class="tab-fullpage-hdr">
+      <button class="tab-back-btn" onclick="switchTab('files')">&#8592; Back to Config Files</button>
+      <span class="tab-fullpage-title">&#128683; Files Excluded by Filter</span>
+    </div>
+    <p style="font-size:12px;color:#666;margin-bottom:12px">
+      Files below matched an exclusion rule in the filter file and were not compared.
+      Click <strong>Copy include rule</strong> to generate a configuration entry
+      that will force inclusion in future runs.
+    </p>
+    <div class="tab-section-hdr">Filter-excluded files</div>
+    <div id="filtered-tab-body"></div>
+  </div>
 </div>
 
 <!-- Change Log Modal -->
@@ -2059,6 +2764,42 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
       <button class="btn-secondary" onclick="closeChangeLog()">Close</button>
       <button class="btn-primary"   onclick="exportChangeLogText()">&#8659; Export Log (.txt)</button>
       <button class="btn-primary"   onclick="exportPatch()">&#8659; Export Patch (.json)</button>
+    </div>
+  </div>
+</div>
+
+<!-- Nav Guard Modal -->
+<div class="modal-overlay" id="navguard-modal">
+  <div class="modal modal-sm">
+    <div class="modal-hdr">
+      <h2>&#9888; Unsaved Changes</h2>
+    </div>
+    <div class="modal-body">
+      <p id="navguard-msg"></p>
+      <p id="navguard-sub" style="font-size:11px;color:#666"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="navGuardCancel()">Cancel</button>
+      <button class="btn-secondary" onclick="navGuardContinue()">Continue Without Saving</button>
+      <button id="navguard-save-btn" class="btn-default" onclick="navGuardSaveAndContinue()">Save &amp; Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Output Dir Prompt Modal -->
+<div class="modal-overlay" id="od-modal" onkeydown="if(event.key==='Enter')outputDirConfirm()">
+  <div class="modal modal-sm">
+    <div class="modal-hdr">
+      <h2>&#128190; Set Output Directory</h2>
+    </div>
+    <div class="modal-body">
+      <p>No output directory is configured. Enter the local path where corrected config files should be saved.</p>
+      <p style="font-size:11px;color:#666">Files will be written as: <code>&lt;output_dir&gt;/&lt;Node&gt;/&lt;rel/path&gt;</code></p>
+      <input type="text" id="od-input" placeholder="e.g. /home/user/corrections" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="outputDirCancel()">Cancel</button>
+      <button class="btn-default" onclick="outputDirConfirm()">Confirm &amp; Save</button>
     </div>
   </div>
 </div>
@@ -2145,17 +2886,29 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
         result.run_timestamp[13:15]
     )
 
-    total_files  = len(result.files)
-    files_differ = sum(1 for f in result.files if f.mismatch_count > 0)
-    total_mm     = result.total_mismatches
-    files_absent = sum(1 for f in result.files if len(f.present_in) < len(result.nodes))
+    total_files   = len(result.files)
+    files_differ  = sum(1 for f in result.files if f.mismatch_count > 0)
+    files_absent  = sum(1 for f in result.files if f.absent_count > 0)
+    files_issues  = sum(1 for f in result.files if f.mismatch_count > 0 or f.absent_count > 0)
+    total_mm      = result.total_mismatches
     node_list    = ", ".join(result.nodes)
     num_parts    = len(parts_meta)
 
-    # Part links
-    part_links = " &nbsp;|&nbsp; ".join(
-        f'<a href="{p["url"]}">{p["label"]}</a>' for p in parts_meta
-    )
+    # Part links with diff/absent badge indicators
+    part_link_items = []
+    for p in parts_meta:
+        part_diffs  = sum(1 for f in p["files"] if f.get("mismatchCount", 0) > 0)
+        part_absent = sum(1 for f in p["files"] if (f.get("absentCount") or 0) > 0)
+        if part_diffs > 0 and part_absent > 0:
+            badge = f'<span style="color:#bf360c;font-size:10px;font-weight:700">&#9888;{part_diffs}d+{part_absent}a</span>'
+        elif part_diffs > 0:
+            badge = f'<span style="color:#c62828;font-size:10px;font-weight:700">&#9888;{part_diffs}&nbsp;diff{"s" if part_diffs!=1 else ""}</span>'
+        elif part_absent > 0:
+            badge = f'<span style="color:#e65100;font-size:10px;font-weight:700">&#9888;&nbsp;absent</span>'
+        else:
+            badge = '<span style="color:#388e3c;font-size:10px">&#10003;&nbsp;OK</span>'
+        part_link_items.append(f'<a href="{p["url"]}">{p["label"]}</a>&nbsp;{badge}')
+    part_links = " &nbsp;|&nbsp; ".join(part_link_items)
 
     # Build path→(part_url, mc, ldc, ft, present) lookup
     file_info: dict = {}
@@ -2213,10 +2966,13 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
         chev = "▼" if auto_open else "▶"
         body_display = "block" if auto_open else "none"
 
-        if diffs > 0:
+        if diffs > 0 and node["absentCount"] > 0:
+            dir_badge = (f'<span class="dir-diff-badge">{diffs} diff{"s" if diffs!=1 else ""}</span>'
+                         f'<span class="dir-warn-badge">⚠ absent</span>')
+        elif diffs > 0:
             dir_badge = f'<span class="dir-diff-badge">{diffs} diff{"s" if diffs!=1 else ""}</span>'
         elif node["absentCount"] > 0:
-            dir_badge = '<span class="dir-warn-badge">⚠ missing</span>'
+            dir_badge = '<span class="dir-warn-badge">⚠ absent</span>'
         else:
             dir_badge = '<span class="dir-ok-badge">✓</span>'
 
@@ -2226,25 +2982,35 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
             fname = fp.split("/")[-1]
             mc, ldc, ft, link = info["mc"], info["ldc"], info["ft"], info["link"]
             absent_nodes = info["absent"]
+            # Build badge: show diff badge + absent badge independently
+            badge_parts = []
             if mc > 0:
-                badge = f'<span class="idx-diff-badge">{mc} diff{"s" if mc!=1 else ""}</span>'
+                badge_parts.append(f'<span class="idx-diff-badge">{mc} diff{"s" if mc!=1 else ""}</span>')
+            if absent_nodes:
+                badge_parts.append('<span class="idx-absent-badge">⚠ absent</span>')
+            if not badge_parts:
+                if ldc > 0:
+                    badge_parts.append(f'<span class="idx-logical-badge">~{ldc} logical</span>')
+                else:
+                    badge_parts.append('<span class="idx-ok-badge">✓</span>')
+            badge = "".join(badge_parts)
+
+            if mc > 0 and absent_nodes:
+                row_cls = "idx-row idx-row-diff idx-row-absent"
+            elif mc > 0:
                 row_cls = "idx-row idx-row-diff"
             elif absent_nodes:
-                badge = '<span class="idx-absent-badge">⚠ absent</span>'
                 row_cls = "idx-row idx-row-absent"
-            elif ldc > 0:
-                badge = f'<span class="idx-logical-badge">~{ldc} logical</span>'
-                row_cls = "idx-row"
             else:
-                badge = '<span class="idx-ok-badge">✓</span>'
                 row_cls = "idx-row idx-row-ok"
 
             absent_info = ""
             if absent_nodes:
                 absent_info = f'<span class="idx-absent-nodes">absent in: {", ".join(absent_nodes)}</span>'
 
+            _has_issue = 1 if (mc > 0 or absent_nodes) else 0
             file_rows += (
-                f'<tr class="{row_cls}" data-diff="{1 if mc>0 else 0}">'
+                f'<tr class="{row_cls}" data-diff="{_has_issue}">'
                 f'<td style="padding-left:{indent_px+32}px">'
                 f'  <a href="{link}" class="idx-file-link">{fname}</a>'
                 f'  {absent_info}'
@@ -2256,8 +3022,9 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
 
         sub_html = "".join(_render_dir(sub, depth + 1) for sub in node["dirs"])
 
+        _dir_has_issue = 1 if (diffs > 0 or node["absentCount"] > 0) else 0
         return (
-            f'<tr class="idx-dir-row" data-diff="{1 if diffs>0 else 0}">'
+            f'<tr class="idx-dir-row" data-diff="{_dir_has_issue}">'
             f'<td colspan="3" style="padding:0">'
             f'  <div class="idx-dir-hdr" style="padding-left:{indent_px+8}px"'
             f'       onclick="toggleIdxDir(this)">'
@@ -2275,25 +3042,34 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
 
     tree_html = _render_dir("", 0)
 
-    # Diff-files quick-list (files with differences, sorted by mismatch count desc)
+    # Diff-files quick-list: files with content diffs OR absent from some nodes
     diff_file_list = sorted(
-        [(path, info) for path, info in file_info.items() if info["mc"] > 0],
-        key=lambda x: -x[1]["mc"],
+        [(path, info) for path, info in file_info.items()
+         if info["mc"] > 0 or info["absent"]],
+        key=lambda x: (-x[1]["mc"], bool(x[1]["absent"])),
     )
+    files_with_issues = len(diff_file_list)
     if diff_file_list:
         _ql_rows = ""
         for _dp, _di in diff_file_list:
             _part_url = _di["link"].split("#")[0]
             _part_lbl = next((m["label"] for m in parts_meta if m["url"] == _part_url), _part_url)
-            _mc       = _di["mc"]
-            _ft       = _di["ft"]
-            _absent   = ", ".join(_di["absent"]) if _di["absent"] else ""
-            _absent_td = f'<td style="color:#e65100;font-size:11px">{_absent}</td>' if _absent else "<td></td>"
+            _mc     = _di["mc"]
+            _ft     = _di["ft"]
+            _absent = ", ".join(_di["absent"]) if _di["absent"] else ""
+            # Status column: show diff badge, absent badge, or both
+            _status_parts = []
+            if _mc > 0:
+                _status_parts.append(f'<span class="idx-diff-badge">{_mc} diff{"s" if _mc!=1 else ""}</span>')
+            if _absent:
+                _status_parts.append(f'<span class="idx-absent-badge">&#9888; absent</span>')
+            _status_td  = f'<td>{"".join(_status_parts)}</td>'
+            _absent_td  = f'<td style="color:#e65100;font-size:11px">{_absent}</td>' if _absent else "<td></td>"
             _ql_rows += (
                 f'<tr>'
                 f'<td><a href="{_di["link"]}" class="idx-file-link">{_dp}</a></td>'
                 f'<td><span class="idx-type">{_ft}</span></td>'
-                f'<td><span class="idx-diff-badge">{_mc} diff{"s" if _mc!=1 else ""}</span></td>'
+                f'{_status_td}'
                 f'{_absent_td}'
                 f'<td><a href="{_di["link"]}" class="diff-ql-part-link">{_part_lbl} &rarr;</a></td>'
                 f'</tr>\n'
@@ -2301,11 +3077,11 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
         diff_ql_html = f"""<div class="diff-ql" id="diff-ql">
   <div class="diff-ql-hdr" onclick="toggleDiffQl()">
     <span class="diff-ql-chev" id="diff-ql-chev">&#9660;</span>
-    &#9888;&nbsp; {files_differ} file{"s" if files_differ!=1 else ""} with differences &mdash; click to expand / collapse
+    &#9888;&nbsp; {files_with_issues} file{"s" if files_with_issues!=1 else ""} with differences or absent nodes &mdash; click to expand / collapse
   </div>
   <div id="diff-ql-body" class="diff-ql-body">
     <table class="diff-ql-table">
-      <thead><tr><th>File</th><th>Type</th><th>Diffs</th><th>Absent in</th><th>Part</th></tr></thead>
+      <thead><tr><th>File</th><th>Type</th><th>Status</th><th>Absent in</th><th>Part</th></tr></thead>
       <tbody>{_ql_rows}</tbody>
     </table>
   </div>
@@ -2313,31 +3089,22 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
     else:
         diff_ql_html = ""
 
-    # Skipped files section
-    skipped_html = ""
-    if result.skipped_backups or result.filtered_files:
-        total_skipped = len(result.skipped_backups) + len(result.filtered_files)
-        rows = ""
-        for e in result.skipped_backups:
-            rows += f'<tr><td style="font-family:monospace">{e.get("rel_path","")}</td><td>backup</td><td style="color:#888">{e.get("base_dir","")}</td></tr>\n'
-        for e in result.filtered_files:
-            rows += f'<tr><td style="font-family:monospace">{e.get("rel_path","")}</td><td>filter</td><td style="color:#888">{e.get("base_dir","")}</td></tr>\n'
-        skipped_html = f"""
-<div class="content">
-  <details>
-    <summary style="cursor:pointer;font-weight:700;color:#555;padding:8px 0">
-      &#8680; Skipped Files ({total_skipped})
-    </summary>
-    <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px;background:#fff">
-      <thead><tr style="background:#f0f2f6">
-        <th style="padding:6px 12px;text-align:left">Path</th>
-        <th style="padding:6px 12px;text-align:left">Reason</th>
-        <th style="padding:6px 12px;text-align:left">Base Dir</th>
-      </tr></thead>
-      <tbody>{rows}</tbody>
-    </table>
-  </details>
-</div>"""
+    # Skipped files section — build rows for the tab panels
+    n_skipped  = len(result.skipped_backups)
+    n_filtered = len(result.filtered_files)
+
+    def _skipped_table(entries: list, rule_type: str) -> str:
+        if not entries:
+            return '<p style="padding:12px;color:#999;font-size:12px">None.</p>'
+        head = '<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff"><thead><tr style="background:#f0f2f6"><th style="padding:6px 12px;text-align:left">Path</th><th style="padding:6px 12px;text-align:left">Reason</th><th style="padding:6px 12px;text-align:left">Base Dir</th></tr></thead><tbody>'
+        body = ""
+        for e in entries:
+            body += f'<tr><td style="font-family:monospace;padding:5px 12px;border-bottom:1px solid #f0f2f6">{e.get("rel_path","")}</td><td style="padding:5px 12px;border-bottom:1px solid #f0f2f6;color:#666">{e.get("reason","")}</td><td style="padding:5px 12px;border-bottom:1px solid #f0f2f6;color:#888;font-size:11px">{e.get("base_dir","")}</td></tr>\n'
+        return head + body + "</tbody></table>"
+
+    skipped_tab_content  = _skipped_table(result.skipped_backups, "backup")
+    filtered_tab_content = _skipped_table(result.filtered_files, "filter")
+
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2349,9 +3116,14 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
 body{{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;color:#222}}
 .sticky-top{{position:sticky;top:0;z-index:100;background:#fff;
              box-shadow:0 2px 6px rgba(0,0,0,.08)}}
-.hdr{{background:#1e2a3a;color:#fff;padding:12px 24px}}
+.hdr{{background:#1e2a3a;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px}}
+.hdr-title{{flex:1}}
 .hdr h1{{font-size:17px;margin-bottom:3px}}
 .hdr .meta{{font-size:11px;color:#9ab}}
+.hdr-actions{{display:flex;gap:6px;flex-shrink:0}}
+.hdr-btn{{background:#2e3d52;color:#cde;border:1px solid #3d5068;border-radius:4px;
+          padding:5px 10px;font-size:11px;cursor:pointer;white-space:nowrap}}
+.hdr-btn:hover{{background:#3d5068}}
 .stats{{background:#fff;padding:10px 24px;border-bottom:1px solid #dde3ed;
         display:flex;gap:20px;flex-wrap:wrap;align-items:center}}
 .stat{{display:flex;flex-direction:column;align-items:center;min-width:60px}}
@@ -2362,6 +3134,19 @@ body{{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;
 .parts-bar{{background:#e8f0fe;padding:7px 24px;border-bottom:1px solid #c0cfe8;
             font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}}
 .parts-bar a{{color:#1565c0;margin-right:4px}}
+/* Tab bar */
+.idx-tab-bar{{display:flex;background:#fff;border-bottom:2px solid #dde3ed}}
+.idx-tab-btn{{padding:7px 18px;font-size:12px;font-weight:600;color:#666;border:none;
+              background:none;cursor:pointer;border-bottom:3px solid transparent;
+              margin-bottom:-2px;white-space:nowrap}}
+.idx-tab-btn:hover{{color:#1e2a3a;background:#f4f6f9}}
+.idx-tab-btn.active{{color:#1565c0;border-bottom-color:#1565c0;background:#fff}}
+.idx-tab-count{{background:#e0e6f0;color:#555;border-radius:9px;padding:1px 7px;
+                font-size:10px;margin-left:5px;font-weight:400}}
+.idx-tab-count.has{{background:#c62828;color:#fff}}
+.idx-tab-panel{{display:none}}
+.idx-tab-panel.active{{display:block}}
+/* Filter bar */
 .filter-bar{{padding:8px 24px;border-bottom:1px solid #dde3ed;background:#fff;
              display:flex;align-items:center;gap:12px;font-size:12px}}
 .filter-toggle{{background:none;border:1px solid #c0c8d8;border-radius:10px;
@@ -2410,13 +3195,24 @@ body{{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;
 .diff-ql-table td{{padding:5px 10px;border-bottom:1px solid #f0f2f6}}
 .diff-ql-table tr:hover td{{background:#fff8f8}}
 .diff-ql-part-link{{color:#1565c0;font-size:11px;white-space:nowrap}}
+/* Skipped-tab content */
+.skipped-content{{padding:16px 24px 40px}}
+.back-lnk{{display:inline-block;background:#f0f2f6;border:1px solid #c0c8d8;border-radius:4px;
+           padding:4px 12px;font-size:11px;cursor:pointer;color:#1e2a3a;
+           text-decoration:none;margin-bottom:14px}}
+.back-lnk:hover{{background:#dde3ed}}
 </style>
 </head>
 <body>
 <div class="sticky-top">
   <div class="hdr">
-    <h1>Config Audit Report &mdash; Index</h1>
-    <div class="meta">Generated: {ts_display} &nbsp;|&nbsp; Nodes: {node_list}</div>
+    <div class="hdr-title">
+      <h1>Config Audit Report &mdash; Index</h1>
+      <div class="meta">Generated: {ts_display} &nbsp;|&nbsp; Nodes: {node_list}</div>
+    </div>
+    <div class="hdr-actions">
+      <a class="hdr-btn" href="audit_diffs.xlsx" download title="Download formatted XLSX report of files with differences">&#8659; Export Diffs XLSX</a>
+    </div>
   </div>
   <div class="stats">
     <div class="stat"><span class="num">{total_files}</span><span class="lbl">Files</span></div>
@@ -2428,12 +3224,28 @@ body{{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;
   <div class="parts-bar">
     <strong>Jump to part:</strong> {part_links}
   </div>
-  <div class="filter-bar">
-    <button id="idx-diffs-toggle" class="filter-toggle" onclick="toggleIdxDiffsOnly()">
-      Show diffs only
+  <div class="idx-tab-bar">
+    <button class="idx-tab-btn active" data-itab="files" onclick="switchIdxTab('files')">
+      &#128196; Config Files
     </button>
-    <span style="color:#aaa;font-size:11px">Click a file to open the detail report. Click a directory header to collapse/expand.</span>
+    <button class="idx-tab-btn" data-itab="skipped" onclick="switchIdxTab('skipped')">
+      &#9888; Skipped Backups
+      <span class="idx-tab-count{' has' if n_skipped else ''}" id="itab-cnt-skipped">{n_skipped}</span>
+    </button>
+    <button class="idx-tab-btn" data-itab="filtered" onclick="switchIdxTab('filtered')">
+      &#128683; Filtered Files
+      <span class="idx-tab-count{' has' if n_filtered else ''}" id="itab-cnt-filtered">{n_filtered}</span>
+    </button>
   </div>
+</div>
+
+<!-- Tab: Config Files -->
+<div id="itab-files" class="idx-tab-panel active">
+<div class="filter-bar">
+  <button id="idx-diffs-toggle" class="filter-toggle" onclick="toggleIdxDiffsOnly()">
+    Show diffs only
+  </button>
+  <span style="color:#aaa;font-size:11px">Click a file to open the detail report. Click a directory header to collapse/expand.</span>
 </div>
 
 {diff_ql_html}
@@ -2452,9 +3264,38 @@ body{{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;
     </tbody>
   </table>
 </div>
-{skipped_html}
+</div><!-- end itab-files -->
+
+<!-- Tab: Skipped Backups -->
+<div id="itab-skipped" class="idx-tab-panel">
+  <div class="skipped-content">
+    <a class="back-lnk" onclick="switchIdxTab('files')">&#8592; Back to Config Files</a>
+    <h2 style="font-size:14px;color:#1e2a3a;margin-bottom:8px">&#9888; Skipped Backup Files ({n_skipped})</h2>
+    <p style="font-size:12px;color:#666;margin-bottom:12px">These files were auto-detected as backups and skipped.</p>
+    {skipped_tab_content}
+  </div>
+</div>
+
+<!-- Tab: Filtered Files -->
+<div id="itab-filtered" class="idx-tab-panel">
+  <div class="skipped-content">
+    <a class="back-lnk" onclick="switchIdxTab('files')">&#8592; Back to Config Files</a>
+    <h2 style="font-size:14px;color:#1e2a3a;margin-bottom:8px">&#128683; Files Excluded by Filter ({n_filtered})</h2>
+    <p style="font-size:12px;color:#666;margin-bottom:12px">These files matched an exclusion rule and were not compared.</p>
+    {filtered_tab_content}
+  </div>
+</div>
 
 <script>
+function switchIdxTab(tabName) {{
+  document.querySelectorAll('.idx-tab-btn').forEach(b => {{
+    b.classList.toggle('active', b.dataset.itab === tabName);
+  }});
+  document.querySelectorAll('.idx-tab-panel').forEach(p => {{
+    p.classList.toggle('active', p.id === 'itab-' + tabName);
+  }});
+}}
+
 function toggleDiffQl() {{
   let body = document.getElementById('diff-ql-body');
   let chev = document.getElementById('diff-ql-chev');
@@ -2552,6 +3393,381 @@ def _validate_html(html_str: str, path: str) -> bool:
     return True
 
 
+def _write_diffs_xlsx(result: "AuditResult", run_dir: str) -> str:
+    """Generate a formatted XLSX report of files with differences or absent nodes.
+
+    Sheets
+    ------
+    1. Summary      — run metadata and aggregate counts
+    2. Issues       — one row per file with diffs or absent nodes (colour-coded)
+    3. All Nodes    — per-node present/absent status for every file
+
+    Returns the path to the written .xlsx file.
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        # openpyxl not available — skip silently
+        return ""
+
+    # ── Palette ───────────────────────────────────────────────────────────
+    DARK_FILL    = PatternFill("solid", fgColor="1E2A3A")
+    RED_FILL     = PatternFill("solid", fgColor="FFEBEE")
+    ORANGE_FILL  = PatternFill("solid", fgColor="FFF3E0")
+    BOTH_FILL    = PatternFill("solid", fgColor="FFE0B2")   # diff + absent
+    OK_FILL      = PatternFill("solid", fgColor="E8F5E9")
+    SECT_FILL    = PatternFill("solid", fgColor="E3F2FD")   # section header
+    WHITE_FONT   = Font(bold=True, color="FFFFFF", name="Calibri", size=10)
+    HDR_FONT     = Font(bold=True, color="FFFFFF", name="Calibri", size=10)
+    BOLD         = Font(bold=True, name="Calibri", size=10)
+    NORMAL       = Font(name="Calibri", size=10)
+    RED_FONT     = Font(bold=True, color="C62828", name="Calibri", size=10)
+    ORANGE_FONT  = Font(bold=True, color="E65100", name="Calibri", size=10)
+    GREEN_FONT   = Font(bold=True, color="1B5E20", name="Calibri", size=10)
+    WRAP         = Alignment(wrap_text=True, vertical="top")
+    TOP          = Alignment(vertical="top")
+
+    def _thin_border():
+        s = Side(style="thin", color="CCCCCC")
+        return Border(left=s, right=s, top=s, bottom=s)
+
+    def _hdr_row(ws, row_num: int, values: list, col_widths: list | None = None) -> None:
+        for col, val in enumerate(values, 1):
+            c = ws.cell(row=row_num, column=col, value=val)
+            c.fill   = DARK_FILL
+            c.font   = HDR_FONT
+            c.border = _thin_border()
+            c.alignment = Alignment(vertical="center", horizontal="center", wrap_text=True)
+        if col_widths:
+            for col, w in enumerate(col_widths, 1):
+                ws.column_dimensions[get_column_letter(col)].width = w
+
+    def _set_cell(ws, row: int, col: int, value, font=None, fill=None, align=None) -> None:
+        c = ws.cell(row=row, column=col, value=value)
+        c.border = _thin_border()
+        if font:   c.font      = font
+        if fill:   c.fill      = fill
+        if align:  c.alignment = align
+        else:      c.alignment = TOP
+
+    nodes = result.nodes
+    ts    = result.run_timestamp
+    ts_display = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]} {ts[8:10]}:{ts[10:12]}:{ts[12:14]}"
+
+    files_total   = len(result.files)
+    files_differ  = sum(1 for f in result.files if f.mismatch_count > 0)
+    files_absent  = sum(1 for f in result.files if f.absent_count  > 0)
+    files_ok      = files_total - sum(1 for f in result.files
+                                      if f.mismatch_count > 0 or f.absent_count > 0)
+    total_mm      = result.total_mismatches
+
+    wb = Workbook()
+
+    # ── Sheet 1: Summary ─────────────────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "Summary"
+    ws1.column_dimensions["A"].width = 28
+    ws1.column_dimensions["B"].width = 60
+
+    def _kv(row, key, val, val_font=None):
+        kc = ws1.cell(row=row, column=1, value=key)
+        kc.font      = BOLD
+        kc.fill      = SECT_FILL
+        kc.border    = _thin_border()
+        kc.alignment = TOP
+        vc = ws1.cell(row=row, column=2, value=val)
+        vc.font      = val_font or NORMAL
+        vc.border    = _thin_border()
+        vc.alignment = WRAP
+
+    r = 1
+    ws1.merge_cells(f"A{r}:B{r}")
+    title_cell = ws1.cell(row=r, column=1, value="Config Audit Report — Summary")
+    title_cell.fill      = DARK_FILL
+    title_cell.font      = Font(bold=True, color="FFFFFF", name="Calibri", size=13)
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws1.row_dimensions[r].height = 24
+    r += 1
+
+    _kv(r, "Report generated",  ts_display);  r += 1
+    _kv(r, "Nodes compared",    ", ".join(nodes));  r += 1
+    _kv(r, "Node count",        len(nodes));  r += 1
+    r += 1  # blank
+
+    ws1.merge_cells(f"A{r}:B{r}")
+    sec = ws1.cell(row=r, column=1, value="File Statistics")
+    sec.fill = SECT_FILL; sec.font = BOLD; sec.border = _thin_border(); r += 1
+
+    _kv(r, "Total files compared", files_total); r += 1
+    _kv(r, "Files matched (no issues)", files_ok,
+        Font(bold=True, color="1B5E20", name="Calibri", size=10)); r += 1
+    _kv(r, "Files with content diffs", files_differ,
+        RED_FONT if files_differ else NORMAL); r += 1
+    _kv(r, "Files absent from ≥1 node", files_absent,
+        ORANGE_FONT if files_absent else NORMAL); r += 1
+    _kv(r, "Total parameter mismatches", total_mm,
+        RED_FONT if total_mm else NORMAL); r += 1
+    r += 1
+
+    if result.skipped_backups:
+        _kv(r, "Backup files skipped", len(result.skipped_backups)); r += 1
+    if result.filtered_files:
+        _kv(r, "Files excluded by filter", len(result.filtered_files)); r += 1
+
+    ws1.freeze_panes = "A2"
+
+    # ── Sheet 2: Issues ───────────────────────────────────────────────────
+    ws2 = wb.create_sheet("Issues")
+    issue_files = [f for f in result.files
+                   if f.mismatch_count > 0 or f.absent_count > 0]
+    issue_files.sort(key=lambda f: (-f.mismatch_count, -f.absent_count, f.rel_path))
+
+    hdrs2 = ["File Path", "Type", "Status", "Mismatches", "Absent From", "Present In",
+             "Mismatched Parameters"]
+    col_w2 = [55, 8, 18, 11, 30, 30, 60]
+    _hdr_row(ws2, 1, hdrs2, col_w2)
+    ws2.freeze_panes = "A2"
+
+    for row_i, af in enumerate(issue_files, 2):
+        absent_nodes  = [n for n in nodes if n not in af.present_in]
+        present_nodes = af.present_in
+
+        if af.mismatch_count > 0 and af.absent_count > 0:
+            status    = "Diff + Absent/Missing"
+            row_fill  = BOTH_FILL
+            stat_font = Font(bold=True, color="BF360C", name="Calibri", size=10)
+        elif af.mismatch_count > 0:
+            status    = "Diff"
+            row_fill  = RED_FILL
+            stat_font = RED_FONT
+        else:
+            status    = "Absent/Missing"
+            row_fill  = ORANGE_FILL
+            stat_font = ORANGE_FONT
+
+        mm_params = "; ".join(
+            p.key or p.compound
+            for p in af.params if p.has_mismatch
+        )[:500]  # cap at 500 chars to avoid huge cells
+
+        cols = [
+            (af.rel_path,                        NORMAL,    None),
+            (af.file_type.upper(),               NORMAL,    Alignment(horizontal="center", vertical="top")),
+            (status,                             stat_font, None),
+            (af.mismatch_count or "",            RED_FONT if af.mismatch_count else NORMAL,
+             Alignment(horizontal="center", vertical="top")),
+            (", ".join(absent_nodes),            ORANGE_FONT if absent_nodes else NORMAL, WRAP),
+            (", ".join(present_nodes),           NORMAL,    WRAP),
+            (mm_params,                          NORMAL,    WRAP),
+        ]
+        ws2.row_dimensions[row_i].height = max(15, 15 * (1 + mm_params.count(";") // 3))
+        for col_i, (val, fnt, aln) in enumerate(cols, 1):
+            _set_cell(ws2, row_i, col_i, val, font=fnt, fill=row_fill,
+                      align=aln or TOP)
+
+    if not issue_files:
+        ws2.cell(row=2, column=1, value="No issues found — all files matched on all nodes.").font = GREEN_FONT
+
+    # ── Sheet 3: Node Status (all files) ─────────────────────────────────
+    ws3 = wb.create_sheet("Node Status")
+    node_hdrs = ["File Path", "Type"] + nodes + ["Status"]
+    node_widths = [55, 8] + [16] * len(nodes) + [22]
+    _hdr_row(ws3, 1, node_hdrs, node_widths)
+    ws3.freeze_panes = "C2"
+
+    for row_i, af in enumerate(result.files, 2):
+        absent_nodes = [n for n in nodes if n not in af.present_in]
+        if af.mismatch_count > 0 and af.absent_count > 0:
+            row_fill = BOTH_FILL
+            status   = "Diff + Absent/Missing"
+        elif af.mismatch_count > 0:
+            row_fill = RED_FILL
+            status   = "Diff"
+        elif af.absent_count > 0:
+            row_fill = ORANGE_FILL
+            status   = "Absent/Missing"
+        else:
+            row_fill = OK_FILL
+            status   = "OK"
+
+        _set_cell(ws3, row_i, 1, af.rel_path, font=NORMAL, fill=row_fill)
+        _set_cell(ws3, row_i, 2, af.file_type.upper(),
+                  font=NORMAL, fill=row_fill,
+                  align=Alignment(horizontal="center", vertical="top"))
+        for col_i, node in enumerate(nodes, 3):
+            present = node in af.present_in
+            val  = "✓" if present else "✗ absent"
+            fnt  = GREEN_FONT if present else ORANGE_FONT
+            _set_cell(ws3, row_i, col_i, val, font=fnt, fill=row_fill,
+                      align=Alignment(horizontal="center", vertical="top"))
+        _set_cell(ws3, row_i, 3 + len(nodes), status,
+                  font=GREEN_FONT if status == "OK" else (RED_FONT if "Diff" in status else ORANGE_FONT),
+                  fill=row_fill,
+                  align=Alignment(horizontal="center", vertical="top"))
+
+    # ── Sheet 4: Parameter Diffs ─────────────────────────────────────────
+    import hashlib as _hashlib
+
+    ws4 = wb.create_sheet("Parameter Diffs")
+    YELLOW_BG   = PatternFill("solid", fgColor="FFF9C4")
+    ABSENT_FILL = PatternFill("solid", fgColor="FFF3E0")  # orange for absent node cells
+
+    param_diff_hdrs = ["File Path", "File Type", "Section", "Parameter Key"] + nodes + ["Note"]
+    param_diff_widths = [50, 8, 20, 30] + [22] * len(nodes) + [20]
+    _hdr_row(ws4, 1, param_diff_hdrs, param_diff_widths)
+    ws4.freeze_panes = "A2"
+
+    # Collect all mismatch params sorted by file path, section, key
+    mismatch_params = []
+    for af in result.files:
+        for p in af.params:
+            if p.has_mismatch:
+                mismatch_params.append((af, p))
+    mismatch_params.sort(key=lambda x: (x[0].rel_path, x[1].section or "", x[1].key or ""))
+
+    for row_i, (af, p) in enumerate(mismatch_params, 2):
+        note = "logical diff" if p.is_logical_diff else ""
+        base_cols = [
+            af.rel_path,
+            af.file_type.upper(),
+            p.section or "",
+            p.key or p.compound,
+        ]
+        for col_i, val in enumerate(base_cols, 1):
+            _set_cell(ws4, row_i, col_i, val, font=NORMAL, fill=RED_FILL)
+
+        for ni, node in enumerate(nodes):
+            col_i = 5 + ni
+            node_val = (p.values or {}).get(node)
+            if node_val is None:
+                _set_cell(ws4, row_i, col_i, "\u2014absent\u2014",
+                          font=Font(italic=True, color="E65100", name="Calibri", size=10),
+                          fill=ABSENT_FILL,
+                          align=Alignment(horizontal="center", vertical="top"))
+            else:
+                _set_cell(ws4, row_i, col_i, str(node_val), font=NORMAL, fill=RED_FILL)
+
+        note_col = 5 + len(nodes)
+        _set_cell(ws4, row_i, note_col, note, font=NORMAL, fill=RED_FILL)
+
+    if not mismatch_params:
+        ws4.cell(row=2, column=1, value="No parameter mismatches found.").font = GREEN_FONT
+
+    # ── Sheet 5: Checksum Check ───────────────────────────────────────────
+    ws5 = wb.create_sheet("Checksum Check")
+    chk_hdrs = ["File Path", "File Type", "Note"] + nodes
+    chk_widths = [50, 8, 45] + [22] * len(nodes)
+    _hdr_row(ws5, 1, chk_hdrs, chk_widths)
+    ws5.freeze_panes = "A2"
+
+    chk_row_i = 2
+    for af in result.files:
+        # Only check files with no param mismatches and no absent nodes
+        if af.mismatch_count != 0 or af.absent_count != 0:
+            continue
+        if af.file_type in ("binary", "error"):
+            continue
+        hashes: dict = {}
+        for node in nodes:
+            node_dir = (result.node_dirs or {}).get(node, "")
+            fpath = os.path.join(node_dir, af.rel_path)
+            try:
+                hashes[node] = _hashlib.sha256(open(fpath, "rb").read()).hexdigest()
+            except OSError:
+                hashes[node] = None
+        # Only include if hashes differ
+        unique_hashes = {h for h in hashes.values() if h is not None}
+        if len(unique_hashes) <= 1:
+            continue
+        note = "Raw checksums differ \u2014 possible encoding/line-ending difference"
+        _set_cell(ws5, chk_row_i, 1, af.rel_path, font=NORMAL, fill=YELLOW_BG)
+        _set_cell(ws5, chk_row_i, 2, af.file_type.upper(), font=NORMAL, fill=YELLOW_BG,
+                  align=Alignment(horizontal="center", vertical="top"))
+        _set_cell(ws5, chk_row_i, 3, note, font=NORMAL, fill=YELLOW_BG)
+        for ni, node in enumerate(nodes):
+            col_i = 4 + ni
+            h = hashes.get(node)
+            _set_cell(ws5, chk_row_i, col_i, h or "N/A", font=NORMAL, fill=YELLOW_BG)
+        chk_row_i += 1
+
+    if chk_row_i == 2:
+        ws5.cell(row=2, column=1, value="No raw checksum differences found for matched files.").font = GREEN_FONT
+
+    # ── Sheet 6: Absent Files ─────────────────────────────────────────────
+    ws6 = wb.create_sheet("Absent Files")
+    absent_hdrs = ["File Path", "File Type", "Present In", "Absent From", "Mismatch Count"]
+    absent_widths = [55, 8, 30, 30, 14]
+    _hdr_row(ws6, 1, absent_hdrs, absent_widths)
+    ws6.freeze_panes = "A2"
+
+    absent_files = sorted(
+        [af for af in result.files if af.absent_count > 0],
+        key=lambda f: f.rel_path
+    )
+    for row_i, af in enumerate(absent_files, 2):
+        absent_nodes = [n for n in nodes if n not in af.present_in]
+        if af.mismatch_count > 0 and af.absent_count > 0:
+            row_fill = BOTH_FILL
+        else:
+            row_fill = ORANGE_FILL
+        _set_cell(ws6, row_i, 1, af.rel_path, font=NORMAL, fill=row_fill)
+        _set_cell(ws6, row_i, 2, af.file_type.upper(), font=NORMAL, fill=row_fill,
+                  align=Alignment(horizontal="center", vertical="top"))
+        _set_cell(ws6, row_i, 3, ", ".join(af.present_in), font=NORMAL, fill=row_fill, align=WRAP)
+        _set_cell(ws6, row_i, 4, ", ".join(absent_nodes), font=ORANGE_FONT, fill=row_fill, align=WRAP)
+        _set_cell(ws6, row_i, 5, af.mismatch_count or "", font=NORMAL, fill=row_fill,
+                  align=Alignment(horizontal="center", vertical="top"))
+
+    if not absent_files:
+        ws6.cell(row=2, column=1, value="No absent files found.").font = GREEN_FONT
+
+    # ── Sheet 7: Skipped Backups ──────────────────────────────────────────
+    ws7 = wb.create_sheet("Skipped Backups")
+    skip_hdrs = ["Relative Path", "Reason", "Base Dir"]
+    skip_widths = [55, 40, 40]
+    _hdr_row(ws7, 1, skip_hdrs, skip_widths)
+    ws7.freeze_panes = "A2"
+
+    skipped_list = result.skipped_backups or []
+    if skipped_list:
+        for row_i, entry in enumerate(skipped_list, 2):
+            _set_cell(ws7, row_i, 1, entry.get("rel_path", ""), font=NORMAL)
+            _set_cell(ws7, row_i, 2, entry.get("reason", ""), font=NORMAL, align=WRAP)
+            _set_cell(ws7, row_i, 3, entry.get("base_dir", ""), font=NORMAL)
+    else:
+        ws7.cell(row=2, column=1, value="No backup files were skipped.").font = GREEN_FONT
+
+    # ── Sheet 8: Filtered Files ───────────────────────────────────────────
+    ws8 = wb.create_sheet("Filtered Files")
+    filt_hdrs = ["Relative Path", "Reason", "Base Dir"]
+    filt_widths = [55, 40, 40]
+    _hdr_row(ws8, 1, filt_hdrs, filt_widths)
+    ws8.freeze_panes = "A2"
+
+    filtered_list = result.filtered_files or []
+    if filtered_list:
+        for row_i, entry in enumerate(filtered_list, 2):
+            _set_cell(ws8, row_i, 1, entry.get("rel_path", ""), font=NORMAL)
+            _set_cell(ws8, row_i, 2, entry.get("reason", ""), font=NORMAL, align=WRAP)
+            _set_cell(ws8, row_i, 3, entry.get("base_dir", ""), font=NORMAL)
+    else:
+        ws8.cell(row=2, column=1, value="No files were excluded by filter.").font = GREEN_FONT
+
+    # ── Reorder sheets: Summary, Issues, Parameter Diffs, Checksum Check,
+    #                   Absent Files, Node Status, Skipped Backups, Filtered Files
+    desired_order = ["Summary", "Issues", "Parameter Diffs", "Checksum Check",
+                     "Absent Files", "Node Status", "Skipped Backups", "Filtered Files"]
+    for i, sheet_name in enumerate(desired_order):
+        if sheet_name in wb.sheetnames:
+            wb.move_sheet(sheet_name, offset=i - wb.sheetnames.index(sheet_name))
+
+    xlsx_path = os.path.join(run_dir, "audit_diffs.xlsx")
+    wb.save(xlsx_path)
+    return xlsx_path
+
+
 def write_audit_html(result: "AuditResult", run_dir: str) -> str:
     """Write the audit report HTML.
 
@@ -2564,6 +3780,9 @@ def write_audit_html(result: "AuditResult", run_dir: str) -> str:
     single file otherwise).
     """
     os.makedirs(run_dir, exist_ok=True)
+
+    # Generate formatted XLSX alongside the HTML report
+    _write_diffs_xlsx(result, run_dir)
 
     parts_chunks = _split_into_parts(result)
 
@@ -2584,6 +3803,15 @@ def write_audit_html(result: "AuditResult", run_dir: str) -> str:
         filename = f"audit_report_p{i:02d}.html"
         parts_meta.append({"label": f"Part {i}", "url": filename, "files": chunk})
 
+    # Pre-compute per-part diff/absent stats for part-nav badges
+    _part_stats = [
+        {
+            "diffs":  sum(1 for f in m["files"] if f.get("mismatchCount", 0) > 0),
+            "absent": sum(1 for f in m["files"] if (f.get("absentCount") or 0) > 0),
+        }
+        for m in parts_meta
+    ]
+
     part_pages: list = []
     for i, meta in enumerate(parts_meta, 1):
         pagination = {
@@ -2591,7 +3819,9 @@ def write_audit_html(result: "AuditResult", run_dir: str) -> str:
             "total":   total_parts,
             "parts":   [
                 {"label": m["label"],
-                 "url":   "#" if j + 1 == i else m["url"]}
+                 "url":   "#" if j + 1 == i else m["url"],
+                 "diffs":  _part_stats[j]["diffs"],
+                 "absent": _part_stats[j]["absent"]}
                 for j, m in enumerate(parts_meta)
             ],
         }

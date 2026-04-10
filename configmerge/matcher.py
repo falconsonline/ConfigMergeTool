@@ -188,6 +188,12 @@ class FileMatcher:
         return norm.lstrip("." + os.sep)
 
     def _resolve_matches(self) -> None:
+        # Track rel_path → FileMatch for deduplication across release dirs.
+        # When the same relative path is found in multiple release dirs, we
+        # prefer the one whose release_dir name matches the base_dir name.
+        seen_rel_paths: Dict[str, FileMatch] = {}
+        base_dir_name = os.path.basename(os.path.normpath(self.base_dir))
+
         for d in self.config.release_dirs:
             d = os.path.normpath(d)
             d_real = os.path.realpath(d)
@@ -233,24 +239,77 @@ class FileMatcher:
                         if os.path.exists(candidate):
                             base_paths.append(rel_path)
 
-                    # 3. Filename-only fallback
+                    # 3. Filename-only fallback.
+                    # When multiple base candidates share the same filename, prefer
+                    # the one whose directory matches the release file's directory.
+                    # If no directory match, use the first candidate and warn.
                     if not base_paths:
                         candidates_by_name = self._base_name_index.get(f, [])
                         if len(candidates_by_name) == 1:
                             base_paths.append(candidates_by_name[0])
                         elif len(candidates_by_name) > 1:
-                            log_structured(self.logger, "WARNING", "FILE", "AMBIGUOUS_MATCH",
-                                           rel_path, f, f"candidates={candidates_by_name}")
-                            ambiguous = True
+                            rel_dir = os.path.dirname(rel_path)
+                            best = next(
+                                (c for c in candidates_by_name
+                                 if os.path.dirname(c) == rel_dir),
+                                None,
+                            )
+                            if best:
+                                base_paths.append(best)
+                                log_structured(
+                                    self.logger, "WARNING", "FILE", "MULTI_BASE_RESOLVED",
+                                    rel_path, f,
+                                    f"multiple base candidates; selected '{best}' "
+                                    f"(same directory as release file)",
+                                )
+                            else:
+                                base_paths.append(candidates_by_name[0])
+                                log_structured(
+                                    self.logger, "WARNING", "FILE", "MULTI_BASE_FIRST",
+                                    rel_path, f,
+                                    f"multiple base candidates {candidates_by_name}; "
+                                    f"using first: '{candidates_by_name[0]}'",
+                                )
 
                     if not base_paths and not ambiguous:
                         log_structured(self.logger, "WARNING", "FILE", "NO_MATCH",
                                        rel_path, f, "no matching file in base")
 
-                    self.matches.append(FileMatch(
+                    new_match = FileMatch(
                         rel_path=rel_path,
                         base_paths=base_paths,
                         mapped=mapped,
                         ambiguous=ambiguous,
                         release_dir=d,
-                    ))
+                    )
+
+                    # ── Deduplicate across release dirs ──────────────────────
+                    # If the same rel_path appears in multiple release dirs, prefer
+                    # the release dir whose name matches the base dir name.
+                    if rel_path not in seen_rel_paths:
+                        seen_rel_paths[rel_path] = new_match
+                        self.matches.append(new_match)
+                    else:
+                        existing = seen_rel_paths[rel_path]
+                        existing_dir_name = os.path.basename(existing.release_dir)
+                        new_dir_name = os.path.basename(d)
+                        # Switch to new match only if it matches base dir better
+                        if (base_dir_name and new_dir_name == base_dir_name
+                                and existing_dir_name != base_dir_name):
+                            self.matches.remove(existing)
+                            self.matches.append(new_match)
+                            seen_rel_paths[rel_path] = new_match
+                            log_structured(
+                                self.logger, "WARNING", "FILE", "MULTI_RELEASE_DIR_RESOLVED",
+                                rel_path, f,
+                                f"found in multiple release dirs; selected '{d}' "
+                                f"(matches base dir name '{base_dir_name}')",
+                            )
+                        else:
+                            log_structured(
+                                self.logger, "WARNING", "FILE", "MULTI_RELEASE_DIR_FIRST",
+                                rel_path, f,
+                                f"found in multiple release dirs "
+                                f"({existing.release_dir!r} and {d!r}); "
+                                f"using first: '{existing.release_dir}'",
+                            )

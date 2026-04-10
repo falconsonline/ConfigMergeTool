@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from . import register, BaseProcessor
 from ..models import MergeConfig, ReportEntry, EntryType
 from ..logger import log_structured
-from ..utils import ensure_dir, get_tag, open_text
+from ..utils import ensure_dir, get_tag, open_text, detect_api_version_upgrade, is_java_fqcn
 
 
 # ---------------------------------------------------------------------------
@@ -301,16 +301,42 @@ def _replace_elements(
             ))
             continue
 
-        # Normal replace
-        start, end = rel_match.span()
-        rel_text = rel_text[:start] + base_block + rel_text[end:]
-        report.append(ReportEntry(
-            type=EntryType.XML_BASE_TO_RELEASE_REPLACED,
-            file=rel_file,
-            element=element_id,
-            old=" ".join(old_block.strip().split()),
-            new=" ".join(base_block.strip().split()),
-        ))
+        # Normal replace — check for API version upgrade or Java FQCN
+        old_compact = " ".join(old_block.strip().split())
+        new_compact  = " ".join(base_block.strip().split())
+        if detect_api_version_upgrade(new_compact, old_compact):
+            # Release has a newer version: keep release value (old_block) in output
+            start, end = rel_match.span()
+            # Leave rel_text unchanged (keep release block)
+            report.append(ReportEntry(
+                type=EntryType.API_VERSION_UPGRADED,
+                file=rel_file,
+                element=element_id,
+                old=new_compact,   # old = base value
+                new=old_compact,   # new = release (newer) value used
+            ))
+        elif is_java_fqcn(new_compact) and is_java_fqcn(old_compact):
+            # Both base and release values are Java FQCNs — class names are
+            # deployment-specific; keep the release value and flag for review.
+            start, end = rel_match.span()
+            # Leave rel_text unchanged (keep release block)
+            report.append(ReportEntry(
+                type=EntryType.JAVA_CLASS_NAME_FROM_RELEASE,
+                file=rel_file,
+                element=element_id,
+                old=new_compact,   # old = base value
+                new=old_compact,   # new = release value used
+            ))
+        else:
+            start, end = rel_match.span()
+            rel_text = rel_text[:start] + base_block + rel_text[end:]
+            report.append(ReportEntry(
+                type=EntryType.XML_BASE_TO_RELEASE_REPLACED,
+                file=rel_file,
+                element=element_id,
+                old=old_compact,
+                new=new_compact,
+            ))
 
     return rel_text, report
 

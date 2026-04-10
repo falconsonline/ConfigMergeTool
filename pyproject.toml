@@ -1,10 +1,10 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "configmergetool"
-version = "2.0.0"
+version = "2.0.1"
 description = "Config merge and multi-node audit tool for any production environments"
 readme = "README.md"
 requires-python = ">=3.9"

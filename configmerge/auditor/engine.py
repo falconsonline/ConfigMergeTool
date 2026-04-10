@@ -105,9 +105,15 @@ class AuditFile:
     params: List[AuditParam]
     binary: Dict[str, BinaryInfo]      # populated only when file_type == "binary"
     raw_content: Dict[str, str]        # node_name -> raw text (for KV reconstruction + display)
-    mismatch_count: int                # actionable mismatches (excludes logical diffs)
+    mismatch_count: int                # content mismatches among present nodes (excludes absence & logical diffs)
     warnings: List[str] = field(default_factory=list)
     logical_diff_count: int = 0        # parameters expected to differ (node-specific)
+    absent_count: int = 0              # number of nodes where the file is entirely absent
+    # Large-file optimisation: when a file is > _MAX_RAW_BYTES on any node AND has
+    # no mismatches AND no absent nodes, raw_content and params are cleared.
+    content_skipped: bool = False      # True when diff display was skipped
+    param_count: int = 0               # original param count (before clearing on skip)
+    file_sizes: "Dict[str, int]" = field(default_factory=dict)  # node -> bytes
 
 
 @dataclass
@@ -120,6 +126,7 @@ class AuditResult:
     total_logical_diffs: int            # across all files
     run_timestamp: str          # "YYYYMMDD_HHMMSS"
     run_dir: str                # path to the audit_YYYYMMDD_HHMMSS/ output directory
+    output_dir: str = ""        # patch output base dir (from audit config {"output_dir": "..."})
     skipped_backups: List[dict] = field(default_factory=list)
     filtered_files: List[dict] = field(default_factory=list)
     render_errors: List[dict] = field(default_factory=list)
@@ -140,9 +147,11 @@ class AuditEngine:
                  logical_diff_patterns: Optional[List[str]] = None,
                  quiet: bool = False,
                  no_skip_files: Optional[List[str]] = None,
-                 filter_file: Optional[str] = None):
+                 filter_file: Optional[str] = None,
+                 output_dir: str = ""):
         self.nodes      = nodes
         self.report_dir = report_dir
+        self._output_dir = output_dir
         self._quiet     = quiet
         ts              = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_dir    = os.path.join(report_dir, f"audit_{ts}")
@@ -313,6 +322,7 @@ class AuditEngine:
             total_logical_diffs = total_logical_diffs,
             run_timestamp       = self._ts,
             run_dir             = self.run_dir,
+            output_dir          = self._output_dir,
             skipped_backups     = list(self._skipped_backups),
             filtered_files      = list(self._filtered_files),
             render_errors       = render_errors,
@@ -576,8 +586,9 @@ class AuditEngine:
 
             with open(str(history_path), "w", encoding="utf-8", newline="\n") as hf:
                 json.dump(history, hf, indent=2)
-        except Exception:
-            pass  # Feedback history is advisory — never abort the run
+        except Exception as _fh_exc:
+            # Feedback history is advisory — never abort the run, but do warn
+            self._log("WARN ", f"Could not write feedback history: {_fh_exc}")
 
     # ------------------------------------------------------------------
     # Backup-file detection helpers
@@ -607,10 +618,21 @@ class AuditEngine:
     def _compare_file(self, rel_path: str, present_in: List[str],
                       abs_paths: Dict[str, str],
                       all_nodes: List[str]) -> AuditFile:
-        ext         = os.path.splitext(rel_path)[1].lower()
-        sample_path = abs_paths[present_in[0]] if present_in else None
+        ext = os.path.splitext(rel_path)[1].lower()
 
-        if sample_path and self._is_binary(sample_path):
+        # Binary routing: check ALL present nodes, not just the first.
+        # A file is treated as binary if:
+        #   (a) its extension is in the hard-coded BINARY_EXCLUDES set, OR
+        #   (b) ANY node's copy of the file contains a null byte in the first
+        #       8 KB (null-byte heuristic).
+        # Checking all nodes catches cases where one node has an old text version
+        # and another node has already been replaced with a binary, and avoids
+        # misrouting noext binary executables that happen to be absent on the
+        # first node.
+        from .file_filter import BINARY_EXCLUDES as _BIN_EX
+        if ext in _BIN_EX or any(
+            self._is_binary(abs_paths[n]) for n in present_in if n in abs_paths
+        ):
             return self._compare_binary(rel_path, present_in, abs_paths, all_nodes)
         elif ext in self.SSTP_EXTS:
             return self._compare_sstp(rel_path, present_in, abs_paths, all_nodes)
@@ -663,9 +685,10 @@ class AuditEngine:
             else:
                 binary[node] = BinaryInfo(md5="", size_bytes=0, present=False)
 
-        present_hashes = {binary[n].md5 for n in present_in}
-        has_diff       = len(present_hashes) > 1 or len(present_in) < len(all_nodes)
-        mismatch       = 1 if has_diff else 0
+        present_hashes    = {binary[n].md5 for n in present_in}
+        has_content_diff  = len(present_hashes) > 1
+        mismatch          = 1 if has_content_diff else 0
+        absent_count      = len(all_nodes) - len(present_in)
 
         return AuditFile(
             rel_path       = rel_path,
@@ -675,6 +698,7 @@ class AuditEngine:
             binary         = binary,
             raw_content    = {},
             mismatch_count = mismatch,
+            absent_count   = absent_count,
         )
 
     def _sha256_size(self, path: str) -> Tuple[str, int]:
@@ -689,6 +713,30 @@ class AuditEngine:
         except OSError:
             return "", 0
         return h.hexdigest(), size
+
+    @staticmethod
+    def _get_file_sizes(abs_paths: Dict[str, int]) -> Dict[str, int]:
+        """Return node → file size in bytes for each path in abs_paths."""
+        sizes: Dict[str, int] = {}
+        for node, path in abs_paths.items():
+            try:
+                sizes[node] = os.path.getsize(path)
+            except OSError:
+                sizes[node] = 0
+        return sizes
+
+    @staticmethod
+    def _should_skip_content(file_sizes: Dict[str, int], mismatch_count: int,
+                              absent_count: int = 0) -> bool:
+        """Return True when large identical files should have their diff display skipped.
+
+        Criteria: no content mismatches AND no absent nodes AND at least one node's
+        file exceeds _MAX_RAW_BYTES.  Files with absent nodes are never skipped so
+        the user can still see which nodes are missing.
+        """
+        if mismatch_count != 0 or absent_count != 0:
+            return False
+        return any(sz > _MAX_RAW_BYTES for sz in file_sizes.values())
 
     # ------------------------------------------------------------------
     # KV comparison
@@ -749,9 +797,9 @@ class AuditEngine:
                 values[node]   = b.body_norm if b else None
                 commented[node] = False
 
-            # Determine mismatch / diff category
+            # Determine mismatch / diff category (absence is tracked separately)
             present_vals = [values[n] for n in present_in if values.get(n) is not None]
-            has_mismatch = len(set(present_vals)) > 1 or len(present_in) < len(all_nodes)
+            has_mismatch = len(set(present_vals)) > 1
 
             # Categorise (use first two present nodes)
             diff_category = "MATCH"
@@ -787,8 +835,9 @@ class AuditEngine:
                 is_logical_diff = is_logical,
             ))
 
-        mismatch_count    = sum(1 for p in params if p.has_mismatch)
+        mismatch_count     = sum(1 for p in params if p.has_mismatch)
         logical_diff_count = sum(1 for p in params if p.is_logical_diff)
+        absent_count       = len(all_nodes) - len(present_in)
 
         return AuditFile(
             rel_path           = rel_path,
@@ -800,6 +849,7 @@ class AuditEngine:
             mismatch_count     = mismatch_count,
             warnings           = warnings,
             logical_diff_count = logical_diff_count,
+            absent_count       = absent_count,
         )
 
     def _compare_kv(self, rel_path: str, present_in: List[str],
@@ -881,20 +931,29 @@ class AuditEngine:
 
         logical_diff_count = self._classify_logical_diffs(params)
         mismatch_count     = sum(1 for p in params if p.has_mismatch)
-        # Files absent from some nodes must surface as a diff even when present nodes agree
-        if len(present_in) < len(all_nodes):
-            mismatch_count = max(mismatch_count, 1)
+        absent_count       = len(all_nodes) - len(present_in)
+
+        file_sizes   = self._get_file_sizes(abs_paths)
+        skip_content = self._should_skip_content(file_sizes, mismatch_count, absent_count)
+        param_count  = len(params)
+        if skip_content:
+            params      = []
+            raw_content = {}
 
         return AuditFile(
-            rel_path          = rel_path,
-            file_type         = "kv",
-            present_in        = present_in,
-            params            = params,
-            binary            = {},
-            raw_content       = raw_content,
-            mismatch_count    = mismatch_count,
-            warnings          = warnings,
+            rel_path           = rel_path,
+            file_type          = "kv",
+            present_in         = present_in,
+            params             = params,
+            binary             = {},
+            raw_content        = raw_content,
+            mismatch_count     = mismatch_count,
+            warnings           = warnings,
             logical_diff_count = logical_diff_count,
+            absent_count       = absent_count,
+            content_skipped    = skip_content,
+            param_count        = param_count,
+            file_sizes         = file_sizes,
         )
 
     # ------------------------------------------------------------------
@@ -951,20 +1010,29 @@ class AuditEngine:
 
         logical_diff_count = self._classify_logical_diffs(params)
         mismatch_count     = sum(1 for p in params if p.has_mismatch)
-        # Files absent from some nodes must surface as a diff even when present nodes agree
-        if len(present_in) < len(all_nodes):
-            mismatch_count = max(mismatch_count, 1)
+        absent_count       = len(all_nodes) - len(present_in)
+
+        file_sizes   = self._get_file_sizes(abs_paths)
+        skip_content = self._should_skip_content(file_sizes, mismatch_count, absent_count)
+        param_count  = len(params)
+        if skip_content:
+            params      = []
+            raw_content = {}
 
         return AuditFile(
-            rel_path          = rel_path,
-            file_type         = "json",
-            present_in        = present_in,
-            params            = params,
-            binary            = {},
-            raw_content       = raw_content,
-            mismatch_count    = mismatch_count,
-            warnings          = warnings,
+            rel_path           = rel_path,
+            file_type          = "json",
+            present_in         = present_in,
+            params             = params,
+            binary             = {},
+            raw_content        = raw_content,
+            mismatch_count     = mismatch_count,
+            warnings           = warnings,
             logical_diff_count = logical_diff_count,
+            absent_count       = absent_count,
+            content_skipped    = skip_content,
+            param_count        = param_count,
+            file_sizes         = file_sizes,
         )
 
     def _flatten_json(self, obj, prefix: str = "") -> Dict[str, str]:
@@ -1016,8 +1084,8 @@ class AuditEngine:
 
         present_md5s = {v for n, v in md5_vals.items()
                         if n in present_in and v is not None}
-        any_absent   = len(present_in) < len(all_nodes)
-        has_mismatch = len(present_md5s) > 1 or any_absent
+        absent_count = len(all_nodes) - len(present_in)
+        has_mismatch = len(present_md5s) > 1      # content diff among present nodes only
         mismatch     = 1 if has_mismatch else 0
 
         param = AuditParam(
@@ -1029,13 +1097,22 @@ class AuditEngine:
             has_mismatch = has_mismatch,
         )
 
+        file_sizes   = self._get_file_sizes(abs_paths)
+        skip_content = self._should_skip_content(file_sizes, mismatch, absent_count)
+        if skip_content:
+            raw_content = {}
+
         return AuditFile(
-            rel_path       = rel_path,
-            file_type      = file_type,
-            present_in     = present_in,
-            params         = [param],
-            binary         = {},
-            raw_content    = raw_content,
-            mismatch_count = mismatch,
-            warnings       = warnings,
+            rel_path        = rel_path,
+            file_type       = file_type,
+            present_in      = present_in,
+            params          = [] if skip_content else [param],
+            binary          = {},
+            raw_content     = raw_content,
+            mismatch_count  = mismatch,
+            warnings        = warnings,
+            absent_count    = absent_count,
+            content_skipped = skip_content,
+            param_count     = 1,
+            file_sizes      = file_sizes,
         )
