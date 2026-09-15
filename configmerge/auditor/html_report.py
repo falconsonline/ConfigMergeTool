@@ -244,6 +244,18 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 .sec-addfrom-btn{background:#1565c0;color:#fff;border:none;border-radius:3px;
                  padding:2px 7px;font-size:10px;cursor:pointer;text-transform:none;letter-spacing:0}
 .sec-addfrom-btn:hover{background:#0d47a1}
+/* Section check (KV): base param count and per-node match/differ/missing/extra */
+.sec-chk{display:flex;flex-wrap:wrap;gap:3px 14px;margin-top:3px;text-transform:none;
+         letter-spacing:0;font-weight:400;font-size:11px}
+.sec-chk-base{color:#1e2a3a;font-weight:600}
+.sec-chk-ok{color:#2e7d32}
+.sec-chk-bad{color:#b71c1c}
+.sec-chk-absent{color:#e65100;font-style:italic}
+/* Duplicate in section: every active value with its source line */
+.dup-val{font-family:monospace}
+.dup-line{color:#888;font-size:10px}
+.dup-tag{display:inline-block;margin-top:2px;font-size:10px;color:#fff;background:#c62828;
+         border-radius:3px;padding:0 5px}
 .param-row td{border-bottom:1px solid #eef0f4;padding:0;vertical-align:top}
 .param-row:hover td{background:#fafbfc}
 .mismatch-row td{background:#fffde7}
@@ -1371,43 +1383,36 @@ function renderParamTable(file, idx) {
       return `<th class="val-th col-node-${i} ${absent?'absent-node-hdr':''}" data-idx="${i}" style="min-width:${colW}px" title="${esc(NODE_DIRS[n]||n)}">${esc(n)}</th>`;
     }).join('');
 
-  let rows    = '';
-  let prevSec = null;
-  file.params.forEach((param, pi) => {
-    if (param.section && param.section !== 'DEFAULT' && param.section !== prevSec) {
-      prevSec = param.section;
-      let secName = param.section;
-
-      // Compute which nodes have params in this section (non-null value)
-      let nodesWithSection = NODES.filter(n =>
-        (file.params || []).some(p => p.section === secName &&
-          p.values && p.values[n] !== null && p.values[n] !== undefined)
-      );
-      let nodesMissingSection = NODES.filter(n =>
-        file.presentIn.includes(n) && !nodesWithSection.includes(n)
-      );
-
-      // Build controls
-      let controls = '';
-      // Skip/Unskip section buttons
-      controls += `<button class="sec-skip-btn" onclick="skipSection(${idx},'${esj(secName)}')" title="Skip all params in this section">&#10006; Skip section</button>`;
-      controls += `<button class="sec-skip-btn" style="background:#90a4ae" onclick="unskipSection(${idx},'${esj(secName)}')" title="Unskip all params in this section">&#8635; Unskip section</button>`;
-
-      // Add-from-node buttons for nodes that have this section
-      if (nodesMissingSection.length > 0 && nodesWithSection.length > 0) {
-        nodesWithSection.forEach(srcNode => {
-          controls += `<button class="sec-addfrom-btn" onclick="addSectionFromNode(${idx},'${esj(secName)}','${esj(srcNode)}')" title="Copy all params in this section from ${srcNode} to nodes that lack them">Add from ${esc(srcNode)}</button>`;
-        });
+  let rows = '';
+  if (file.sections && file.sections.length) {
+    // KV: one header row per section (merged file order) carrying the section check, then its rows
+    let bySection = {};
+    file.params.forEach((param, pi) => {
+      (bySection[param.section] = bySection[param.section] || []).push(pi);
+    });
+    file.sections.forEach(sec => {
+      // Section-level difference: the section is absent on a node that has the file (base included)
+      let secDiff = file.presentIn.some(n => !(sec.present || {})[n]);
+      rows += renderSectionDivider(file, idx, sec.name,
+                                   NODES.filter(n => (sec.present || {})[n]),
+                                   renderSectionCheck(file, sec), secDiff);
+      (bySection[sec.name] || []).forEach(pi => { rows += renderRow(file, idx, file.params[pi], pi); });
+    });
+  } else {
+    let prevSec = null;
+    file.params.forEach((param, pi) => {
+      if (param.section && param.section !== 'DEFAULT' && param.section !== prevSec) {
+        prevSec = param.section;
+        // Nodes that have params in this section (non-null value)
+        let nodesWithSection = NODES.filter(n =>
+          (file.params || []).some(p => p.section === param.section &&
+            p.values && p.values[n] !== null && p.values[n] !== undefined)
+        );
+        rows += renderSectionDivider(file, idx, param.section, nodesWithSection, '');
       }
-
-      rows += `<tr class="section-divider">
-        <td colspan="${NODES.length + 1}">
-          <span class="section-divider-controls">${controls}</span>
-          ${esc(secName)}
-        </td></tr>`;
-    }
-    rows += renderRow(file, idx, param, pi);
-  });
+      rows += renderRow(file, idx, param, pi);
+    });
+  }
 
   const selector = renderNodeSelector();
   const tableId  = `ptbl-${idx}`;
@@ -1419,6 +1424,57 @@ function renderParamTable(file, idx) {
   setTimeout(() => { initColResize(tableId); _initColWidthControls(); }, 0);
   // Note: caller (renderFilePanel) already wraps tableHtml in .table-wrap, so return unwrapped
   return selector + table;
+}
+
+function renderSectionDivider(file, idx, secName, nodesWithSection, checkHtml, secDiff) {
+  let nodesMissingSection = NODES.filter(n =>
+    file.presentIn.includes(n) && !nodesWithSection.includes(n)
+  );
+
+  let controls = '';
+  // Skip/Unskip section buttons
+  controls += `<button class="sec-skip-btn" onclick="skipSection(${idx},'${esj(secName)}')" title="Skip all params in this section">&#10006; Skip section</button>`;
+  controls += `<button class="sec-skip-btn" style="background:#90a4ae" onclick="unskipSection(${idx},'${esj(secName)}')" title="Unskip all params in this section">&#8635; Unskip section</button>`;
+
+  // Add-from-node buttons for nodes that have this section
+  if (nodesMissingSection.length > 0 && nodesWithSection.length > 0) {
+    nodesWithSection.forEach(srcNode => {
+      controls += `<button class="sec-addfrom-btn" onclick="addSectionFromNode(${idx},'${esj(secName)}','${esj(srcNode)}')" title="Copy all params in this section from ${srcNode} to nodes that lack them">Add from ${esc(srcNode)}</button>`;
+    });
+  }
+
+  let label = secName === 'DEFAULT' ? '(no section)' : secName;
+  return `<tr class="section-divider" data-sec-diff="${secDiff ? '1' : '0'}">
+    <td colspan="${NODES.length + 1}">
+      <span class="section-divider-controls">${controls}</span>
+      ${esc(label)}${checkHtml}
+    </td></tr>`;
+}
+
+// Section check: base node's param count, then per other node match/differ/missing/extra or absence
+function renderSectionCheck(file, sec) {
+  let parts = [];
+  let fallback = NODES[0] !== sec.base && !file.presentIn.includes(NODES[0])
+    ? ` (${esc(NODES[0])}: file absent)` : '';
+  if (sec.baseCount === null || sec.baseCount === undefined) {
+    parts.push(`<span class="sec-chk-absent">base ${esc(sec.base)}${fallback}: section absent</span>`);
+  } else {
+    parts.push(`<span class="sec-chk-base">base ${esc(sec.base)}${fallback}: ${sec.baseCount} param(s)</span>`);
+  }
+  file.presentIn.filter(n => n !== sec.base).forEach(n => {
+    if (!(sec.present || {})[n]) {
+      parts.push(`<span class="sec-chk-absent">${esc(n)}: section absent</span>`);
+      return;
+    }
+    let c = (sec.counts || {})[n];
+    if (!c) {
+      parts.push(`<span class="sec-chk-base">${esc(n)}: ${(sec.paramCounts || {})[n] || 0} param(s)</span>`);
+      return;
+    }
+    let bad = c.differ || c.missing || c.extra;
+    parts.push(`<span class="${bad ? 'sec-chk-bad' : 'sec-chk-ok'}">${esc(n)}: ${c.match} match &middot; ${c.differ} differ &middot; ${c.missing} missing${c.extra ? ` &middot; +${c.extra} extra` : ''}</span>`);
+  });
+  return `<div class="sec-chk">${parts.join('')}</div>`;
 }
 
 function renderRow(file, idx, param, pi) {
@@ -1496,6 +1552,12 @@ function renderCell(file, idx, param, pi, node, nodeIdx, isExpDiff) {
     let origStr = (origVal !== null && origVal !== undefined)
       ? esc(String(origVal)) : '<em>missing</em>';
     valDisplay = `<span class="orig-struck">${origStr}</span> <span class="new-val">${esc(String(pendVal))}</span>`;
+  } else if ((param.dupValues || {})[node]) {
+    // Duplicate in section: every active value with its source line
+    let lines = (param.lines || {})[node] || [];
+    valDisplay = param.dupValues[node].map((v, i) =>
+      `<div class="dup-val">${esc(String(v))} <span class="dup-line">L${lines[i] !== undefined ? lines[i] : '?'}</span></div>`
+    ).join('') + `<span class="dup-tag">duplicate in section</span>`;
   } else {
     valDisplay = esc(String(effVal !== null && effVal !== undefined ? effVal : ''));
     if (isCommented) valDisplay = `<span style="color:#888">#${valDisplay}</span>`;
@@ -1860,12 +1922,15 @@ function applyDiffsFilter() {
   });
   rows.forEach((row, i) => {
     if (!row.classList.contains('section-divider')) return;
-    let anyVis = false;
+    let anyVis = false, hasRows = false;
     for (let j = i + 1; j < rows.length; j++) {
       if (rows[j].classList.contains('section-divider')) break;
+      hasRows = true;
       if (rows[j].style.display !== 'none') { anyVis = true; break; }
     }
-    row.style.display = anyVis ? '' : 'none';
+    // Keep headers whose section check flags a difference, and empty sections when not filtering
+    let keep = anyVis || row.dataset.secDiff === '1' || (!hasRows && !showDiffsOnly);
+    row.style.display = keep ? '' : 'none';
   });
 }
 
@@ -2406,8 +2471,21 @@ def _serialise_result(result: "AuditResult") -> dict:
                 "commented":     p.commented,
                 "hasMismatch":   p.has_mismatch,
                 "isLogicalDiff": p.is_logical_diff,
+                "lines":         p.lines,
+                "dupValues":     p.dup_values,
             }
             for p in af.params
+        ]
+        sections_js = [
+            {
+                "name":        s["name"],
+                "base":        s["base"],
+                "present":     s["present"],
+                "baseCount":   s["base_count"],
+                "counts":      s["counts"],
+                "paramCounts": s["param_counts"],
+            }
+            for s in af.sections
         ]
         binary_js = None
         if af.file_type == "binary":
@@ -2427,6 +2505,7 @@ def _serialise_result(result: "AuditResult") -> dict:
             "absentCount":     af.absent_count,
             "logicalDiffCount": af.logical_diff_count,
             "params":          params_js,
+            "sections":        sections_js,
             "rawContent":      af.raw_content if af.file_type not in ("binary", "error") else {},
             "binary":          binary_js,
             "warnings":        af.warnings,
@@ -3647,7 +3726,11 @@ def _write_diffs_xlsx(result: "AuditResult", run_dir: str) -> str:
                           fill=ABSENT_FILL,
                           align=Alignment(horizontal="center", vertical="top"))
             else:
-                _set_cell(ws4, row_i, col_i, str(node_val), font=NORMAL, fill=RED_FILL)
+                # Duplicate in section: every active value with its source line
+                dups = (p.dup_values or {}).get(node)
+                text = (" | ".join(f"{v} (L{ln})" for v, ln in zip(dups, p.lines.get(node, [])))
+                        if dups else str(node_val))
+                _set_cell(ws4, row_i, col_i, text, font=NORMAL, fill=RED_FILL)
 
         note_col = 5 + len(nodes)
         _set_cell(ws4, row_i, note_col, note, font=NORMAL, fill=RED_FILL)

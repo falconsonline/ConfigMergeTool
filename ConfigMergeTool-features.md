@@ -421,7 +421,7 @@ configmergetool --audit-config-file audit.json --filter-file filters.txt --quiet
 | ID | Feature | Behaviour |
 |---|---|---|
 | A-01 | Multi-node diff | Compares every file across all nodes; produces per-file, per-parameter diff results |
-| A-02 | KV semantic comparison | Full `parse_kv_doc()` parse; per-section, per-key comparison; active values only |
+| A-02 | KV semantic comparison | Section-by-section comparison against the **base node** (first node in the audit config that has the file). A key is compared only within its section — the same key in two sections is two rows. A commented header `#[X]` is a comment: active keys after it belong to the enclosing real section. A commented-out key counts as present (commented). Header rule: `[Name]` optionally followed by `# comment` |
 | A-03 | JSON comparison | Deep parse and per-key comparison |
 | A-04 | Text/XML comparison | Normalised text comparison (strip BOM, CRLF→LF, trailing whitespace); SHA-256 not used for text |
 | A-05 | Binary comparison | SHA-256 + file size; replaces legacy MD5 |
@@ -434,6 +434,9 @@ configmergetool --audit-config-file audit.json --filter-file filters.txt --quiet
 | A-11 | Exit code | Exit 0 = no mismatches; exit 1 = mismatches found; exit 2 = configuration error |
 | A-12 | Path traversal guard | `safe_realpath()` applied in `_scan_dir()`; symlinks escaping `base_dir` silently skipped |
 | A-13 | CRLF output | All written files use `newline="\n"` — consistent across Windows/Linux |
+| A-14 | KV section check | `AuditFile.sections`: per section — base node, base param count (None when base lacks the section), per-node `match` / `differ` / `missing` / `extra`, or section absent. Empty sections are listed; keys before the first header form the `DEFAULT` "(no section)" block |
+| A-15 | KV duplicate in section | Same active key twice in one section on a node: `AuditParam.dup_values` / `lines` keep every value with its line number; row counts as a mismatch; warning `node: 'key' duplicated in [Section] (Lx, Ly)` |
+| A-16 | KV merged ordering | Sections and keys follow the base node's file; sections/keys it lacks are inserted after their predecessor in the file that has them — no repeated section blocks |
 
 ---
 
@@ -483,14 +486,14 @@ Output: `<run_dir>/audit_report.html` (or paginated part files for large runs)
 | R-01 | Self-contained | Full CSS + JS embedded; no internet connection required |
 | R-02 | Interactive sidebar | Recursive directory tree with per-directory diff badges; click to navigate |
 | R-03 | File search | Search box in sidebar filters file list as you type; shows match count; Enter jumps to first match; Escape clears; Ctrl+K focuses from anywhere |
-| R-04 | Parameter table | One row per parameter; per-node value columns; full page width |
+| R-04 | Parameter table | One row per parameter; per-node value columns; full page width. KV: one header row per section showing the section check (base count; per node match · differ · missing · +extra, or section absent); duplicate cells list every value with its line and a "duplicate in section" tag |
 | R-05 | Sticky key column | Parameter column stays visible on horizontal scroll (many-node runs) |
 | R-06 | Horizontal scroll | `.table-wrap` scrolls horizontally; node columns visible on 16+ node runs |
 | R-07 | Node chip visibility | When nodes > 4: chip buttons above table to hide/show individual node columns |
 | R-08 | Column width scaling | Column width auto-scales: ≤4 nodes → 260px; 5-8 → 220px; 9-16 → 180px; >16 → 160px |
 | R-09 | Pagination | Reports > 22 MB split into `audit_report_p01.html`, `p02.html`… with index page |
 | R-10 | Script injection fix | `</script>` in file content escaped to `<\/script>` before embedding JSON |
-| R-11 | Show diffs only | Toggle hides matched rows and collapses empty section dividers; state persists across file navigation |
+| R-11 | Show diffs only | Toggle hides matched rows and collapses section dividers with no visible rows — except KV headers whose section is absent on a node; empty sections stay visible when the toggle is off; state persists across file navigation |
 | R-12 | Show expected diffs | Toggle shows/hides logical-diff rows (purple) |
 | R-13 | Per-node download | Reconstructed KV/JSON per node, excluding skipped compounds |
 | R-14 | Export Patch | Downloads `audit_patch.json` with `changes` + `skipped` arrays |
@@ -715,6 +718,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-15 | A-02, A-14–A-16, R-04, R-11: Audit KV compared section by section against the base node — fixes the same parameter shown in two rows (missing above / missing below) and false "missing" for active keys after `#[X]` commented headers; section check on header rows; duplicate-in-section values with line numbers (HTML + Excel "Parameter Diffs") |
 | 2026-04-10 | **v2.0.1 released** — patch release covering all KV, JSON, XML, and output-format fixes from 2026-04-09–10 |
 | 2026-04-10 | J-11: Primitive array inline format — `_collapse_primitive_arrays()` post-processes `json.dumps` output; arrays with no nested objects/arrays collapsed to single line (e.g. `["oauth2"]` not expanded to multi-line) |
 | 2026-04-10 | J-10/X-13: Java FQCN from release extended to JSON and XML — `is_java_fqcn()` applied in JSON `_merge()` and XML `_replace_elements()`; both keep release value and emit `JAVA_CLASS_NAME_FROM_RELEASE` |

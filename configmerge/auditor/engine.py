@@ -17,8 +17,11 @@ is_logical_diff (bool)
     differ between nodes (e.g. hostname, log file name, instance ID).  They
     are tracked and visible in the report but are not counted as mismatches.
 
+KV files are compared section by section against the base node (the first node in
+the audit config that has the file); see MEMORY.md (2026-09-15) for the rules.
+
 Reuses:
-  - parse_kv_doc() from configmerge.processors.kv
+  - KV line helpers (_is_kv_line, _has_valid_kv_key, _split_kv) from configmerge.processors.kv
   - BaseDirConfig from configmerge.models
 """
 
@@ -61,7 +64,7 @@ _BACKUP_SUFFIX_RE = re.compile(
 )
 
 from ..models import BaseDirConfig
-from ..processors.kv import parse_kv_doc
+from ..processors.kv import _has_valid_kv_key, _is_kv_line, _split_kv
 from ..utils import open_text, file_sha256
 from .file_filter import FileFilter
 from .html_report import write_audit_html
@@ -86,6 +89,8 @@ class AuditParam:
     commented: Dict[str, bool]         # node_name -> is_commented
     has_mismatch: bool          # True if active values differ and NOT a logical diff
     is_logical_diff: bool = False      # True if matched by logical_diff_patterns
+    lines: Dict[str, List[int]] = field(default_factory=dict)       # KV: node -> source line numbers
+    dup_values: Dict[str, List[str]] = field(default_factory=dict)  # KV: node -> all active values when duplicated in section
 
 
 @dataclass
@@ -114,6 +119,103 @@ class AuditFile:
     content_skipped: bool = False      # True when diff display was skipped
     param_count: int = 0               # original param count (before clearing on skip)
     file_sizes: "Dict[str, int]" = field(default_factory=dict)  # node -> bytes
+    # KV section check, in merged section order. Each entry:
+    #   name, base (node checked against), present {node: bool}, base_count (None when base lacks
+    #   the section), counts {node: {match, differ, missing, extra}}, param_counts {node: int}
+    sections: List[dict] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# KV section walker (audit only — merge keeps processors.kv.parse_kv_doc)
+# ---------------------------------------------------------------------------
+
+KV_DEFAULT_SECTION = "DEFAULT"
+# Same header rule as parse_kv_doc: "[Name]" optionally followed by an inline "# comment".
+_KV_SECTION_RE = re.compile(r'^\s*\[(.+)\]\s*(?:#.*)?$')
+_KV_COMMENTED_SECTION_RE = re.compile(r'^\[(.+)\]\s*$')
+
+
+@dataclass
+class _KVSections:
+    """One node's KV file grouped by real section. A commented header "#[X]" is a comment."""
+    section_order: List[str]
+    key_order: Dict[str, List[str]]                         # section -> keys in file order
+    active: Dict[Tuple[str, str], List[Tuple[str, int]]]    # (section, key) -> [(value, line)]
+    commented: Dict[Tuple[str, str], Tuple[str, int]]       # (section, key) -> last (value, line)
+
+
+def _walk_kv_sections(text: str) -> _KVSections:
+    doc = _KVSections([KV_DEFAULT_SECTION], {KV_DEFAULT_SECTION: []}, {}, {})
+    section = KV_DEFAULT_SECTION
+
+    def note(key: str) -> None:
+        if key not in doc.key_order[section]:
+            doc.key_order[section].append(key)
+
+    for lineno, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        m_sec = _KV_SECTION_RE.match(line) if stripped.startswith("[") else None
+        if m_sec:
+            section = f"[{m_sec.group(1).strip()}]"
+            if section not in doc.key_order:
+                doc.section_order.append(section)
+                doc.key_order[section] = []
+            continue
+        if stripped[0] in "#!":
+            inner = stripped.lstrip("#!").strip()
+            if _KV_COMMENTED_SECTION_RE.match(inner):
+                continue
+            if _is_kv_line(inner) and _has_valid_kv_key(inner):
+                key, value, _ = _split_kv(inner)
+                if key:
+                    doc.commented[(section, key)] = (value, lineno)
+                    note(key)
+            continue
+        if _is_kv_line(stripped):
+            key, value, _ = _split_kv(stripped)
+            if key:
+                doc.active.setdefault((section, key), []).append((value, lineno))
+                note(key)
+    return doc
+
+
+def _merge_order(sequences: List[List[str]]) -> List[str]:
+    """Merge ordered sequences: the first sets the order, later items are placed after their predecessor."""
+    merged: List[str] = []
+    seen: Set[str] = set()
+    for seq in sequences:
+        inserts: Dict[Optional[str], List[str]] = {}
+        anchor: Optional[str] = None
+        for item in seq:
+            if item in seen:
+                anchor = item
+            else:
+                inserts.setdefault(anchor, []).append(item)
+                seen.add(item)
+        rebuilt = list(inserts.get(None, []))
+        for item in merged:
+            rebuilt.append(item)
+            rebuilt.extend(inserts.get(item, []))
+        merged = rebuilt
+    return merged
+
+
+def _section_check_kind(values: Dict[str, Optional[str]], commented: Dict[str, bool],
+                        dup_values: Dict[str, List[str]], base: str, node: str) -> Optional[str]:
+    base_val, node_val = values.get(base), values.get(node)
+    if base_val is None and node_val is None:
+        return None
+    if node_val is None:
+        return "missing"
+    if base_val is None:
+        return "extra"
+    if node in dup_values:
+        return "differ"
+    if not commented.get(base) and not commented.get(node) and base_val != node_val:
+        return "differ"
+    return "match"
 
 
 @dataclass
@@ -855,79 +957,111 @@ class AuditEngine:
     def _compare_kv(self, rel_path: str, present_in: List[str],
                     abs_paths: Dict[str, str],
                     all_nodes: List[str]) -> AuditFile:
-        docs        = {}
-        raw_content : Dict[str, str] = {}
-        warnings    : List[str]      = []
+        """Section-by-section comparison against the base node (rules: MEMORY.md, 2026-09-15)."""
+        docs        : Dict[str, _KVSections] = {}
+        raw_content : Dict[str, str]         = {}
+        warnings    : List[str]              = []
 
         for node in present_in:
-            path = abs_paths[node]
             try:
-                text = open_text(path)  # BUG-B: encoding-aware read
-
-                if len(text.encode("utf-8", errors="replace")) > _MAX_RAW_BYTES:
-                    raw_content[node] = text[:_MAX_RAW_BYTES]
-                    warnings.append(
-                        f"{node}: raw content truncated at {_MAX_RAW_BYTES // 1024} KB"
-                    )
-                else:
-                    raw_content[node] = text
-
-                docs[node] = parse_kv_doc(path)
-
-            except Exception as exc:
-                warnings.append(f"{node}: parse error — {exc}")
-                docs[node]        = None
+                text = open_text(abs_paths[node])  # BUG-B: encoding-aware read
+            except OSError as exc:
+                warnings.append(f"{node}: read error — {exc}")
                 raw_content[node] = ""
-
-        # Collect compounds in first-seen document order
-        seen : Dict[str, tuple] = {}
-        order: List[str]        = []
-        for node in present_in:
-            doc = docs.get(node)
-            if doc is None:
                 continue
-            for sec in doc.section_order:
-                if sec.startswith('#['):
-                    continue
-                for entry in doc.sections.get(sec, []):
-                    if entry.is_commented:
-                        continue
-                    compound = f"{sec}|{entry.key}"
-                    if compound not in seen:
-                        seen[compound] = (sec, entry.key)
-                        order.append(compound)
+            if len(text.encode("utf-8", errors="replace")) > _MAX_RAW_BYTES:
+                raw_content[node] = text[:_MAX_RAW_BYTES]
+                warnings.append(
+                    f"{node}: raw content truncated at {_MAX_RAW_BYTES // 1024} KB"
+                )
+            else:
+                raw_content[node] = text
+            docs[node] = _walk_kv_sections(text)
 
-        params: List[AuditParam] = []
-        for compound in order:
-            sec, key = seen[compound]
-            values   : Dict[str, Optional[str]] = {}
-            commented: Dict[str, bool]          = {}
+        # Base node for this file: first node in config order that has (and could read) it
+        parsed = [n for n in present_in if n in docs]
+        base   = parsed[0] if parsed else ""
 
-            for node in all_nodes:
-                if node not in present_in:
-                    continue
-                doc = docs.get(node)
-                if doc is None or compound not in doc.lookup:
-                    values[node]    = None
-                    commented[node] = False
-                else:
-                    entry           = doc.lookup[compound]
-                    values[node]    = entry.value
-                    commented[node] = entry.is_commented
+        params  : List[AuditParam] = []
+        sections: List[dict]       = []
 
-            active_vals  = {v for n, v in values.items()
-                            if not commented.get(n, False) and v is not None}
-            any_missing  = any(v is None for v in values.values())
-            has_mismatch = len(active_vals) > 1 or any_missing
+        for sec in _merge_order([docs[n].section_order for n in parsed]):
+            holders = [n for n in parsed if sec in docs[n].key_order]
+            # A row needs the key active on at least one node
+            keys = [
+                k for k in _merge_order([docs[n].key_order[sec] for n in holders])
+                if any((sec, k) in docs[n].active for n in holders)
+            ]
+            if sec == KV_DEFAULT_SECTION and not keys:
+                continue
 
-            params.append(AuditParam(
-                compound     = compound,
-                section      = sec,
-                key          = key,
-                values       = values,
-                commented    = commented,
-                has_mismatch = has_mismatch,
-            ))
+            base_has     = base in holders
+            counts       = ({n: {"match": 0, "differ": 0, "missing": 0, "extra": 0}
+                             for n in holders if n != base} if base_has else {})
+            param_counts = {n: 0 for n in holders}
+            base_count   = 0
+
+            for key in keys:
+                values    : Dict[str, Optional[str]] = {}
+                commented : Dict[str, bool]          = {}
+                lines     : Dict[str, List[int]]     = {}
+                dup_values: Dict[str, List[str]]     = {}
+                for node in present_in:
+                    doc    = docs.get(node)
+                    active = doc.active.get((sec, key)) if doc else None
+                    com    = doc.commented.get((sec, key)) if doc else None
+                    if active:
+                        values[node]    = active[-1][0]
+                        commented[node] = False
+                        lines[node]     = [ln for _, ln in active]
+                        if len(active) > 1:
+                            dup_values[node] = [v for v, _ in active]
+                    elif com:
+                        values[node]    = com[0]
+                        commented[node] = True
+                        lines[node]     = [com[1]]
+                    else:
+                        values[node]    = None
+                        commented[node] = False
+
+                for node in dup_values:
+                    where = ", ".join(f"L{ln}" for ln in lines[node])
+                    warnings.append(f"{node}: '{key}' duplicated in {sec} ({where})")
+
+                active_vals = {v for n, v in values.items()
+                               if not commented[n] and v is not None}
+                any_missing = any(v is None for v in values.values())
+
+                params.append(AuditParam(
+                    compound     = f"{sec}|{key}",
+                    section      = sec,
+                    key          = key,
+                    values       = values,
+                    commented    = commented,
+                    has_mismatch = len(active_vals) > 1 or any_missing or bool(dup_values),
+                    lines        = lines,
+                    dup_values   = dup_values,
+                ))
+
+                for node in holders:
+                    if values.get(node) is not None:
+                        param_counts[node] += 1
+                if base_has:
+                    if values.get(base) is not None:
+                        base_count += 1
+                    for node in counts:
+                        kind = _section_check_kind(values, commented, dup_values, base, node)
+                        if kind:
+                            counts[node][kind] += 1
+
+            sections.append({
+                "name":         sec,
+                "base":         base,
+                "present":      {n: n in holders for n in present_in},
+                "base_count":   base_count if base_has else None,
+                "counts":       counts,
+                "param_counts": param_counts,
+            })
 
         logical_diff_count = self._classify_logical_diffs(params)
         mismatch_count     = sum(1 for p in params if p.has_mismatch)
@@ -954,6 +1088,7 @@ class AuditEngine:
             content_skipped    = skip_content,
             param_count        = param_count,
             file_sizes         = file_sizes,
+            sections           = sections,
         )
 
     # ------------------------------------------------------------------

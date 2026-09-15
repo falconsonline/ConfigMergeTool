@@ -974,6 +974,22 @@ Right panel — parameter table:
     Purple -- logical diff (expected to differ; not flagged as error)
     Striped -- file absent from this node (FILE ABSENT cell)
 
+  KV files (.properties / .cfg / .ini / .conf / .sh) are compared section by
+  section against the base node -- the first node in the audit config that has
+  the file.  Each [section] header row shows a section check:
+    base <node>: N param(s)   <node>: M match . D differ . X missing . +E extra
+  or "section absent" when a node has the file but not that section.
+    - A key is compared only within its section; the same key in two sections
+      is two separate rows.
+    - A commented header (#[Name]) is a comment: active keys below it belong
+      to the real section above.
+    - A commented-out key (#key=value) counts as present (shown greyed).
+    - The same key twice in one section on a node shows every value with its
+      line number, tagged "duplicate in section", and counts as a mismatch.
+    - Keys before the first header appear under "(no section)".
+    - "Show differences only" still shows a section header when that section
+      is absent on a node.
+
   Files absent from some nodes are flagged with a MISSING badge in the
   sidebar and appear in the "files with differences" lists.
 
