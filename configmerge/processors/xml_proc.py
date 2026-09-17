@@ -357,12 +357,18 @@ def _include_base_only(
     base_children = list(base_root)
 
     for i, child in enumerate(base_children):
-        tag = get_tag(child)
-        # Fixed: use word-boundary regex to avoid false substring matches
-        if re.search(rf'<(?:[\w-]+:)?{re.escape(tag)}[\s/>]', rel_text):
+        tag  = get_tag(child)
+        name = child.attrib.get("name")
+        if name:
+            # Named element: present only if release has this tag WITH this name
+            if _find_matching_block(rel_text, tag, name):
+                continue
+        # Unnamed element: present if release has any element with this tag
+        # (word-boundary regex avoids false substring matches)
+        elif re.search(rf'<(?:[\w-]+:)?{re.escape(tag)}[\s/>]', rel_text):
             continue
 
-        base_match = _find_matching_block(base_text, tag, None)
+        base_match = _find_matching_block(base_text, tag, name)
         if not base_match:
             continue
         block = base_match.group(0)
@@ -380,7 +386,7 @@ def _include_base_only(
         report.append(ReportEntry(
             type=EntryType.BASE_ONLY_PARAMETER_ADDED,
             file=rel_file,
-            element=tag,
+            element=f"{tag}:{name}" if name else tag,
             old="",
             new=" ".join(block.strip().split()),
         ))

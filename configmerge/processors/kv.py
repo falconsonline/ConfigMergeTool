@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from collections import defaultdict
 
 from . import register, BaseProcessor
@@ -97,8 +97,14 @@ class KVDocument:
 
 _GROUP_KEY_RE = re.compile(r'^([\w.]+)\.(\d+)\.(.+)$')
 
+# Review annotations written by this tool into merged output — never read back as content.
+_REVIEW_ANNOTATION_RE = re.compile(r'^\s*#\s*\[CMT-[A-Z]{3}-[EWI]\d{3}\] REVIEW:')
 
-def parse_kv_doc(file_path: str) -> KVDocument:
+
+def parse_kv_doc(file_path: str, known_keys: Optional[Set[str]] = None) -> KVDocument:
+    """Parse a KV file.  *known_keys* (active keys of the files being merged) lets a commented
+    line with spaces around its key (``#key = value``) be recognised as a commented parameter;
+    without it only ``#key=value``-style commented keys are recognised."""
     doc = KVDocument()
     current_section = "DEFAULT"
     doc.sections[current_section] = []
@@ -131,6 +137,8 @@ def parse_kv_doc(file_path: str) -> KVDocument:
 
             # ── Comment / blank ─────────────────────────────────────────
             if stripped.strip() == "" or stripped.strip().startswith("#") or stripped.strip().startswith("!"):
+                if _REVIEW_ANNOTATION_RE.match(stripped):
+                    continue
                 # Could be a commented-out key — check
                 stripped_inner = stripped.strip().lstrip("#!").strip()
 
@@ -144,7 +152,9 @@ def parse_kv_doc(file_path: str) -> KVDocument:
                     comment_buffer = []
                     continue
 
-                if _is_kv_line(stripped_inner) and _has_valid_kv_key(stripped_inner):
+                if _is_kv_line(stripped_inner) and (
+                        _has_valid_kv_key(stripped_inner)
+                        or (known_keys and _split_kv(stripped_inner)[0] in known_keys)):
                     # This is a commented key — parse as entry with is_commented=True
                     key, value, delim = _split_kv(stripped_inner)
                     if key:
@@ -211,6 +221,40 @@ def parse_kv_doc(file_path: str) -> KVDocument:
 
 def _is_kv_line(s: str) -> bool:
     return "=" in s or ":" in s
+
+
+def _comma_union(base_val: str, rel_val: str) -> str:
+    """Base items in base order, then release items the base lacks.  Keeps the release separator."""
+    sep = ", " if ", " in rel_val else ","
+    items = [i.strip() for i in base_val.split(",")]
+    items += [i for i in (r.strip() for r in rel_val.split(",")) if i not in items]
+    return sep.join(items)
+
+
+def _match_groups(
+    prefix: str,
+    b_grps: Dict[int, List["KVEntry"]],
+    r_grps: Dict[int, List["KVEntry"]],
+) -> Dict[int, int]:
+    """Map release group index → base group index.
+
+    Groups are identified by their active ``<prefix>.<N>.name`` value when every base and
+    release group has one and names are unique on each side; otherwise by index.
+    """
+    def names(grps: Dict[int, List["KVEntry"]]) -> Optional[Dict[str, int]]:
+        found: Dict[str, int] = {}
+        for idx, entries in grps.items():
+            name = next((e.value.strip() for e in entries
+                         if not e.is_commented and e.key == f"{prefix}.{idx}.name"), None)
+            if not name or name in found:
+                return None
+            found[name] = idx
+        return found
+
+    b_names, r_names = names(b_grps), names(r_grps)
+    if b_grps and r_grps and b_names is not None and r_names is not None:
+        return {r_idx: b_names[name] for name, r_idx in r_names.items() if name in b_names}
+    return {r_idx: r_idx for r_idx in r_grps if r_idx in b_grps}
 
 
 def _is_comma_list_value(v: str) -> bool:
@@ -380,6 +424,16 @@ def merge_kv(
             # _shadow_merge=True tells the merge logic to keep these commented
             # entries (not treat them as "absent") and to emit them commented.
             _shadow_merge = True
+            out_lines.append(
+                f"# [CMT-MRG-W015] REVIEW: section {section} is commented out in base but active "
+                f"in release — its entries are kept commented (base); confirm this is correct\n")
+            report.append(ReportEntry(
+                type=EntryType.REVIEW_COMMENTED_SECTION_IN_BASE,
+                file=rel_file, element=section, old="active in release",
+                new="commented (base kept)", section=section,
+            ))
+            log_structured(logger, "WARNING", "KV", "REVIEW_COMMENTED_SECTION", rel_file, section,
+                           "section commented out in base but active in release; base kept — confirm")
             base_entries: List[KVEntry] = []
             for _e in _shadow_entries_raw:
                 _re = KVEntry(
@@ -442,16 +496,28 @@ def merge_kv(
             for hdr in base_headers.get(prefix, []) + rel_headers.get(prefix, []):
                 group_header_compounds.add(f"{section}|{hdr.key}")
 
+        # Group identity: release index → base index.  Groups are matched by their
+        # `name` subkey when every group of the prefix has a unique one, otherwise by index.
+        r_to_b: Dict[str, Dict[int, int]] = {
+            prefix: _match_groups(prefix, base_groups.get(prefix, {}), rel_groups.get(prefix, {}))
+            for prefix in all_prefixes
+        }
+        b_to_r: Dict[str, Dict[int, int]] = {
+            prefix: {b: r for r, b in m.items()} for prefix, m in r_to_b.items()
+        }
+
         # Renumber map for release-only groups → merged indices
         renumber_map: Dict[str, Dict[int, int]] = {}
+        group_totals: Dict[str, int] = {}
         for prefix in all_prefixes:
             b_grps = base_groups.get(prefix, {})
             r_grps = rel_groups.get(prefix, {})
             max_b  = max(b_grps.keys(), default=0)
-            rel_only_sorted = sorted(k for k in r_grps if k not in b_grps)
+            rel_only_sorted = sorted(k for k in r_grps if k not in r_to_b[prefix])
             renumber_map[prefix] = {
                 r_idx: max_b + 1 + i for i, r_idx in enumerate(rel_only_sorted)
             }
+            group_totals[prefix] = len(b_grps) + len(rel_only_sorted)
 
         # Track which base / release group indices have been emitted
         emitted_b_groups: Dict[str, set] = defaultdict(set)
@@ -477,10 +543,23 @@ def merge_kv(
         }
 
         base_annotations: Dict[str, List[KVEntry]] = defaultdict(list)
-        for entry in base_entries:
+        base_post_annotations: Dict[str, List[KVEntry]] = defaultdict(list)
+        base_commented_only: Dict[str, List[KVEntry]] = defaultdict(list)
+        for _bi, entry in enumerate(base_entries):
             compound = f"{section}|{entry.key}"
-            if entry.is_commented and compound in base_pre_annotation_keys:
+            if not entry.is_commented:
+                continue
+            if compound in base_pre_annotation_keys:
                 base_annotations[compound].append(entry)
+            elif compound in _base_first_active_pos and _bi > _base_first_active_pos[compound]:
+                base_post_annotations[compound].append(entry)
+            elif compound not in base_active_compounds:
+                base_commented_only[compound].append(entry)
+
+        # Every line of the release section — base comment lines already present there
+        # are not copied a second time.
+        rel_lines = {e.raw_line.strip() for e in rel_entries}
+        rel_lines |= {c.strip() for e in rel_entries for c in e.comments}
 
         # ── Anchor map: base-only regular params ─────────────────────────
         anchors: Dict[str, List[KVEntry]] = defaultdict(list)
@@ -611,10 +690,17 @@ def merge_kv(
                     for bann in base_annotations.get(ge_compound, []):
                         _emit_verbatim(bann.raw_line, bann.comments)
 
-                # Use canonical (last-wins) base entry for value
+                # Use canonical (last-wins) base entry for value; the matching release
+                # entry lives under the release index of the matched group.
                 canonical_base = base_doc.lookup.get(ge_compound, ge)
-                rel_ge = rel_doc.lookup.get(ge_compound)
-                if rel_ge and rel_ge.is_commented and ge_compound not in rel_active_keys:
+                r_idx_match = b_to_r.get(prefix, {}).get(b_idx)
+                rel_ge = None
+                if r_idx_match is not None:
+                    rel_key = re.sub(rf'^({re.escape(prefix)}\.)\d+(\.)',
+                                     lambda m: f"{m.group(1)}{r_idx_match}{m.group(2)}", ge.key)
+                    rel_ge = rel_doc.lookup.get(f"{section}|{rel_key}")
+                if rel_ge and rel_ge.is_commented and \
+                        f"{section}|{rel_ge.key}" not in rel_active_keys:
                     rel_ge = None
 
                 merged_val, merged_comments, rpt = _merge_single_entry(
@@ -623,6 +709,8 @@ def merge_kv(
                 if rpt:
                     report.append(rpt)
                 _emit_entry(out_lines, canonical_base, merged_val, merged_comments)
+                if rpt and rpt.type == EntryType.JAVA_CLASS_NAME_FROM_RELEASE:
+                    _annotate_class_from_release(ge.key, ge_compound, rpt.old)
                 emitted_keys.add(ge_compound)
 
             emitted_b_groups[prefix].add(b_idx)
@@ -647,7 +735,6 @@ def merge_kv(
                     out_lines, new_key, ge.value,
                     ge.delimiter, ge.is_commented, ge.comments[:]
                 )
-                emitted_keys.add(f"{section}|{ge.key}")
                 emitted_keys.add(new_compound)
                 report.append(ReportEntry(
                     type=EntryType.INDEXED_GROUP_APPENDED,
@@ -659,9 +746,52 @@ def merge_kv(
                 ))
             emitted_r_groups[prefix].add(r_idx)
 
+        def _annotate_class_from_release(key: str, compound: str, production_value: str) -> None:
+            """Release Java class name replaced the production one: show the production value
+            directly above the active line so the user can confirm."""
+            out_lines.insert(len(out_lines) - 1,
+                f"# [CMT-MRG-W017] REVIEW: '{key}' production value was {production_value} — "
+                f"release class name kept; confirm the correct class\n")
+            log_structured(logger, "WARNING", "KV", "REVIEW_CLASS_NAME_FROM_RELEASE", rel_file, compound,
+                           f"production class {production_value} replaced by release class — confirm")
+
+        def _flag_group_count(compound: str, key: str, value: str) -> None:
+            """Base count wins, but a count that differs from the merged group total is flagged."""
+            if not key.endswith(".count"):
+                return
+            prefix = key[: -len(".count")]
+            total = group_totals.get(prefix)
+            if total is None or not value.strip().isdigit() or int(value) == total:
+                return
+            report.append(ReportEntry(
+                type=EntryType.GROUP_COUNT_MISMATCH,
+                file=rel_file, element=compound,
+                old=value.strip(), new=str(total), section=section,
+            ))
+            log_structured(logger, "WARNING", "KV", "GROUP_COUNT_MISMATCH", rel_file, compound,
+                           f"{key}={value.strip()} kept from base, but the merged output has "
+                           f"{total} '{prefix}' groups — verify the count")
+
         # ── Combined single pass over release spine ───────────────────────
         for entry in rel_entries:
             compound = f"{section}|{entry.key}"
+
+            # ── Active indexed group entry ───────────────────────────────
+            # Tracked per group (not per key): with name matching a release
+            # index can differ from the base index it maps to, so release and
+            # base group keys must not share the emitted_keys namespace.
+            grp_active = None if entry.is_commented else _GROUP_KEY_RE.match(entry.key)
+            if grp_active and grp_active.group(1) in all_prefixes:
+                prefix = grp_active.group(1)
+                r_idx  = int(grp_active.group(2))
+                b_idx_match = r_to_b.get(prefix, {}).get(r_idx)
+                if b_idx_match is not None:
+                    if b_idx_match not in emitted_b_groups[prefix]:
+                        emit_base_group(prefix, b_idx_match)
+                elif (r_idx in renumber_map.get(prefix, {})
+                        and r_idx not in emitted_r_groups[prefix]):
+                    emit_release_only_group(prefix, r_idx)
+                continue
 
             if compound in emitted_keys:
                 # Post-annotation: a commented release entry for an already-emitted
@@ -685,13 +815,13 @@ def merge_kv(
                 r_idx  = int(grp_match.group(2))
                 b_grps = base_groups.get(prefix, {})
 
-                if r_idx in b_grps:
-                    # Base group index: emit all entries of this base group
-                    # the first time any entry of this index is encountered.
-                    if r_idx not in emitted_b_groups[prefix]:
-                        emit_base_group(prefix, r_idx)
-                    else:
-                        emitted_keys.add(compound)
+                b_idx_match = r_to_b.get(prefix, {}).get(r_idx)
+                if b_idx_match is not None:
+                    # Matched base group: emit all entries of the base group
+                    # the first time any entry of the release group is encountered.
+                    if b_idx_match not in emitted_b_groups[prefix]:
+                        emit_base_group(prefix, b_idx_match)
+                    emitted_keys.add(compound)
                 elif r_idx in emitted_r_groups.get(prefix, set()):
                     emitted_keys.add(compound)
                 elif prefix in renumber_map and r_idx in renumber_map[prefix]:
@@ -726,8 +856,8 @@ def merge_kv(
                 else:
                     rel_hdr = entry if not entry.is_commented else None
                     # Comma-separated registry headers (e.g. schedule.registry):
-                    # prefer release value when it differs — release adds new class
-                    # registrations and the full release list is authoritative.
+                    # union of base items then release-only items, so base
+                    # registrations are kept and release registrations are added.
                     # All other group headers (e.g. schedule.count) follow the
                     # standard base-wins strategy.
                     if (rel_hdr is not None
@@ -735,15 +865,18 @@ def merge_kv(
                             and _is_comma_list_value(base_hdr.value)
                             and _is_comma_list_value(rel_hdr.value)):
                         merged_comments = rel_hdr.comments or base_hdr.comments
-                        report.append(ReportEntry(
-                            type=EntryType.BASE_TO_RELEASE_REPLACED,
-                            file=rel_file, element=compound,
-                            old=base_hdr.value, new=rel_hdr.value,
-                            base_comment="\n".join(base_hdr.comments),
-                            release_comment="\n".join(rel_hdr.comments),
-                            section=section,
-                        ))
-                        _emit_entry(out_lines, rel_hdr, rel_hdr.value, merged_comments)
+                        union_val = _comma_union(base_hdr.value, rel_hdr.value)
+                        if union_val != base_hdr.value:
+                            report.append(ReportEntry(
+                                type=EntryType.COMMA_VALUE_UNION,
+                                file=rel_file, element=compound,
+                                old=rel_hdr.value, new=union_val,
+                                base_comment="\n".join(base_hdr.comments),
+                                release_comment="\n".join(rel_hdr.comments),
+                                section=section,
+                            ))
+                        _emit_entry(out_lines, rel_hdr, union_val, merged_comments)
+                        emitted_value = union_val
                     else:
                         merged_val, merged_comments, rpt = _merge_single_entry(
                             base_hdr, rel_hdr, rel_file, config, section
@@ -751,6 +884,8 @@ def merge_kv(
                         if rpt:
                             report.append(rpt)
                         _emit_entry(out_lines, base_hdr, merged_val, merged_comments)
+                        emitted_value = merged_val
+                    _flag_group_count(compound, entry.key, emitted_value)
                 emitted_keys.add(compound)
                 # NOTE: we do NOT eagerly emit base groups here.
                 # Base groups are emitted on-demand when the release spine
@@ -787,7 +922,32 @@ def merge_kv(
                 if rpt:
                     report.append(rpt)
                 _emit_entry(out_lines, base_entry, merged_val, merged_comments)
+                if rpt and rpt.type == EntryType.JAVA_CLASS_NAME_FROM_RELEASE:
+                    _annotate_class_from_release(entry.key, compound, rpt.old)
+                # Base alternative-value comments (`#key=alt` after the active key) give context;
+                # one that equals the value now active adds nothing and is not copied.
+                for alt in base_post_annotations.get(compound, []):
+                    if alt.raw_line.strip() not in rel_lines and alt.value.strip() != merged_val.strip():
+                        _emit_verbatim(alt.raw_line, [])
             else:
+                # Commented out in base, active in release: keep the base comment for context
+                # and ask the user to confirm the release value.
+                if not entry.is_commented and base_commented_only.get(compound):
+                    for bc in base_commented_only[compound]:
+                        if bc.raw_line.strip() not in rel_lines and bc.value.strip() != entry.value.strip():
+                            _emit_verbatim(bc.raw_line, [])
+                    out_lines.append(
+                        f"# [CMT-MRG-W014] REVIEW: '{entry.key}' is commented out in base but active "
+                        f"in release — release value kept; confirm the correct value\n")
+                    report.append(ReportEntry(
+                        type=EntryType.REVIEW_COMMENTED_IN_BASE,
+                        file=rel_file, element=compound,
+                        old=base_commented_only[compound][-1].raw_line.strip(), new=entry.value,
+                        section=section,
+                    ))
+                    log_structured(logger, "WARNING", "KV", "REVIEW_COMMENTED_IN_BASE", rel_file,
+                                   compound, "commented out in base, active in release; release value "
+                                   "kept — confirm the correct value")
                 # Release-only
                 _emit_entry(out_lines, entry, entry.value, entry.comments)
                 report.append(ReportEntry(
@@ -995,8 +1155,9 @@ def _emit_entry(
     # NOTE: commented entries are included here — their raw_line already starts
     # with '#', so verbatim emit is always correct for unchanged values.
     if entry.value == value:
-        # Pass-through: strip trailing spaces/tabs from value portion, keep newline.
-        out_lines.append(raw.rstrip(" \t") + "\n")
+        # Pass-through: commented lines are context and stay byte-for-byte;
+        # active lines have trailing spaces/tabs stripped from the value (K-20).
+        out_lines.append((raw if entry.is_commented else raw.rstrip(" \t")) + "\n")
         return
 
     # Changed value: use raw_line as template.
@@ -1108,9 +1269,16 @@ class KVProcessor(BaseProcessor):
 
         # For Many-to-One: merge base files sequentially (first base is master,
         # subsequent bases add extra keys not already seen)
-        base_doc = parse_kv_doc(base_files[0])
+        # Active keys of every file in this merge: lets `#key = value` (spaces around the
+        # key) be recognised as a commented parameter without turning prose into keys.
+        known_keys: Set[str] = set()
+        for path in [*base_files, rel_file]:
+            known_keys |= {e.key for entries in parse_kv_doc(path).sections.values()
+                           for e in entries if not e.is_commented}
+
+        base_doc = parse_kv_doc(base_files[0], known_keys)
         for extra_base in base_files[1:]:
-            extra_doc = parse_kv_doc(extra_base)
+            extra_doc = parse_kv_doc(extra_base, known_keys)
             for section, entries in extra_doc.sections.items():
                 if section not in base_doc.sections:
                     base_doc.sections[section] = []
@@ -1127,7 +1295,7 @@ class KVProcessor(BaseProcessor):
             _detect_groups(base_doc)
 
         rel_raw = open_text(rel_file)
-        rel_doc = parse_kv_doc(rel_file)
+        rel_doc = parse_kv_doc(rel_file, known_keys)
 
         # Only report duplicates found in the RELEASE file — those indicate the
         # release config has conflicting entries the user should review.

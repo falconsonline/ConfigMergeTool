@@ -147,6 +147,22 @@ def _merge(
         return
     for k in base:
         current = f"{path}.{k}" if path else k
+        # Empty object/array in base but populated in release — flagged for review.
+        # {} : base predates the release keys → release keys taken.
+        # [] : base list intentionally empty → base (empty) kept.
+        if (isinstance(base[k], (dict, list)) and not base[k]
+                and type(rel.get(k)) is type(base[k]) and rel.get(k)):
+            keep_release = isinstance(base[k], dict)
+            report.append(ReportEntry(
+                type=EntryType.REVIEW_EMPTY_IN_BASE,
+                file=rel_file,
+                element=current,
+                old=json.dumps(rel[k]),
+                new=json.dumps(rel[k] if keep_release else base[k]),
+            ))
+            if not keep_release:
+                rel[k] = []
+            continue
         if isinstance(base[k], dict) and isinstance(rel.get(k), dict):
             _merge(base[k], rel[k], current, rel_file, report)
         else:
@@ -266,6 +282,9 @@ class JSONProcessor(BaseProcessor):
 
         _merge(base, rel, "", rel_file, report)
         for entry in report:
+            if entry.type == EntryType.REVIEW_EMPTY_IN_BASE:
+                log_structured(logger, "WARNING", "JSON", "REVIEW_EMPTY_IN_BASE", rel_file, entry.element,
+                               f"empty in base but populated in release; output {entry.new} — confirm")
             if entry.type == EntryType.JSON_EMPTY_BASE_OVERRIDE:
                 log_structured(logger, "ERROR", "JSON", "EMPTY_BASE_OVERRIDE", rel_file, entry.element,
                                "base value empty — release value forced empty; review required")

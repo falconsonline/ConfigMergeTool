@@ -35,13 +35,26 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 | F-009 | P2 | XML/JSON many-to-one merged only base_files[0]; one-to-many warned as ambiguous | FIXED — tests/test_merge_mappings.py (4 tests); real data unaffected (no mapping files) |
 | F-010 | P3 | Critical processor entries had no log line/ID | FIXED — CMT-MRG-E012..E014; real data: 3 E012 lines/node |
 | F-011 | P1 | Unparseable JSON/XML input silently missing from output, exit 0 | FIXED — INVALID_JSON/INVALID_XML critical, 2 tests |
+| F-012 | P1 | XML _find_matching_block non-greedy regex truncates named blocks with same-tag descendants | VERIFIED; real: 4/19 named blocks truncated in each jetty.xml, 0 differ today (latent) |
+| F-013 | P2 | JSON _collapse_primitive_arrays rewrites "[a,b]" inside string values | VERIFIED; real: 0/62 files altered |
+| F-014 | P2 | KV _split_kv prefers '=' over ':' → `k: v=x` mis-keyed, line duplicated | VERIFIED; real: 0/687 mixed-delimiter lines colon-first |
+| F-015 | P2 | JSON `!=` treats true==1 / false==0 → release value kept | VERIFIED; real: 0 cases in 6 pairs |
+| F-017 | P2 | KV commented key with space before delimiter (`#a = B`) not recognised → base comment leaks to end of output (vs `#a=B` merged) | VERIFIED; literal trim rule sim: 2322 commented lines/109 files newly keys; merge output changes 4 files/node (blank lines in doc-comment headers) — needs Q9 scope |
+| F-017 | P2 | (see above) | FIXED (uncommitted) — tests/test_merge_review_annotations.py (9 tests) |
+| F-016 | P2 | KV indexed-group header not a union; groups matched by index only | FIXED (uncommitted) — tests/test_merge_groups_and_xml.py (6 tests); real data: 0 output diffs, W013 flags |
 
 ## OPEN QUESTIONS
-- none
+- Q7 ANSWERED (IMPLEMENTED): header union = base items then release-only items (real data: base registry ⊂ release → output unchanged)
+- Q8 ANSWERED: match by name subkey, index fallback — IMPLEMENTED
+- Q12 ANSWERED: keep base count, flag GROUP_COUNT_MISMATCH [CMT-MRG-W013] — IMPLEMENTED (real: 2 flags/node, 0 output diffs)
+- Q9 ANSWERED + IMPLEMENTED (uncommitted): base comments copied in context; W014 param / W015 section review annotations in output; `#key = v` recognised only for real keys; annotations not re-read. Real: fsmapp.properties +3 W015, +1 W014 (+2 APP-02), +3 alt-value comments; genericupload.properties 1 trailing space stripped on a commented key line (K-20 rule)
+- Q10 FINAL (uncommitted): JSON base {} → release keys taken + W016; base [] → base kept + W016. Real: openapi-config.json output identical to last commit, flagged.
+- Review follow-up FINAL (uncommitted): W017 in-file annotation for production Java class replaced (real: executor.class); base comments equal to active value not copied; comment lines byte-for-byte. Real: only fsmapp.properties changes (+7 lines/node, +1 APP-02)
+- Q11 ANSWERED (IMPLEMENTED): insert named base-only XML elements unless --exclude-params-in-baseonlyconfig
 
-## TESTS: 41 passed (13 audit KV + 11 merge engine + 9 mappings + 5 patch + 3 error codes), 0.27s
+## TESTS: 59 passed (13 audit KV + 11 merge engine + 9 mappings + 6 groups/xml + 12 review annotations + 5 patch + 3 error codes), 0.46s
 ## PERFORMANCE BASELINES: none measured
-## SONNET TASKS COMPLETED: 0 | OPUS TASKS COMPLETED: 0
+## SONNET TASKS COMPLETED: 1 (S1: 5 findings, 4 exact + 1 corrected by orchestrator) | OPUS TASKS COMPLETED: 0
 
-LAST COMPLETED ACTION: fixes + docs + real-data old/new output diff (scratchpad real.*)
-NEXT ACTION: commit on user approval; then S1 Sonnet review of kv/xml/json processors
+LAST COMPLETED ACTION: commit 52765a3; S1 review verified + real-data exposure measured
+NEXT ACTION: commit approval (groups/comments/review-annotation batch); go-ahead F-012..F-015

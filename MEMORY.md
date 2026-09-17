@@ -62,6 +62,24 @@ node has a duplicate; match = otherwise (incl. commented); extra = key not in ba
 7. **Mapping file is authoritative for base↔release pairs**: one base → many release files and many bases →
    one release file are both valid. Many-to-one uses the KV rule for every processor (KV, XML, JSON): the
    first base listed in the mapping file wins; later bases only add what earlier bases lack.
+9. **KV indexed groups (2026-09-17)**: matched by the `prefix.N.name` subkey when every base and release group
+   has a unique name, else by index (nameless groups such as `server.N.uri` must not append release default
+   hosts). Comma-list headers (`schedule.registry`) = union, base items first. `prefix.count` keeps the base
+   value (sites may run fewer groups on purpose) but is flagged `GROUP_COUNT_MISMATCH` [CMT-MRG-W013] when it
+   differs from the merged total — real data: `schedule.count=3` vs 11 groups in iCampaign fsmapp.properties.
+10. **XML base-only elements**: a named base-only element is inserted even if release has the same tag with
+    other names; `--exclude-params-in-baseonlyconfig` suppresses it (included by default).
+11. **Comments are context; unclear changes are annotated for review (2026-09-17)**: base comment lines are
+    copied next to the parameter they describe, never dropped. Commented-out in base but active in release →
+    release value kept, base comment + in-file `# [CMT-MRG-W014] REVIEW:` annotation (sections: W015 under the
+    header). `#key = value` counts as a commented key only when the key is active in base or release (prose
+    `# Database : text` stays prose — trimming all comments added blank lines to real doc headers). JSON base
+    `{}` vs populated release → release keys taken, flagged W016 (real: icampaignservice openapi-config.json
+    KPI_EP `{}` vs release `{"packet.logger": ""}` — base predates the key); base `[]` → base kept, flagged W016.
+    Tool annotations are not re-read. Base comments equal to the active value are not copied; comment lines are
+    byte-for-byte. Production Java class replaced by release (JAVA_CLASS_NAME_FROM_RELEASE) → in-file W017
+    annotation naming the production class (real: fsmapp.properties executor.class BaseRuleExecutor →
+    EmbeddedRuleExecutor).
 8. **Critical entries are traceable**: every critical report entry is also logged with a `CMT-*` code; an
    unparseable JSON/XML input is critical (`INVALID_JSON` / `INVALID_XML`, exit 1), never silently dropped.
 

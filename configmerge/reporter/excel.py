@@ -176,6 +176,13 @@ def _add_sheet(
             EntryType.DUPLICATE_KEY,
             EntryType.INVALID_JSON,
             EntryType.INVALID_OUTPUT_JSON,
+            EntryType.INVALID_XML,
+            EntryType.PROCESSOR_ERROR,
+            EntryType.AMBIGUOUS_MATCH_SKIPPED,
+            EntryType.GROUP_COUNT_MISMATCH,
+            EntryType.REVIEW_COMMENTED_IN_BASE,
+            EntryType.REVIEW_COMMENTED_SECTION_IN_BASE,
+            EntryType.REVIEW_EMPTY_IN_BASE,
         ):
             font_color, fill_color = _C.RED, _C.RED_BG
         elif row_type == EntryType.BASE_ONLY_PARAMETER_ADDED:

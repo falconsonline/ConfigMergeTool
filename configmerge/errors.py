@@ -62,6 +62,11 @@ CODES: Dict[str, str] = {
     "CMT-MRG-W010": "File in several release dirs; first release dir used",
     "CMT-MRG-W011": "(retired 2026-09-17 — XML many-to-one mapping merges all base files)",
     "CMT-MRG-W012": "(retired 2026-09-17 — JSON many-to-one mapping merges all base files)",
+    "CMT-MRG-W013": "Indexed group count kept from base differs from the merged group total",
+    "CMT-MRG-W014": "KV parameter commented out in base but active in release; review annotation added",
+    "CMT-MRG-W015": "KV section commented out in base but active in release; review annotation added",
+    "CMT-MRG-W016": "JSON empty object/array in base but populated in release; review required ({} takes release keys, [] keeps base)",
+    "CMT-MRG-W017": "KV production Java class name replaced by release class; review annotation added",
     "CMT-MRG-I001": "Mapping: several base files mapped to one release file (first listed wins)",
     "CMT-MRG-I002": "Mapping: one base file mapped to several release files",
     # ── Audit mode ──────────────────────────────────────────────────────
@@ -113,6 +118,11 @@ STRUCTURED_CODES: Dict[Tuple[str, str], str] = {
     ("MAPPING",   "MULTI_BASE"):                 "CMT-MRG-I001",
     ("MAPPING",   "BASE_TO_MANY_RELEASES"):      "CMT-MRG-I002",
     ("KV",        "EMPTY_BASE_OVERRIDE"):        "CMT-MRG-E012",
+    ("KV",        "GROUP_COUNT_MISMATCH"):       "CMT-MRG-W013",
+    ("KV",        "REVIEW_COMMENTED_IN_BASE"):   "CMT-MRG-W014",
+    ("KV",        "REVIEW_COMMENTED_SECTION"):   "CMT-MRG-W015",
+    ("JSON",      "REVIEW_EMPTY_IN_BASE"):       "CMT-MRG-W016",
+    ("KV",        "REVIEW_CLASS_NAME_FROM_RELEASE"): "CMT-MRG-W017",
     ("XML",       "EMPTY_BASE_OVERRIDE"):        "CMT-MRG-E013",
     ("JSON",      "EMPTY_BASE_OVERRIDE"):        "CMT-MRG-E014",
 }

@@ -288,6 +288,10 @@ class EntryType:
     JAVA_CLASS_NAME_FROM_RELEASE        = "JAVA_CLASS_NAME_FROM_RELEASE"
     AMBIGUOUS_MATCH_SKIPPED             = "AMBIGUOUS_MATCH_SKIPPED"
     INVALID_XML                         = "INVALID_XML"
+    GROUP_COUNT_MISMATCH                = "GROUP_COUNT_MISMATCH"
+    REVIEW_COMMENTED_IN_BASE            = "REVIEW_COMMENTED_IN_BASE"
+    REVIEW_COMMENTED_SECTION_IN_BASE    = "REVIEW_COMMENTED_SECTION_IN_BASE"
+    REVIEW_EMPTY_IN_BASE                = "REVIEW_EMPTY_IN_BASE"
 
     # All types that should trigger a non-zero exit code in CI
     CRITICAL_TYPES: Set[str] = {

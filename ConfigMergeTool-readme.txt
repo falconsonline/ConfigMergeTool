@@ -760,6 +760,8 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
     renamed classes, etc.).
     These entries are flagged as JAVA_CLASS_NAME_FROM_RELEASE in the report
     so a reviewer can verify the class name is correct for this environment.
+    The replaced production class is also written directly above the line:
+      # [CMT-MRG-W017] REVIEW: 'executor.class' production value was <class> ...
 
   API version upgrade:
     When base and release values look like different versions of the same
@@ -769,12 +771,41 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
   Shadow sections:
     - If base has an entire section commented out AND release has the same
       section active, output keeps all entries commented (base state wins).
+      A review annotation is written under the section header:
+        # [CMT-MRG-W015] REVIEW: section [X] is commented out in base but active ...
+
+  Commented lines (context):
+    - Base comment lines are copied into the output next to the parameter
+      they describe (never dropped); lines already in release are not duplicated.
+    - "#key=alt" after an active "key=value" in base is kept right after the
+      merged parameter.
+    - A parameter commented out in base but active in release keeps the
+      release value; the base comment and a review annotation are written
+      directly above it for the user to confirm:
+        #key=base-value
+        # [CMT-MRG-W014] REVIEW: 'key' is commented out in base but active ...
+        key=release-value
+    - Spaces around a commented key ("#key = value") are ignored when that key
+      is a real parameter in base or release; prose comments such as
+      "# Database : description" stay plain comments.
+    - Review annotation lines are never copied again when a merged output is
+      used as the base of a later run.
+    - A base comment whose value equals the value now active is not copied
+      (it would only repeat the active line).
+    - Comment lines are emitted byte-for-byte (trailing spaces kept).
 
   Indexed group handling:
     - Keys matching prefix.N.subkey (e.g. schedule.1.name) form indexed groups.
+    - Groups are matched by their "name" subkey (prefix.N.name) when every
+      base and release group has a unique name; otherwise by index N.
+      A release group named like a base group is the same group even at a
+      different index — base values win inside it.
     - Base groups retained; release-only groups appended and renumbered.
-    - prefix.count updated to the final group total.
-    - Comma-separated header values merged as a union of base + release.
+    - prefix.count keeps the base value.  When it differs from the merged
+      group total it is flagged GROUP_COUNT_MISMATCH [CMT-MRG-W013]
+      (highlighted in the report) so the count can be verified.
+    - Comma-separated header values (e.g. schedule.registry) are merged as a
+      union: base items in base order, then release items the base lacks.
 
   Section ordering:
     - Sections follow release file order.
@@ -800,6 +831,11 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
 -------------------
   Deep recursive merge: base values overwrite matching release values at any
   nesting depth.  Release-only keys preserved.
+  An empty object {} or array [] in base with a populated release value is
+  flagged REVIEW_EMPTY_IN_BASE [CMT-MRG-W016] for the user to confirm (report
+  and log only — JSON has no comments):
+    {}  base predates the release keys -> release keys are taken
+    []  base list intentionally empty  -> base (empty) list is kept
   Original indent style is detected (tab or 2/4/8 spaces) and preserved in the output.
   If both base and release string values are Java FQCNs but differ -> RELEASE
   value kept, flagged as JAVA_CLASS_NAME_FROM_RELEASE for reviewer attention.
@@ -1174,6 +1210,10 @@ Merge mode (MergeCategory in Excel / HTML):
   SSTP_RELEASE_COPIED            .sstp routing rule: release file copied as-is
   PROCESSOR_ERROR                Processor encountered an error (review log)
   AMBIGUOUS_MATCH_SKIPPED        Filename matched several base files; file skipped
+  GROUP_COUNT_MISMATCH           Base prefix.count kept but differs from merged group total
+  REVIEW_COMMENTED_IN_BASE       KV param commented in base, active in release; confirm value
+  REVIEW_COMMENTED_SECTION_IN_BASE KV section commented in base, active in release; confirm
+  REVIEW_EMPTY_IN_BASE           JSON {} / [] in base, populated in release; base kept; confirm
 
 
 ================================================================================
@@ -1251,6 +1291,11 @@ Search logs for the code; codes are never renumbered or reused.
   CMT-MRG-W010   File in several release dirs; first release dir used
   CMT-MRG-W011   (retired 2026-09-17 — XML many-to-one mapping merges all base files)
   CMT-MRG-W012   (retired 2026-09-17 — JSON many-to-one mapping merges all base files)
+  CMT-MRG-W013   Indexed group count kept from base differs from the merged group total
+  CMT-MRG-W014   KV parameter commented out in base but active in release; review annotation added
+  CMT-MRG-W015   KV section commented out in base but active in release; review annotation added
+  CMT-MRG-W016   JSON empty object/array in base but populated in release; review required ({} takes release keys, [] keeps base)
+  CMT-MRG-W017   KV production Java class name replaced by release class; review annotation added
   CMT-MRG-I001   Mapping: several base files mapped to one release file (first listed wins)
   CMT-MRG-I002   Mapping: one base file mapped to several release files
   CMT-AUD-E001   Node directory not found; audit aborted

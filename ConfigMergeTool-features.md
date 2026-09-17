@@ -257,8 +257,8 @@ Handles: `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`, `.acl`
 | K-07 | Release-only preservation | Keys in release absent from base kept in output (`RELEASE_ONLY_PARAMETER_ADDED`) |
 | K-08 | Exclude flag | `--exclude-params-in-baseonlyconfig` suppresses K-06 |
 | K-09 | Empty base override | Base value blank → release value forced blank (`EMPTY_BASE_OVERRIDE`) |
-| K-10 | Indexed group handling | `prefix.N.subkey` groups: base groups retained, release-only groups appended with renumbered indices; `prefix.count` updated |
-| K-11 | Comma-list group header | Group header params whose value is a comma-separated name/class list (e.g. `schedule.registry`) use the release value — release adds new registrations |
+| K-10 | Indexed group handling | `prefix.N.subkey` groups matched by `prefix.N.name` when every group has a unique name, else by index; base groups retained, release-only groups appended with renumbered indices; `prefix.count` kept from base and flagged `GROUP_COUNT_MISMATCH` when it differs from the merged total |
+| K-11 | Comma-list group header | Group header params whose value is a comma-separated name/class list (e.g. `schedule.registry`) are merged as a union: base items in order, then release-only items (`COMMA_VALUE_UNION`) |
 | K-12 | Active duplicate detection | Multiple active occurrences of `section\|key` in release → `DUPLICATE_KEY` |
 | K-13 | Shadow section handling | Base `#[SectionName]` merged with release active `[SectionName]`; all output entries remain commented |
 | K-14 | Pre-annotation preservation | `#key=old` before active `key=new` in release emitted verbatim before merged active entry |
@@ -718,6 +718,10 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | `COMMA_VALUE_UNION` | Normal | Comma-separated group header value merged as union of base + release |
 | `JAVA_CLASS_NAME_FROM_RELEASE` | **Review** | Both base and release values are Java FQCNs but differ; release value used — reviewer should verify the class is correct for this environment |
 | `PROCESSOR_ERROR` | **Red/ERROR** | Processor encountered a fatal error for this file (exit 1, `[CMT-MRG-E001]`) |
+| `REVIEW_COMMENTED_IN_BASE` | **Review** | KV parameter commented out in base, active in release: release value kept, base comment + in-file review annotation (`[CMT-MRG-W014]`) |
+| `REVIEW_COMMENTED_SECTION_IN_BASE` | **Review** | KV section commented out in base, active in release: entries kept commented, in-file review annotation under header (`[CMT-MRG-W015]`) |
+| `REVIEW_EMPTY_IN_BASE` | **Review** | JSON `{}` in base, populated in release: release keys taken; `[]` in base: base kept (`[CMT-MRG-W016]`) |
+| `GROUP_COUNT_MISMATCH` | **Review** | KV `prefix.count` kept from base but differs from the merged indexed-group total (`[CMT-MRG-W013]`, highlighted, not critical) |
 | `AMBIGUOUS_MATCH_SKIPPED` | **Red/ERROR** | Release file matched several base files by name only; skipped (exit 1, `[CMT-MRG-E002]`) |
 
 ---
@@ -726,6 +730,9 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-17 | Review follow-up: production Java class replaced by release class → in-file `[CMT-MRG-W017]` annotation with the production value; base comments equal to the active value not copied; commented lines emitted byte-for-byte; JSON base `{}` now takes release keys (flagged), `[]` keeps base |
+| 2026-09-17 | Comments as context: base comment lines copied next to their parameter (alternative values, commented-in-base params); `#key = value` recognised when the key is a real parameter; review annotations `[CMT-MRG-W014]` (param) / `[CMT-MRG-W015]` (section) written into output and never re-copied on later runs; JSON base `{}`/`[]` kept over populated release and flagged `[CMT-MRG-W016]` |
+| 2026-09-17 | KV indexed groups matched by `name` subkey (index fallback); comma-list group headers merged as union (base items then release-only); base `prefix.count` kept but flagged `GROUP_COUNT_MISMATCH` when it differs from the merged total; XML named base-only elements inserted even when release has the same tag with other names (respects `--exclude-params-in-baseonlyconfig`) |
 | 2026-09-17 | Mapping: One-to-Many supported (F-14, warning `CMT-MRG-W006` retired); Many-to-One now merges every base for XML and JSON with the KV first-wins rule (F-06, `W011`/`W012` retired). Unparseable JSON/XML inputs are critical (`INVALID_JSON`/`INVALID_XML`, exit 1) instead of silently missing from output. Empty-base overrides logged with `CMT-MRG-E012`–`E014` |
 | 2026-09-17 | QE fixes: release-only files copied to output (F-10); hidden files ignored (F-13); ambiguous filename matches skipped + exit 1 (F-04); `--output-dir` overlapping inputs refused (F-12); `.sstp` merge no longer fails with PROCESSOR_ERROR and processor failures now exit 1; patch node-name traversal blocked (P-06) and patch exit codes 0/1/2 (P-07); stable error identifiers `CMT-<AREA>-<E\|W\|I><nnn>` on every error/warning (`configmerge/errors.py`) |
 | 2026-09-15 | A-02, A-14–A-16, R-04, R-11: Audit KV compared section by section against the base node — fixes the same parameter shown in two rows (missing above / missing below) and false "missing" for active keys after `#[X]` commented headers; section check on header rows; duplicate-in-section values with line numbers (HTML + Excel "Parameter Diffs") |
