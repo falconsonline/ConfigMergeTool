@@ -27,13 +27,17 @@ No linter/formatter is configured. Version lives in both `configmerge/__init__.p
 `ConfigMergeTool.py` is a shim; `configmerge/cli.py::_main` routes purely by flags, in this order:
 `--feedback-summary` → `--apply-audit-patch` (`AuditPatcher`) → `--audit-config-file` (`AuditEngine`) → merge
 (`MergeEngine`). `--remote-audit` / `--email-config` and `configmerge/workflows/` are Phase 11/12 stubs.
+Every error/warning carries a stable ID from `configmerge/errors.py` (`CMT-<AREA>-<E|W|I><nnn>`; new
+`log_structured` pairs and tagged messages must be registered there and in the readme — `tests/test_error_codes.py`).
 Exit codes: merge returns 1 on `EntryType.CRITICAL_TYPES`; audit returns 1 on any mismatch or render error;
+patch returns 1 when any file was skipped/failed;
 config errors raise `ConfigMergeError` → 2. Node/base JSON configs are arrays; an entry `{"output_dir": ...}`
 without `base_dir` sets the patch output dir; a literal `"password"` key is rejected (use `password_env`).
 
 **Merge** (base values win): `MergeConfig` is normalised to a list of `BaseDirConfig`; each base gets an
 independent pass. `matcher.FileMatcher` resolves release→base files (mapping file → same relative path →
-unique filename; ambiguous names are skipped). `processors/` register per extension via `@register` into
+unique filename; ambiguous names are skipped and critical; hidden files ignored). Release-only files are
+copied to output; `--output-dir` overlapping an input dir is refused. `processors/` register per extension via `@register` into
 `PROCESSOR_REGISTRY`; unregistered extensions go to `GenericProcessor` (copy release file). Processors return
 `ReportEntry` lists consumed by `reporter/excel.py` (one workbook per base) and `reporter/html_reporter.py`
 (one combined HTML).

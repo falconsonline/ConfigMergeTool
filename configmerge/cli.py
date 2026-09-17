@@ -19,11 +19,7 @@ from configmerge import MergeEngine, MergeConfig
 from configmerge.models import BaseDirConfig, EntryType, RemoteConfig
 from configmerge.auditor import AuditEngine, AuditPatcher
 from configmerge.auditor.feedback import print_summary as _print_feedback_summary
-
-
-class ConfigMergeError(Exception):
-    """Raised by helper functions to signal a fatal configuration error."""
-
+from configmerge.errors import ConfigMergeError
 
 def parse_args(argv=None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -138,9 +134,9 @@ def _load_base_configs(path: str):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        raise ConfigMergeError(f"Cannot read config file {path!r}: {e}")
+        raise ConfigMergeError("CMT-CLI-E001", f"Cannot read config file {path!r}: {e}")
     if not isinstance(data, list):
-        raise ConfigMergeError(f"Config file {path!r} must be a JSON array.")
+        raise ConfigMergeError("CMT-CLI-E002", f"Config file {path!r} must be a JSON array.")
 
     # Validate unique node names (Phase 7.5)
     names_seen: set = set()
@@ -150,7 +146,7 @@ def _load_base_configs(path: str):
 
     for i, item in enumerate(data):
         if not isinstance(item, dict):
-            raise ConfigMergeError(f"Entry {i} in {path!r} is not a JSON object.")
+            raise ConfigMergeError("CMT-CLI-E003", f"Entry {i} in {path!r} is not a JSON object.")
 
         # Special entry: {"output_dir": "..."} — no base_dir
         if "output_dir" in item and "base_dir" not in item:
@@ -158,11 +154,12 @@ def _load_base_configs(path: str):
             continue
 
         if "base_dir" not in item:
-            raise ConfigMergeError(f"Entry {i} in {path!r} missing 'base_dir'.")
+            raise ConfigMergeError("CMT-CLI-E004", f"Entry {i} in {path!r} missing 'base_dir'.")
 
         # Security: reject literal "password" key (must use "password_env")
         if "password" in item:
             raise ConfigMergeError(
+                "CMT-CLI-E005",
                 f"Entry {i} in {path!r}: use 'password_env' (name of an environment "
                 "variable) instead of storing a literal 'password' in the config file."
             )
@@ -170,6 +167,7 @@ def _load_base_configs(path: str):
         name = item.get("name", "")
         if name and name in names_seen:
             raise ConfigMergeError(
+                "CMT-CLI-E006",
                 f"Entry {i} in {path!r}: duplicate node name {name!r}. "
                 "Node names must be unique."
             )
@@ -187,10 +185,12 @@ def _load_base_configs(path: str):
             r = item["remote"]
             if not isinstance(r, dict) or "host" not in r:
                 raise ConfigMergeError(
+                    "CMT-CLI-E007",
                     f"Entry {i} in {path!r}: 'remote' must be an object with at least 'host'."
                 )
             if "password" in r:
                 raise ConfigMergeError(
+                    "CMT-CLI-E008",
                     f"Entry {i} in {path!r}: use 'password_env' in remote config "
                     "instead of a literal 'password'."
                 )
@@ -199,6 +199,7 @@ def _load_base_configs(path: str):
                 timeout_secs = int(r.get("timeout_secs", 30))
             except (ValueError, TypeError) as e:
                 raise ConfigMergeError(
+                    "CMT-CLI-E009",
                     f"Entry {i} in {path!r}: 'port' and 'timeout_secs' must be "
                     f"integers: {e}"
                 )
@@ -221,7 +222,7 @@ def _load_base_configs(path: str):
                 remote         = remote,
             ))
         except ValueError as e:
-            raise ConfigMergeError(f"Entry {i} in {path!r}: {e}")
+            raise ConfigMergeError("CMT-CLI-E010", f"Entry {i} in {path!r}: {e}")
     return configs, no_skip_files, output_dir
 
 
@@ -243,20 +244,18 @@ def _main(argv=None) -> int:
 
     # ── Future email-monitor mode (Phase 12) ────────────────────────────
     if args.email_config:
-        print(
-            "[ERROR] --email-config (email-triggered audit) is not yet implemented. "
+        raise ConfigMergeError(
+            "CMT-CLI-E014",
+            "--email-config (email-triggered audit) is not yet implemented. "
             "It will be available in Phase 12.",
-            file=sys.stderr,
         )
-        return 2
 
     # ── Future remote-audit mode (Phase 11) ─────────────────────────────
     if args.remote_audit and not args.audit_config_file:
-        print(
-            "[ERROR] --remote-audit requires --audit-config-file with 'remote' entries.",
-            file=sys.stderr,
+        raise ConfigMergeError(
+            "CMT-CLI-E015",
+            "--remote-audit requires --audit-config-file with 'remote' entries.",
         )
-        return 2
 
     # ── Apply-patch mode ────────────────────────────────────────────────
     if args.apply_audit_patch:
@@ -266,8 +265,8 @@ def _main(argv=None) -> int:
             _, _, patch_output_dir = _load_base_configs(args.audit_config_file)
         # If still empty, AuditPatcher will read output_dir from the patch JSON itself
         patcher = AuditPatcher(args.apply_audit_patch, patch_output_dir)
-        written = patcher.apply()
-        return 0 if written >= 0 else 1
+        patcher.apply()
+        return 1 if patcher.issues else 0
 
     # ── Audit mode ──────────────────────────────────────────────────────
     if args.audit_config_file:
@@ -275,12 +274,11 @@ def _main(argv=None) -> int:
 
         if args.remote_audit:
             # Phase 11: SSHNodeFetcher — not yet implemented
-            print(
-                "[ERROR] --remote-audit SSH connectivity is not yet implemented. "
+            raise ConfigMergeError(
+                "CMT-CLI-E016",
+                "--remote-audit SSH connectivity is not yet implemented. "
                 "It will be available in Phase 11 (pip install \"configmergetool[ssh]\").",
-                file=sys.stderr,
             )
-            return 2
 
         engine = AuditEngine(
             nodes,
@@ -298,40 +296,40 @@ def _main(argv=None) -> int:
 
     # ── Merge mode: validate required args ─────────────────────────────
     if not args.release_dirs:
-        print("[ERROR] --release-dirs is required unless --audit-config-file is provided.",
-              file=sys.stderr)
-        return 2
+        raise ConfigMergeError(
+            "CMT-CLI-E011", "--release-dirs is required unless --audit-config-file is provided.")
     if not args.output_dir:
-        print("[ERROR] --output-dir is required unless --audit-config-file is provided.",
-              file=sys.stderr)
-        return 2
+        raise ConfigMergeError(
+            "CMT-CLI-E012", "--output-dir is required unless --audit-config-file is provided.")
 
     # Build base_configs
-    if args.base_config_file:
-        base_configs, _, _ = _load_base_configs(args.base_config_file)
-        config = MergeConfig(
-            release_dirs      = args.release_dirs,
-            output_dir        = args.output_dir,
-            base_configs      = base_configs,
-            exclude_base_only = args.exclude_params_in_baseonlyconfig,
-            dry_run           = args.dry_run,
-            verbose           = args.verbose,
-        )
-    else:
-        if not args.base_dir:
-            print("[ERROR] --base-dir is required unless --base-config-file is provided.",
-                  file=sys.stderr)
-            return 2
-        config = MergeConfig(
-            release_dirs      = args.release_dirs,
-            output_dir        = args.output_dir,
-            base_dir          = args.base_dir,
-            mapping_file      = args.mapping_file,
-            copy_only_file    = args.copy_baseonlyconfigfile,
-            exclude_base_only = args.exclude_params_in_baseonlyconfig,
-            dry_run           = args.dry_run,
-            verbose           = args.verbose,
-        )
+    try:
+        if args.base_config_file:
+            base_configs, _, _ = _load_base_configs(args.base_config_file)
+            config = MergeConfig(
+                release_dirs      = args.release_dirs,
+                output_dir        = args.output_dir,
+                base_configs      = base_configs,
+                exclude_base_only = args.exclude_params_in_baseonlyconfig,
+                dry_run           = args.dry_run,
+                verbose           = args.verbose,
+            )
+        else:
+            if not args.base_dir:
+                raise ConfigMergeError(
+                    "CMT-CLI-E013", "--base-dir is required unless --base-config-file is provided.")
+            config = MergeConfig(
+                release_dirs      = args.release_dirs,
+                output_dir        = args.output_dir,
+                base_dir          = args.base_dir,
+                mapping_file      = args.mapping_file,
+                copy_only_file    = args.copy_baseonlyconfigfile,
+                exclude_base_only = args.exclude_params_in_baseonlyconfig,
+                dry_run           = args.dry_run,
+                verbose           = args.verbose,
+            )
+    except ValueError as e:
+        raise ConfigMergeError("CMT-CLI-E017", str(e))
 
     engine  = MergeEngine(config, log_dir=args.log_dir, report_dir=args.report_dir)
     results = engine.run()   # List[MergeResult]

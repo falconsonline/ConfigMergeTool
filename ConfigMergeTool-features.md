@@ -213,14 +213,18 @@ Fields: `base_dir` (required), `name`, `no_skip_files` (filenames exempt from ba
 |---|---|---|
 | F-01 | Recursive walk | Both `base_dir` and all `release_dirs` are walked recursively |
 | F-02 | Relative-path match | Release file matched to base file first by identical relative path |
-| F-03 | Filename-only fallback | If relative paths differ, matched by filename alone |
-| F-04 | Ambiguity detection | Same filename in multiple base locations → flagged ambiguous, skipped with WARNING |
+| F-03 | Filename-only fallback | If relative paths differ, matched by filename alone — only when that filename is unique in base |
+| F-04 | Ambiguity detection | Same filename in multiple base locations (no mapping, no same-path match) → file skipped, `AMBIGUOUS_MATCH_SKIPPED` reported, `[CMT-MRG-E002]` logged, exit 1. Resolve with `--mapping-file` |
 | F-05 | Explicit mapping | `--mapping-file` maps base paths to differently-named release paths |
-| F-06 | Many-to-One mapping | Multiple base paths may map to one release path; all merged in order |
+| F-06 | Many-to-One mapping | Multiple base paths may map to one release path — KV, XML and JSON: first base listed in the mapping file wins, later bases only add what earlier bases lack (`CMT-MRG-I001`) |
+| F-14 | One-to-Many mapping | One base path may map to several release paths; each release file is merged from it (`CMT-MRG-I002`) |
+| F-15 | Unique filename fallback output | A unique filename-only match writes the merged file at the base file's relative path (confirmed intended 2026-09-17) |
 | F-07 | Copy-only bypass | Files in `--copy-baseonlyconfigfile` copied from base without processing |
 | F-08 | Path traversal guard | Paths canonicalised with `safe_realpath()`; must remain within `base_dir` |
 | F-09 | Output dir cleanup | Output dir removed and recreated before each run (skipped in `--dry-run`) |
-| F-10 | Release-only detection | Release files with no base counterpart noted in ReleaseOnlyFiles sheet |
+| F-12 | Output dir overlap guard | `--output-dir` equal to, containing, or inside any base/release dir → run refused before anything is deleted, `[CMT-MRG-E010]`, exit 2 (also in `--dry-run`) |
+| F-10 | Release-only files | Release files with no base counterpart are copied to output as-is and listed in the ReleaseOnlyFiles sheet (`[CMT-MRG-W001]`) |
+| F-13 | Hidden files ignored | Files whose name starts with `.` (e.g. `.DS_Store`) are ignored in base and release, like hidden directories |
 | F-11 | Flexible path format | Mapping and copy-only files accept full working-directory paths, base-dir-name-prefixed paths, or bare paths |
 
 ---
@@ -300,7 +304,7 @@ Handles: `.properties`, `.cfg`, `.ini`, `.conf`, `.sh`, `.acl`
 | J-02 | Release-only preservation | Keys only in release at any depth retained |
 | J-03 | Empty-base override | Base value `""` → release forced `""` (`JSON_EMPTY_BASE_OVERRIDE`) |
 | J-04 | Duplicate key detection | Custom object-pairs hook detects duplicate keys; last wins |
-| J-05 | Input validation | Both files validated before merge; invalid → `INVALID_JSON` |
+| J-05 | Input validation | Every base and the release file validated before merge; invalid/empty → `INVALID_JSON` (critical, exit 1), file skipped |
 | J-06 | Output validation | Merged JSON re-parsed; invalid → discarded + `INVALID_OUTPUT_JSON` |
 | J-07 | Indent preservation | Original indent style detected from the release file (tab or 2/4/8 spaces); output uses the same style (not forced to 2 spaces) |
 | J-08 | Encoding-aware read | `open_text()` tries utf-8-sig → chardet → latin-1 fallback |
@@ -607,6 +611,8 @@ Activated with `--apply-audit-patch <patch.json> --output-dir <dir>`.
 | P-03 | JSON patching | Deep path substitution into original JSON; preserves file structure |
 | P-04 | Corrections log | Writes `corrections.log` alongside patched files |
 | P-05 | CRLF safe | Output written with `newline="\n"` |
+| P-06 | Node name guard | A node name that is not a plain directory name (`..`, contains `/` or `\`) is skipped with `[CMT-PAT-E008]` — patch files cannot write outside `--output-dir` |
+| P-07 | Exit codes | 0 = all changes written; 1 = some files skipped/failed (`CMT-PAT-E005`–`E009`); 2 = patch unreadable, missing fields, malformed change or no changes (`CMT-PAT-E001`–`E004`) |
 
 ---
 
@@ -704,13 +710,15 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | `DUPLICATE_KEY` | **Red** | Duplicate active key in **release** file; last value used |
 | `INVALID_JSON` | **Red** | Input file contains invalid JSON; file skipped |
 | `INVALID_OUTPUT_JSON` | **Red** | Merged JSON failed re-validation; output discarded |
+| `INVALID_XML` | **Red** | Base or release XML cannot be parsed; file skipped (exit 1, `[CMT-MRG-E007]`) |
 | `FILE_MAPPING` | Normal | Explicit file mapping from `--mapping-file` applied |
 | `NAMESPACE_ADAPTED` | Normal | XML namespace updated from release declarations |
 | `INDEXED_GROUP_RENUMBERED` | Normal | Indexed group entries (e.g. `schedule.N.x`) renumbered |
 | `INDEXED_GROUP_APPENDED` | Normal | Release-only indexed groups appended after base groups |
 | `COMMA_VALUE_UNION` | Normal | Comma-separated group header value merged as union of base + release |
 | `JAVA_CLASS_NAME_FROM_RELEASE` | **Review** | Both base and release values are Java FQCNs but differ; release value used — reviewer should verify the class is correct for this environment |
-| `PROCESSOR_ERROR` | **Red/ERROR** | Processor encountered a fatal error for this file |
+| `PROCESSOR_ERROR` | **Red/ERROR** | Processor encountered a fatal error for this file (exit 1, `[CMT-MRG-E001]`) |
+| `AMBIGUOUS_MATCH_SKIPPED` | **Red/ERROR** | Release file matched several base files by name only; skipped (exit 1, `[CMT-MRG-E002]`) |
 
 ---
 
@@ -718,6 +726,8 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-17 | Mapping: One-to-Many supported (F-14, warning `CMT-MRG-W006` retired); Many-to-One now merges every base for XML and JSON with the KV first-wins rule (F-06, `W011`/`W012` retired). Unparseable JSON/XML inputs are critical (`INVALID_JSON`/`INVALID_XML`, exit 1) instead of silently missing from output. Empty-base overrides logged with `CMT-MRG-E012`–`E014` |
+| 2026-09-17 | QE fixes: release-only files copied to output (F-10); hidden files ignored (F-13); ambiguous filename matches skipped + exit 1 (F-04); `--output-dir` overlapping inputs refused (F-12); `.sstp` merge no longer fails with PROCESSOR_ERROR and processor failures now exit 1; patch node-name traversal blocked (P-06) and patch exit codes 0/1/2 (P-07); stable error identifiers `CMT-<AREA>-<E\|W\|I><nnn>` on every error/warning (`configmerge/errors.py`) |
 | 2026-09-15 | A-02, A-14–A-16, R-04, R-11: Audit KV compared section by section against the base node — fixes the same parameter shown in two rows (missing above / missing below) and false "missing" for active keys after `#[X]` commented headers; section check on header rows; duplicate-in-section values with line numbers (HTML + Excel "Parameter Diffs") |
 | 2026-04-10 | **v2.0.1 released** — patch release covering all KV, JSON, XML, and output-format fixes from 2026-04-09–10 |
 | 2026-04-10 | J-11: Primitive array inline format — `_collapse_primitive_arrays()` post-processes `json.dumps` output; arrays with no nested objects/arrays collapsed to single line (e.g. `["oauth2"]` not expanded to multi-line) |

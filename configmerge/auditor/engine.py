@@ -63,6 +63,7 @@ _BACKUP_SUFFIX_RE = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
+from ..errors import tag
 from ..models import BaseDirConfig
 from ..processors.kv import _has_valid_kv_key, _is_kv_line, _split_kv
 from ..utils import open_text, file_sha256
@@ -272,7 +273,7 @@ class AuditEngine:
             try:
                 self._logical_patterns.append(re.compile(pat, re.IGNORECASE))
             except re.error as exc:
-                print(f"[WARN] Invalid logical_diff_pattern {pat!r}: {exc}")
+                print(tag("CMT-AUD-W001", f"[WARN] Invalid logical_diff_pattern {pat!r}: {exc}"))
 
     # ------------------------------------------------------------------
     # Structured logger (writes to audit.log in run_dir)
@@ -319,8 +320,9 @@ class AuditEngine:
         # 7.3: Pre-run node directory validation
         for node in self.nodes:
             if not os.path.isdir(node.base_dir):
-                msg = (f"[ERROR] Node '{node.name}': directory {node.base_dir!r} not found. "
-                       "Aborting.")
+                msg = tag("CMT-AUD-E001",
+                          f"[ERROR] Node '{node.name}': directory {node.base_dir!r} not found. "
+                          "Aborting.")
                 print(msg, flush=True)
                 self._log("ERROR", msg)
                 self._flush_log()
@@ -361,11 +363,11 @@ class AuditEngine:
                 af = self._compare_file(rel_path, present_in, abs_paths, node_names)
             except Exception as exc:
                 tb = traceback.format_exc()
-                self._log("ERROR", f"Processing error for {rel_path}: {exc}")
+                self._log("ERROR", tag("CMT-AUD-E002", f"Processing error for {rel_path}: {exc}"))
                 render_errors.append({
                     "rel_path":  rel_path,
                     "present_in": present_in,
-                    "error":     str(exc),
+                    "error":     tag("CMT-AUD-E002", str(exc)),
                     "traceback": tb,
                 })
                 af = AuditFile(
@@ -453,9 +455,9 @@ class AuditEngine:
             with open(lw_path, "w", encoding="utf-8", newline="\n") as f:
                 json.dump(log_warnings, f, indent=2)
             self._log("WARN ",
-                      f"[LOG NAMES] {len(log_warnings)} duplicate log prefix(es) "
+                      f"[CMT-AUD-W008] [LOG NAMES] {len(log_warnings)} duplicate log prefix(es) "
                       f"detected — see feedback/log_name_warnings.json")
-            print(f"[LOG NAMES]      {len(log_warnings)} duplicate log prefix(es) "
+            print(f"[CMT-AUD-W008] [LOG NAMES] {len(log_warnings)} duplicate log prefix(es) "
                   f"— {lw_path}", flush=True)
 
         # 3c. Write skipped-backups feedback (Phase 3.2)
@@ -690,7 +692,7 @@ class AuditEngine:
                 json.dump(history, hf, indent=2)
         except Exception as _fh_exc:
             # Feedback history is advisory — never abort the run, but do warn
-            self._log("WARN ", f"Could not write feedback history: {_fh_exc}")
+            self._log("WARN ", tag("CMT-AUD-W002", f"Could not write feedback history: {_fh_exc}"))
 
     # ------------------------------------------------------------------
     # Backup-file detection helpers
@@ -866,7 +868,7 @@ class AuditEngine:
                 text    = open_text(path)
                 docs[node] = SstpParser.parse(text)
             except Exception as exc:
-                warnings.append(f"{node}: SSTP parse error — {exc}")
+                warnings.append(f"{node}: [CMT-AUD-W003] SSTP parse error — {exc}")
                 docs[node] = None
 
         # Build union of all block compounds
@@ -966,13 +968,13 @@ class AuditEngine:
             try:
                 text = open_text(abs_paths[node])  # BUG-B: encoding-aware read
             except OSError as exc:
-                warnings.append(f"{node}: read error — {exc}")
+                warnings.append(f"{node}: [CMT-AUD-W005] read error — {exc}")
                 raw_content[node] = ""
                 continue
             if len(text.encode("utf-8", errors="replace")) > _MAX_RAW_BYTES:
                 raw_content[node] = text[:_MAX_RAW_BYTES]
                 warnings.append(
-                    f"{node}: raw content truncated at {_MAX_RAW_BYTES // 1024} KB"
+                    f"{node}: [CMT-AUD-W006] raw content truncated at {_MAX_RAW_BYTES // 1024} KB"
                 )
             else:
                 raw_content[node] = text
@@ -1026,7 +1028,7 @@ class AuditEngine:
 
                 for node in dup_values:
                     where = ", ".join(f"L{ln}" for ln in lines[node])
-                    warnings.append(f"{node}: '{key}' duplicated in {sec} ({where})")
+                    warnings.append(f"{node}: '{key}' duplicated in {sec} ({where}) [CMT-AUD-W007]")
 
                 active_vals = {v for n, v in values.items()
                                if not commented[n] and v is not None}
@@ -1115,10 +1117,10 @@ class AuditEngine:
                         key_order.append(k)
                     flat[k][node] = v
             except json.JSONDecodeError as exc:
-                warnings.append(f"{node}: invalid JSON — {exc}")
+                warnings.append(f"{node}: [CMT-AUD-W004] invalid JSON — {exc}")
                 raw_content.setdefault(node, "")
             except Exception as exc:
-                warnings.append(f"{node}: read error — {exc}")
+                warnings.append(f"{node}: [CMT-AUD-W005] read error — {exc}")
                 raw_content.setdefault(node, "")
 
         params: List[AuditParam] = []
@@ -1209,13 +1211,13 @@ class AuditEngine:
 
                 if len(text.encode("utf-8", errors="replace")) > _MAX_RAW_BYTES:
                     raw_content[node] = text[:_MAX_RAW_BYTES] + "\n[...truncated...]"
-                    warnings.append(f"{node}: display truncated at {_MAX_RAW_BYTES // 1024} KB")
+                    warnings.append(f"{node}: [CMT-AUD-W006] display truncated at {_MAX_RAW_BYTES // 1024} KB")
                 else:
                     raw_content[node] = text
 
             except OSError as exc:
                 md5_vals[node] = None
-                warnings.append(f"{node}: read error — {exc}")
+                warnings.append(f"{node}: [CMT-AUD-W005] read error — {exc}")
 
         present_md5s = {v for n, v in md5_vals.items()
                         if n in present_in and v is not None}

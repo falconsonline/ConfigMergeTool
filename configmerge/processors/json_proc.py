@@ -129,6 +129,17 @@ def _detect_duplicates(
     return report
 
 
+def _add_missing_keys(target: Any, extra: Any) -> None:
+    """Recursively copy keys from *extra* that *target* lacks (existing values are kept)."""
+    if not isinstance(target, dict) or not isinstance(extra, dict):
+        return
+    for k, v in extra.items():
+        if k not in target:
+            target[k] = v
+        else:
+            _add_missing_keys(target[k], v)
+
+
 def _merge(
     base: Any, rel: Any, path: str, rel_file: str, report: List[ReportEntry]
 ) -> None:
@@ -226,26 +237,38 @@ class JSONProcessor(BaseProcessor):
         logger.info(f"[JSON] {rel_file}")
         report: List[ReportEntry] = []
 
-        # MOD-2: warn if multiple base files supplied (not yet supported for JSON)
-        if len(base_files) > 1:
-            logger.warning(
-                f"[JSON] {rel_file}: multi-base merge not fully supported for JSON — "
-                f"using base_files[0] only; {len(base_files) - 1} additional base(s) ignored"
-            )
-
         # BUG-G: detect original indent width for fidelity-preserving output
         rel_raw  = open_text(rel_file)
         rel_indent = _detect_indent(rel_raw)
 
-        base = _safe_load_json(base_files[0], "BASE", rel_file, logger)
-        rel  = json.loads(rel_raw) if rel_raw.strip() else None
+        # Many-to-One: the first base (mapping-file order) wins; later bases only add
+        # keys the earlier ones lack — same rule as the KV processor.
+        bases = [_safe_load_json(bf, "BASE", rel_file, logger) for bf in base_files]
+        rel   = _safe_load_json(rel_file, "RELEASE", rel_file, logger)
 
-        if base is None or rel is None:
+        if rel is None or any(b is None for b in bases):
+            bad = [f for f, b in zip(base_files, bases) if b is None] + ([rel_file] if rel is None else [])
+            report.append(ReportEntry(
+                type=EntryType.INVALID_JSON,
+                file=rel_file,
+                element="",
+                old=", ".join(bad),
+                new="SKIPPED",
+            ))
             return report
 
-        report.extend(_detect_duplicates(base_files[0], rel_file, logger))
+        base = bases[0]
+        for extra in bases[1:]:
+            _add_missing_keys(base, extra)
+
+        for bf in base_files:
+            report.extend(_detect_duplicates(bf, rel_file, logger))
 
         _merge(base, rel, "", rel_file, report)
+        for entry in report:
+            if entry.type == EntryType.JSON_EMPTY_BASE_OVERRIDE:
+                log_structured(logger, "ERROR", "JSON", "EMPTY_BASE_OVERRIDE", rel_file, entry.element,
+                               "base value empty — release value forced empty; review required")
         _find_release_only(base, rel, "", rel_file, report)
 
         # Output validation

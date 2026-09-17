@@ -1136,6 +1136,10 @@ class KVProcessor(BaseProcessor):
 
         out_lines, merge_report = merge_kv(base_doc, rel_doc, rel_file, config, logger)
         report.extend(merge_report)
+        for entry in merge_report:
+            if entry.type == EntryType.EMPTY_BASE_OVERRIDE:
+                log_structured(logger, "ERROR", "KV", "EMPTY_BASE_OVERRIDE", rel_file, entry.element,
+                               "base value empty — release value forced empty; review required")
 
         # Preserve trailing blank line: if the release file ends with a blank line
         # (i.e. \n\n at EOF), the merged output must too.  merge_kv strips all

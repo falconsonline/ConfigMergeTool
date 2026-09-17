@@ -46,6 +46,27 @@ node has a duplicate; match = otherwise (incl. commented); extra = key not in ba
 
 ---
 
+## Merge output, matching and error identifiers (confirmed 2026-09-17)
+
+1. **Release-only files** (no base counterpart) are copied to the output as-is — the output dir must be
+   deployment-complete. Real data: 12 such files per iCampaign node (e.g. `config/dbtocsv.properties`).
+2. **Hidden files** (name starts with `.`, e.g. `.DS_Store`) are ignored on both sides, like hidden dirs.
+3. **Ambiguous filename match** (no mapping, no same-path match, several base files share the name) → the file
+   is skipped, not merged and not copied; `AMBIGUOUS_MATCH_SKIPPED` is critical (exit 1). Resolve with a mapping.
+   A *unique* filename-only match writes the merged file at the base path — confirmed intended.
+4. **--output-dir overlapping** any base/release dir (equal, parent or child) is refused with exit 2 before
+   anything is deleted — also in --dry-run.
+5. **Error identifiers**: every error/warning carries `CMT-<CLI|MRG|AUD|PAT>-<E|W|I><nnn>` from
+   `configmerge/errors.py`; codes are never renumbered/reused and are listed in the readme.
+6. **Patch exit codes**: 0 all written, 1 some files skipped/failed, 2 invalid patch or nothing to apply.
+7. **Mapping file is authoritative for base↔release pairs**: one base → many release files and many bases →
+   one release file are both valid. Many-to-one uses the KV rule for every processor (KV, XML, JSON): the
+   first base listed in the mapping file wins; later bases only add what earlier bases lack.
+8. **Critical entries are traceable**: every critical report entry is also logged with a `CMT-*` code; an
+   unparseable JSON/XML input is critical (`INVALID_JSON` / `INVALID_XML`, exit 1), never silently dropped.
+
+---
+
 ## Working rules
 
 - **Data first, no assumptions (2026-09-15).** Before proposing a plan, share a snapshot with actual data,

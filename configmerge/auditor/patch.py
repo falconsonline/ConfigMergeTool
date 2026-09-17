@@ -32,6 +32,7 @@ import re
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from ..errors import ConfigMergeError, tag
 from ..utils import safe_realpath
 
 
@@ -68,14 +69,22 @@ class AuditPatcher:
     def __init__(self, patch_file: str, output_dir: str = ""):
         self.patch_file = patch_file
         self.output_dir = output_dir  # may be empty; resolved in apply() from patch JSON
+        self.issues     = 0           # changes skipped or failed during apply()
 
     # ------------------------------------------------------------------
 
     def apply(self) -> int:
-        """Apply patch. Returns number of files written."""
+        """Apply patch. Returns number of files written; skipped/failed files are counted
+        in ``self.issues``.  Raises ConfigMergeError when the patch is invalid or empty."""
         patch      = self._load_patch()
         node_dirs  = patch['node_dirs']
-        changes    = [PatchChange(c) for c in patch['changes']]
+        changes    = []
+        for i, raw in enumerate(patch['changes']):
+            try:
+                changes.append(PatchChange(raw))
+            except (KeyError, TypeError, AttributeError) as exc:
+                raise ConfigMergeError(
+                    "CMT-PAT-E003", f"Patch change #{i} is malformed (missing/invalid {exc})")
         audit_run  = patch.get('audit_run', 'unknown')
 
         # Resolve output_dir: CLI arg wins → config/patch field → default to run_dir/corrections
@@ -86,8 +95,7 @@ class AuditPatcher:
             print(f"[PATCH] No output_dir specified — defaulting to: {output_dir}")
 
         if not changes:
-            print("[PATCH] No changes in patch file — nothing to do.")
-            return 0
+            raise ConfigMergeError("CMT-PAT-E004", "No changes in patch file — nothing to apply.")
 
         os.makedirs(output_dir, exist_ok=True)
 
@@ -103,24 +111,29 @@ class AuditPatcher:
         for (node, rel_path), file_changes in sorted(by_node_file.items()):
             file_type = file_changes[0].file_type
 
+            # The node name becomes a directory under output_dir — it must be a plain name
+            if not _is_plain_dir_name(node):
+                self._issue(log_lines, tag("CMT-PAT-E008",
+                    f"[ERROR] Skipping {node!r}/{rel_path}: node name must be a plain directory name"))
+                continue
+
             # Source file path from patch node_dirs
             src_dir = node_dirs.get(node)
             if not src_dir:
-                warn = f"[WARN] Node '{node}' not found in patch node_dirs — skipping"
-                print(warn)
-                log_lines.append(warn)
+                self._issue(log_lines, tag("CMT-PAT-E005",
+                    f"[ERROR] Node '{node}' not found in patch node_dirs — skipping"))
                 continue
 
             # Guard against path traversal (e.g. rel_path containing "../")
             if os.path.isabs(rel_path):
-                warn = f"[WARN] Skipping {node}/{rel_path}: rel_path must be relative"
-                print(warn); log_lines.append(warn)
+                self._issue(log_lines, tag("CMT-PAT-E006",
+                    f"[ERROR] Skipping {node}/{rel_path}: rel_path must be relative"))
                 continue
             src_path = safe_realpath(src_dir, rel_path)
             dst_path = safe_realpath(os.path.join(output_dir, node), rel_path)
             if src_path is None or dst_path is None:
-                warn = f"[WARN] Skipping {node}/{rel_path}: path traversal detected"
-                print(warn); log_lines.append(warn)
+                self._issue(log_lines, tag("CMT-PAT-E007",
+                    f"[ERROR] Skipping {node}/{rel_path}: path traversal detected"))
                 continue
             os.makedirs(os.path.dirname(dst_path), exist_ok=True)
 
@@ -129,9 +142,7 @@ class AuditPatcher:
                     src_path, rel_path, file_type, node, file_changes
                 )
             except Exception as exc:
-                warn = f"[ERROR] {node}/{rel_path}: {exc}"
-                print(warn)
-                log_lines.append(warn)
+                self._issue(log_lines, tag("CMT-PAT-E009", f"[ERROR] {node}/{rel_path}: {exc}"))
                 continue
 
             with open(dst_path, "w", encoding="utf-8", newline="") as f:
@@ -177,12 +188,18 @@ class AuditPatcher:
             with open(self.patch_file, encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError) as exc:
-            raise SystemExit(f"[ERROR] Cannot read patch file {self.patch_file!r}: {exc}")
-        required = ('node_dirs', 'changes')
-        for r in required:
-            if r not in data:
-                raise SystemExit(f"[ERROR] Patch JSON missing field '{r}'")
+            raise ConfigMergeError("CMT-PAT-E001", f"Cannot read patch file {self.patch_file!r}: {exc}")
+        if not isinstance(data, dict):
+            raise ConfigMergeError("CMT-PAT-E002", "Patch JSON must be an object")
+        for field in ('node_dirs', 'changes'):
+            if field not in data:
+                raise ConfigMergeError("CMT-PAT-E002", f"Patch JSON missing field '{field}'")
         return data
+
+    def _issue(self, log_lines: List[str], msg: str) -> None:
+        self.issues += 1
+        print(msg)
+        log_lines.append(msg)
 
     def _log_header(self, audit_run: str, n_changes: int, n_files: int,
                     output_dir: str) -> List[str]:
@@ -368,3 +385,9 @@ class AuditPatcher:
                     cur[last] = c.corrected
 
         return json.dumps(obj, indent=2, ensure_ascii=False) + '\n'
+
+
+def _is_plain_dir_name(name: str) -> bool:
+    """True for a single path component such as ``APP-01`` (no separators, not ``.``/``..``)."""
+    seps = {"/", "\\", os.sep} | ({os.altsep} if os.altsep else set())
+    return bool(name) and name not in (".", "..") and not any(sep in name for sep in seps)

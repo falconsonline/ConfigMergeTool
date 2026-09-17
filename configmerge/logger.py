@@ -14,6 +14,8 @@ import os
 import sys
 from datetime import datetime
 
+from .errors import STRUCTURED_CODES
+
 
 def setup_logging(verbose: bool = False, log_dir: str = "logs") -> logging.Logger:
     """
@@ -94,9 +96,11 @@ def log_structured(
     message: str = "",
 ) -> None:
     """
-    Emit a structured log line:
-        [TYPE][ACTION][SEVERITY][FILE][ELEMENT] message
+    Emit a structured log line prefixed with the stable error identifier:
+        [CMT-MRG-E001][TYPE][ACTION][SEVERITY][FILE][ELEMENT] message
     """
-    log_msg = f"[{ftype}][{action}][{severity}][{file}][{element}] {message}"
+    code    = STRUCTURED_CODES.get((ftype, action))
+    prefix  = f"[{code}]" if code else ""
+    log_msg = f"{prefix}[{ftype}][{action}][{severity}][{file}][{element}] {message}"
     level   = _LEVEL_MAP.get(severity.upper(), "debug")
     getattr(logger, level)(log_msg)

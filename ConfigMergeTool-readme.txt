@@ -191,6 +191,12 @@ Option details:
   --output-dir PATH
       Directory where merged config files are written.
       Cleaned and recreated on every run (skipped with --dry-run).
+      Must not be, contain, or sit inside any base or release directory —
+      such runs are refused before anything is deleted [CMT-MRG-E010], exit 2.
+      Release files with no base counterpart are copied here as-is.
+      Hidden files (names starting with '.') are ignored.
+      A release file matched by filename to several base files is skipped
+      [CMT-MRG-E002] — add a --mapping-file entry to choose the base.
 
   --base-config-file PATH
       JSON file listing multiple base directories (one pass per node).
@@ -601,10 +607,21 @@ Example — mapping-file.txt:
   base/config/db-primary.properties = release/config/database.properties
   base/config/db-replica.properties = release/config/database.properties
 
-Many-to-One mapping:
-  Multiple base files can map to a single release file.  All base files
-  are merged in order into one output file.  The Excel FileMappings sheet
-  lists all applied mappings.
+  # One-to-Many: one base file merges into two release files
+  base/config/common.properties = release/config/app1.properties
+  base/config/common.properties = release/config/app2.properties
+
+Many-to-One mapping (KV, XML and JSON):
+  Multiple base files can map to a single release file.  Base files are
+  applied in the order their lines appear in the mapping file: the FIRST
+  base listed wins for any parameter/element/key several bases define;
+  later bases only add what the earlier bases lack.  [CMT-MRG-I001]
+
+One-to-Many mapping:
+  One base file can map to several release files; each release file is
+  merged from that base independently.  [CMT-MRG-I002]
+
+The Excel FileMappings sheet lists all applied mappings.
 
 
 ================================================================================
@@ -1083,8 +1100,8 @@ Step 2 — Apply the patch:
   A  corrections.log  lists every change applied.
 
 Exit codes:
-  0  -- patch applied successfully with no warnings
-  1  -- mismatches remain after applying patch (review corrections.log)
+  0  -- every change in the patch was written
+  1  -- some files were skipped or failed (review corrections.log)
   2  -- patch file invalid or no changes to apply
 
 
@@ -1144,7 +1161,8 @@ Merge mode (MergeCategory in Excel / HTML):
   LOGROTATE_EMPTY_BASE_OVERRIDE  *** Logrotate: base file empty -- review required ***
 
   DUPLICATE_KEY                  Duplicate ACTIVE key in release file
-  INVALID_JSON                   Input file contains invalid JSON
+  INVALID_JSON                   Input file contains invalid JSON; file skipped
+  INVALID_XML                    Input file contains invalid XML; file skipped
   INVALID_OUTPUT_JSON            Merged JSON output failed validation
   FILE_MAPPING                   Explicit mapping from --mapping-file applied
   BASE_ONLY_FILE_COPIED          File copied as-is from --copy-baseonlyconfigfile
@@ -1155,6 +1173,7 @@ Merge mode (MergeCategory in Excel / HTML):
   COMMA_VALUE_UNION              Comma-separated group header value merged as union
   SSTP_RELEASE_COPIED            .sstp routing rule: release file copied as-is
   PROCESSOR_ERROR                Processor encountered an error (review log)
+  AMBIGUOUS_MATCH_SKIPPED        Filename matched several base files; file skipped
 
 
 ================================================================================
@@ -1164,16 +1183,96 @@ Merge mode (MergeCategory in Excel / HTML):
 Merge mode:
   0  -- merge completed; no EMPTY_BASE_OVERRIDE or critical errors
   1  -- one or more critical issues found (EMPTY_BASE_OVERRIDE, INVALID_JSON,
-         PROCESSOR_ERROR); review the Excel report
+         INVALID_XML, PROCESSOR_ERROR, AMBIGUOUS_MATCH_SKIPPED); review the
+         Excel report.  Each critical entry is also logged with its [CMT-*] code.
+  2  -- invalid arguments/config, or --output-dir overlaps an input directory
 
 Audit mode:
   0  -- audit completed; all nodes match (or all differences are logical diffs)
   1  -- one or more mismatches found between nodes; review audit_report.html
 
 Patch mode:
-  0  -- patch applied successfully
-  1  -- residual mismatches after patch
-  2  -- patch invalid or nothing to apply
+  0  -- every change in the patch was written
+  1  -- some files were skipped or failed (CMT-PAT-E005..E009); see corrections.log
+  2  -- patch unreadable, missing fields, malformed change, or no changes
+         (CMT-PAT-E001..E004)
+
+
+================================================================================
+ ERROR IDENTIFIERS
+================================================================================
+
+Every error and warning line carries a stable identifier for traceability, e.g.
+  [CMT-MRG-E002][FILE][AMBIGUOUS_MATCH][ERROR][new/dup.properties] ...
+Search logs for the code; codes are never renumbered or reused.
+  CLI = arguments/config files   MRG = merge   AUD = audit   PAT = apply patch
+  E = error   W = warning   I = informational
+
+  CMT-CLI-E001   Config file cannot be read or is not valid JSON
+  CMT-CLI-E002   Config file is not a JSON array
+  CMT-CLI-E003   Config entry is not a JSON object
+  CMT-CLI-E004   Config entry is missing 'base_dir'
+  CMT-CLI-E005   Config entry contains a literal 'password' (use 'password_env')
+  CMT-CLI-E006   Duplicate node name in config file
+  CMT-CLI-E007   'remote' is not an object with 'host'
+  CMT-CLI-E008   'remote' contains a literal 'password' (use 'password_env')
+  CMT-CLI-E009   'port' / 'timeout_secs' are not integers
+  CMT-CLI-E010   Config entry failed validation (e.g. directory not found)
+  CMT-CLI-E011   --release-dirs is required
+  CMT-CLI-E012   --output-dir is required
+  CMT-CLI-E013   --base-dir is required
+  CMT-CLI-E014   --email-config is not yet implemented
+  CMT-CLI-E015   --remote-audit requires --audit-config-file
+  CMT-CLI-E016   --remote-audit SSH connectivity is not yet implemented
+  CMT-CLI-E017   Merge arguments failed validation (e.g. directory not found)
+  CMT-MRG-E001   Processor failed for a file
+  CMT-MRG-E002   Ambiguous filename match: several base candidates, file skipped
+  CMT-MRG-E003   Invalid JSON input
+  CMT-MRG-E004   Merged JSON output is invalid
+  CMT-MRG-E005   Empty JSON file
+  CMT-MRG-E006   JSON file cannot be read
+  CMT-MRG-E007   Invalid XML input
+  CMT-MRG-E008   XML file cannot be read
+  CMT-MRG-E009   Logrotate base file is empty; output forced empty
+  CMT-MRG-E010   --output-dir overlaps a base or release directory; run refused
+  CMT-MRG-E011   SSTP release file missing
+  CMT-MRG-E012   KV base value empty; release value forced empty (EMPTY_BASE_OVERRIDE)
+  CMT-MRG-E013   XML base element empty; release element forced empty (EMPTY_BASE_OVERRIDE_XML)
+  CMT-MRG-E014   JSON base value empty; release value forced empty (JSON_EMPTY_BASE_OVERRIDE)
+  CMT-MRG-W001   Release file has no base counterpart; copied from release
+  CMT-MRG-W002   Release file resolves outside its release directory; skipped
+  CMT-MRG-W003   Copy-only base file not found; skipped
+  CMT-MRG-W004   Copy-only entry escapes the base directory; skipped
+  CMT-MRG-W005   Mapping entry escapes the base directory; skipped
+  CMT-MRG-W006   (retired 2026-09-17 — one base → several release files is supported, see CMT-MRG-I002)
+  CMT-MRG-W007   Mapping: mapped base file not found
+  CMT-MRG-W008   XML duplicate key
+  CMT-MRG-W009   File in several release dirs; dir matching the base name selected
+  CMT-MRG-W010   File in several release dirs; first release dir used
+  CMT-MRG-W011   (retired 2026-09-17 — XML many-to-one mapping merges all base files)
+  CMT-MRG-W012   (retired 2026-09-17 — JSON many-to-one mapping merges all base files)
+  CMT-MRG-I001   Mapping: several base files mapped to one release file (first listed wins)
+  CMT-MRG-I002   Mapping: one base file mapped to several release files
+  CMT-AUD-E001   Node directory not found; audit aborted
+  CMT-AUD-E002   File could not be compared (render error)
+  CMT-AUD-W001   Invalid logical_diff_pattern regex ignored
+  CMT-AUD-W002   Feedback history could not be written
+  CMT-AUD-W003   SSTP parse error on a node
+  CMT-AUD-W004   Invalid JSON on a node
+  CMT-AUD-W005   File cannot be read on a node
+  CMT-AUD-W006   Raw/display content truncated
+  CMT-AUD-W007   Same key duplicated within one section on a node
+  CMT-AUD-W008   Duplicate log-name prefixes detected
+  CMT-AUD-W009   Generated HTML report failed the sanity check
+  CMT-PAT-E001   Patch file cannot be read or is not valid JSON
+  CMT-PAT-E002   Patch JSON is missing a required field
+  CMT-PAT-E003   Patch change entry is malformed
+  CMT-PAT-E004   Patch contains no changes
+  CMT-PAT-E005   Patch node not found in node_dirs; changes skipped
+  CMT-PAT-E006   Patch file path is absolute; changes skipped
+  CMT-PAT-E007   Patch file path escapes its directory; changes skipped
+  CMT-PAT-E008   Patch node name is not a plain directory name; changes skipped
+  CMT-PAT-E009   Applying changes to a file failed
 
 
 ================================================================================

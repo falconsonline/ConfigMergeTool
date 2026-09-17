@@ -26,7 +26,8 @@ import logging
 import shutil
 from typing import List, Optional
 
-from .models import BaseDirConfig, MergeConfig, MergeResult, EntryType, FileProcessResult
+from .models import BaseDirConfig, MergeConfig, MergeResult, EntryType, FileProcessResult, ReportEntry
+from .errors import ConfigMergeError, tag
 from .logger import setup_logging, important, log_structured
 from .utils import copy_file, ensure_dir
 from .matcher import FileMatcher
@@ -70,6 +71,7 @@ class MergeEngine:
         config = self.config
         logger = self.logger
         multi  = len(config.base_configs) > 1
+        self._refuse_overlapping_output_dir()
 
         important(
             f"[RELEASE DIRS]: {', '.join(config.release_dirs)}  "
@@ -163,7 +165,20 @@ class MergeEngine:
 
         # ── Process matched files ────────────────────────────────────────
         for file_match in matcher.matches:
-            if not file_match.base_paths or file_match.ambiguous:
+            if file_match.ambiguous:
+                result.report.append(ReportEntry(
+                    type=EntryType.AMBIGUOUS_MATCH_SKIPPED,
+                    file=file_match.rel_path,
+                    element="",
+                    old="MULTIPLE_BASE_CANDIDATES",
+                    new="SKIPPED",
+                ))
+                continue
+            if not file_match.base_paths:
+                # Release-only file: no base counterpart, deploy the release copy as-is.
+                if not config.dry_run:
+                    copy_file(os.path.join(file_match.release_dir, file_match.rel_path),
+                              os.path.join(base_output_dir, file_match.rel_path), logger)
                 continue
             # Skip files designated as copy-only — already copied above;
             # processing them here would overwrite the direct copy with a merge.
@@ -198,15 +213,20 @@ class MergeEngine:
             except Exception as e:
                 log_structured(logger, "ERROR", "ENGINE", "PROCESSOR_FAILED",
                                file_match.rel_path, "", str(e))
-                important(
-                    f"[ERROR] Processor failed for {file_match.rel_path}: {e}", logger
-                )
+                important(tag("CMT-MRG-E001",
+                              f"[ERROR] Processor failed for {file_match.rel_path}: {e}"), logger)
                 result.failed_files.append(FileProcessResult(
                     rel_path=file_match.rel_path,
                     success=False,
                     error=str(e),
                 ))
-                entries = []
+                entries = [ReportEntry(
+                    type=EntryType.PROCESSOR_ERROR,
+                    file=rel_file,
+                    element="",
+                    old="",
+                    new=str(e),
+                )]
 
             for entry in entries:
                 if entry.type == EntryType.EXCLUDED_BASE_ONLY_PARAMETER:
@@ -253,6 +273,26 @@ class MergeEngine:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _refuse_overlapping_output_dir(self) -> None:
+        """The output dir is deleted and recreated, so it must not be, contain, or sit
+        inside any base or release dir — otherwise inputs are destroyed or re-read."""
+        out_real = os.path.realpath(self.config.output_dir)
+        inputs = [b.base_dir for b in self.config.base_configs] + list(self.config.release_dirs)
+        for d in inputs:
+            d_real = os.path.realpath(d)
+            try:
+                shared = os.path.commonpath([out_real, d_real])
+            except ValueError:   # different drives (Windows) — cannot overlap
+                continue
+            if shared in (out_real, d_real):
+                log_structured(self.logger, "ERROR", "ENGINE", "OUTPUT_DIR_OVERLAP",
+                               self.config.output_dir, d, "run refused")
+                raise ConfigMergeError(
+                    "CMT-MRG-E010",
+                    f"--output-dir {self.config.output_dir!r} overlaps input directory {d!r}; "
+                    "it would be deleted or re-read. Choose a separate output directory.",
+                )
 
     def _clean_dir(self, path: str) -> None:
         if os.path.exists(path):

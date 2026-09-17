@@ -242,8 +242,10 @@ def _replace_elements(
     rel_text: str,
     rel_file: str,
     logger: logging.Logger,
+    skip: Optional[Set[Tuple[str, Optional[str]]]] = None,
 ) -> Tuple[str, List[ReportEntry]]:
-    """Replace release element blocks with base element blocks."""
+    """Replace release element blocks with base element blocks.
+    Elements whose (tag, name) is in *skip* were already taken from an earlier base."""
     report: List[ReportEntry] = []
     processed = set()
 
@@ -253,6 +255,8 @@ def _replace_elements(
 
         tag  = get_tag(b_elem)
         name = b_elem.attrib.get("name")
+        if skip and (tag, name) in skip:
+            continue
         sig  = f"{tag}:{name}:{hashlib.md5(ET.tostring(b_elem, encoding='unicode').encode()).hexdigest()}"
 
         if sig in processed:
@@ -385,14 +389,14 @@ def _include_base_only(
 
 
 def _detect_release_only(
-    base_root: ET.Element,
+    base_roots: List[ET.Element],
     rel_root: ET.Element,
     rel_file: str,
     logger: logging.Logger,
 ) -> List[ReportEntry]:
-    """Report elements present only in release."""
+    """Report elements present only in release (in none of the base files)."""
     report: List[ReportEntry] = []
-    base_elements = {(get_tag(e), e.attrib.get("name")) for e in base_root.iter()}
+    base_elements = {(get_tag(e), e.attrib.get("name")) for root in base_roots for e in root.iter()}
 
     for elem in rel_root.iter():
         tag  = get_tag(elem)
@@ -433,60 +437,75 @@ class XMLProcessor(BaseProcessor):
         logger.info(f"[XML] {rel_file}")
         report: List[ReportEntry] = []
 
-        # MOD-2: warn if multiple base files supplied (not yet supported for XML)
-        if len(base_files) > 1:
-            logger.warning(
-                f"[XML] {rel_file}: multi-base merge not fully supported for XML — "
-                f"using base_files[0] only; {len(base_files) - 1} additional base(s) ignored"
-            )
-        base_file = base_files[0]
-        base_root, base_text = _parse_xml_safe(base_file, logger, rel_file)
-        rel_root,  rel_text  = _parse_xml_safe(rel_file,  logger, rel_file)
+        parsed_bases = [_parse_xml_safe(bf, logger, rel_file) for bf in base_files]
+        rel_root, rel_text = _parse_xml_safe(rel_file, logger, rel_file)
 
-        if base_root is None or rel_root is None:
+        if rel_root is None or any(root is None for root, _ in parsed_bases):
+            bad = [f for f, (root, _) in zip(base_files, parsed_bases) if root is None]
+            bad += [rel_file] if rel_root is None else []
+            report.append(ReportEntry(
+                type=EntryType.INVALID_XML,
+                file=rel_file,
+                element="",
+                old=", ".join(bad),
+                new="SKIPPED",
+            ))
             return report
 
         # Capture release root open tag BEFORE any modifications (namespace race-condition fix)
         original_rel_open = _extract_root_open_tag(rel_text)
 
-        # Duplicate detection
-        report.extend(_detect_xml_duplicates(base_root, rel_file, logger))
+        # Many-to-One: bases are applied in mapping-file order.  The first base wins —
+        # a later base only replaces elements no earlier base has, and base-only
+        # elements are inserted only when their tag is not yet in the output (KV rule).
+        seen_elements: Set[Tuple[str, Optional[str]]] = set()
+        for base_root, base_text in parsed_bases:
+            # Duplicate detection
+            report.extend(_detect_xml_duplicates(base_root, rel_file, logger))
 
-        # Step 1: Replace matching elements (base values → release file)
-        rel_text, rpt = _replace_elements(base_root, base_text, rel_text, rel_file, logger)
-        report.extend(rpt)
-
-        # Step 2: Ensure the root element's opening tag still matches the original
-        #         release namespace (Step 1 may have swapped it via block replacement).
-        if original_rel_open:
-            current_open = _extract_root_open_tag(rel_text)
-            if current_open and current_open != original_rel_open:
-                rel_text = rel_text.replace(current_open, original_rel_open, 1)
-                report.append(ReportEntry(
-                    type=EntryType.NAMESPACE_ADAPTED,
-                    file=rel_file,
-                    element="root",
-                    old=current_open,
-                    new=original_rel_open,
-                ))
-
-        # Step 3: Include base-only elements
-        if not config.exclude_base_only:
-            rel_text, rpt = _include_base_only(
-                base_root, base_text, rel_text, rel_file, logger
-            )
+            # Step 1: Replace matching elements (base values → release file)
+            rel_text, rpt = _replace_elements(base_root, base_text, rel_text, rel_file, logger,
+                                              skip=seen_elements)
             report.extend(rpt)
-        else:
-            # Still detect and report them as excluded
-            _, excluded_rpt = _include_base_only(
-                base_root, base_text, rel_text, rel_file, logger
-            )
-            for r in excluded_rpt:
-                r.type = EntryType.EXCLUDED_BASE_ONLY_PARAMETER
-            report.extend(excluded_rpt)
 
-        # Step 4: Detect release-only elements
-        report.extend(_detect_release_only(base_root, rel_root, rel_file, logger))
+            # Step 2: Ensure the root element's opening tag still matches the original
+            #         release namespace (Step 1 may have swapped it via block replacement).
+            if original_rel_open:
+                current_open = _extract_root_open_tag(rel_text)
+                if current_open and current_open != original_rel_open:
+                    rel_text = rel_text.replace(current_open, original_rel_open, 1)
+                    report.append(ReportEntry(
+                        type=EntryType.NAMESPACE_ADAPTED,
+                        file=rel_file,
+                        element="root",
+                        old=current_open,
+                        new=original_rel_open,
+                    ))
+
+            # Step 3: Include base-only elements
+            if not config.exclude_base_only:
+                rel_text, rpt = _include_base_only(
+                    base_root, base_text, rel_text, rel_file, logger
+                )
+                report.extend(rpt)
+            else:
+                # Still detect and report them as excluded
+                _, excluded_rpt = _include_base_only(
+                    base_root, base_text, rel_text, rel_file, logger
+                )
+                for r in excluded_rpt:
+                    r.type = EntryType.EXCLUDED_BASE_ONLY_PARAMETER
+                report.extend(excluded_rpt)
+
+            seen_elements |= {(get_tag(e), e.attrib.get("name")) for e in base_root.iter()}
+
+        for entry in report:
+            if entry.type == EntryType.EMPTY_BASE_OVERRIDE_XML:
+                log_structured(logger, "ERROR", "XML", "EMPTY_BASE_OVERRIDE", rel_file, entry.element,
+                               "base element empty — release element forced empty; review required")
+
+        # Step 4: Detect release-only elements (absent from every base)
+        report.extend(_detect_release_only([r for r, _ in parsed_bases], rel_root, rel_file, logger))
 
         # Step 5: Strip any ns0:/ns1:/ns: prefixes that were not in the original
         #         release root tag (prevents ElementTree namespace pollution).

@@ -6,7 +6,9 @@ Resolves which base file(s) correspond to each release file.
 Matching priority (per release file):
   1. Explicit entry in --mapping-file  (Many-to-One: multiple bases → 1 release)
   2. Same relative path exists in base dir
-  3. Filename-only match (skipped if ambiguous)
+  3. Filename-only match (skipped and reported if several base files share the name)
+
+Hidden files and directories (name starts with '.') are ignored on both sides.
 
 Path-traversal guard applied to all resolved paths.
 """
@@ -69,6 +71,8 @@ class FileMatcher:
         for root, dirs, files in os.walk(self.base_dir, followlinks=False):
             dirs[:] = [x for x in dirs if not x.startswith(".")]
             for f in files:
+                if f.startswith("."):
+                    continue
                 abs_path = os.path.join(root, f)
                 # Symlink guard
                 if os.path.realpath(abs_path) == abs_path or \
@@ -111,7 +115,7 @@ class FileMatcher:
         """
         Parse mapping file.  Format:  base_path = release_path
         Supports Many-to-One: multiple base lines may share the same release path.
-        Detects one-base → many-release (ambiguous base) and flags it.
+        Supports One-to-Many: one base line may map to several release paths.
         """
         path = self.config.mapping_file
         if not path:
@@ -146,7 +150,7 @@ class FileMatcher:
 
             self._mapping_lookup[rel_norm].append(base_norm)
 
-        # detect ambiguous base (one base → many releases)
+        # one base → many releases (supported; logged for traceability)
         base_to_releases: Dict[str, List[str]] = defaultdict(list)
         for rel_norm, base_list in self._mapping_lookup.items():
             for b in base_list:
@@ -155,8 +159,8 @@ class FileMatcher:
         for base, releases in base_to_releases.items():
             if len(releases) > 1:
                 self.ambiguous_base.append((base, releases))
-                log_structured(self.logger, "WARNING", "MAPPING", "AMBIGUOUS_BASE",
-                               base, "", f"maps to multiple release files: {releases}")
+                log_structured(self.logger, "INFO", "MAPPING", "BASE_TO_MANY_RELEASES",
+                               base, "", f"merged into each of {len(releases)} release files: {releases}")
 
         # detect multi-base (many bases → one release)
         for rel_norm, base_list in self._mapping_lookup.items():
@@ -202,6 +206,8 @@ class FileMatcher:
                 # Skip hidden directories (e.g. .git, .svn)
                 dirs[:] = [x for x in dirs if not x.startswith(".")]
                 for f in files:
+                    if f.startswith("."):
+                        continue
                     abs_path = os.path.join(root, f)
 
                     # Path-traversal guard on release side (handles symlinked files)
@@ -239,41 +245,25 @@ class FileMatcher:
                         if os.path.exists(candidate):
                             base_paths.append(rel_path)
 
-                    # 3. Filename-only fallback.
-                    # When multiple base candidates share the same filename, prefer
-                    # the one whose directory matches the release file's directory.
-                    # If no directory match, use the first candidate and warn.
+                    # 3. Filename-only fallback — only when the name is unique in base.
+                    # Several candidates can never be in the release file's own directory
+                    # (that would be step 2), so picking one would merge an arbitrary base.
                     if not base_paths:
                         candidates_by_name = self._base_name_index.get(f, [])
                         if len(candidates_by_name) == 1:
                             base_paths.append(candidates_by_name[0])
                         elif len(candidates_by_name) > 1:
-                            rel_dir = os.path.dirname(rel_path)
-                            best = next(
-                                (c for c in candidates_by_name
-                                 if os.path.dirname(c) == rel_dir),
-                                None,
+                            ambiguous = True
+                            log_structured(
+                                self.logger, "ERROR", "FILE", "AMBIGUOUS_MATCH",
+                                rel_path, f,
+                                f"multiple base candidates {sorted(candidates_by_name)}; "
+                                f"file skipped — add a --mapping-file entry to resolve",
                             )
-                            if best:
-                                base_paths.append(best)
-                                log_structured(
-                                    self.logger, "WARNING", "FILE", "MULTI_BASE_RESOLVED",
-                                    rel_path, f,
-                                    f"multiple base candidates; selected '{best}' "
-                                    f"(same directory as release file)",
-                                )
-                            else:
-                                base_paths.append(candidates_by_name[0])
-                                log_structured(
-                                    self.logger, "WARNING", "FILE", "MULTI_BASE_FIRST",
-                                    rel_path, f,
-                                    f"multiple base candidates {candidates_by_name}; "
-                                    f"using first: '{candidates_by_name[0]}'",
-                                )
 
                     if not base_paths and not ambiguous:
                         log_structured(self.logger, "WARNING", "FILE", "NO_MATCH",
-                                       rel_path, f, "no matching file in base")
+                                       rel_path, f, "no matching file in base — copied from release")
 
                     new_match = FileMatch(
                         rel_path=rel_path,

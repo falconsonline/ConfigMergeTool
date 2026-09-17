@@ -3464,7 +3464,7 @@ def _validate_html(html_str: str, path: str) -> bool:
 
     if issues:
         print(
-            f"[WARN ] HTML sanity check FAILED for {path}:\n"
+            f"[CMT-AUD-W009] [WARN ] HTML sanity check FAILED for {path}:\n"
             + "\n".join(f"        • {i}" for i in issues),
             file=sys.stderr,
         )
