@@ -41,7 +41,14 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 | F-015 | P2 | JSON `!=` treats true==1 / false==0 → release value kept | FIXED (uncommitted) — _same_json type-strict compare |
 | F-018 | P1 | XML block matching hit commented-out <!-- --> copies (48 real lookups) | FIXED (uncommitted) — test_xml_commented_out_element_is_not_matched |
 | F-019 | P3 | XML output dropped the final newline | FIXED (uncommitted) — test_xml_merge_keeps_final_newline |
-| F-020 | P2 | KV merge of identical base/release produced spurious report rows (e.g. log4j 24× RELEASE_ONLY_PARAMETER_ADDED, testexternalservice EMPTY_BASE_OVERRIDE) and non-faithful output (±1..20 bytes) | MASKED for whitespace-equal files by WS-1; root cause OPEN — may affect files with real differences |
+| F-020 | P1 | KV merge fidelity — pre-existing since 547f785 (not caused by this week's changes). Identity test (file merged with itself) on 253 real KV files: 143 not identical; 0 active params lost (160 dropped lines = documented DUPLICATE_KEY collapse) | ROOT CAUSES FOUND, split below |
+| F-020a | P2 | Key commented out in BOTH base and release reported RELEASE_ONLY_PARAMETER_ADDED (e.g. log4j 24 rows) | FIXED (uncommitted) |
+| F-020b | P1 | EMPTY_BASE_OVERRIDE (critical, exit 1) raised when release value is ALSO empty — real: fsmapp/testexternalservice `generic.caches=` empty on both sides → every real run exits 1 spuriously | FIXED (uncommitted) — real runs exit 1→0 |
+| F-020c | P2 | Comments duplicated (493 lines) / lost (63 lines) across 96 real files, e.g. fsmapp `#trans.filter.1.results` twice, `#For parameter description…` dropped | FIXED (uncommitted) — group comment duplicates + dropped-duplicate comments |
+| F-020d | P2 | Section repeated in one file (e.g. release icampaignservice/fsmapp.properties [EventTrigger Redistribution Poller] L282 & L308) → folded into one; 2nd header lost, its keys moved under the first | FIXED (uncommitted) — decision 1a; real icampaignservice fsmapp: 26→1 lines differing from release |
+| F-020e | P1 (latent) | `.sh` registered as KV: shell script lines (fi/done/if …) dropped — 214 lines in Telstra Tomcat scripts; no .sh in current merge data | FIXED (uncommitted) — decision 2a (.sh → GenericProcessor); audit still KV-reads .sh (open) |
+| F-020g | P3 | Telstra (audit-only) files: comment blocks of interleaved indexed groups duplicated/reordered (31 files) | OPEN — not in current merge data |
+| F-020f | P3 | Synthetic blank separator between sections (+ preamble dedupe) adds/removes blank lines — 49 files whitespace-only | FIXED (uncommitted) — no synthetic separator, commented-header preamble kept, EOF = release |
 | F-017 | P2 | KV commented key with space before delimiter (`#a = B`) not recognised → base comment leaks to end of output (vs `#a=B` merged) | VERIFIED; literal trim rule sim: 2322 commented lines/109 files newly keys; merge output changes 4 files/node (blank lines in doc-comment headers) — needs Q9 scope |
 | F-017 | P2 | (see above) | FIXED (uncommitted) — tests/test_merge_review_annotations.py (9 tests) |
 | F-016 | P2 | KV indexed-group header not a union; groups matched by index only | FIXED (uncommitted) — tests/test_merge_groups_and_xml.py (6 tests); real data: 0 output diffs, W013 flags |
@@ -61,4 +68,5 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 
 LAST COMPLETED ACTION: commit 52765a3; S1 review verified + real-data exposure measured
 LAST: commit f9eb4f7 (review annotations); processor fixes implemented + side-by-side verification sent
-NEXT ACTION: commit processor + whitespace fixes on approval; investigate F-020 root cause; then S2 filter/backup review
+LAST: commit a39f9d2; F-020 investigated (identity-merge harness scratch sep.*/ident.py, classify.py)
+NEXT ACTION: commit F-020 batch on approval; then F-020g or S2 filter/backup review; open: audit .sh handling

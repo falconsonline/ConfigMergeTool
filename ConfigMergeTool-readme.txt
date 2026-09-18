@@ -711,7 +711,8 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
  MERGE BEHAVIOUR BY FILE TYPE
 ================================================================================
 
-.properties / .cfg / .ini / .conf / .sh / .acl  (Key-Value files)
+.properties / .cfg / .ini / .conf / .acl  (Key-Value files)
+  (.sh shell scripts are not key-value merged: the release copy is deployed as-is.)
 ------------------------------------------------------------------
   Sections ([section]) are tracked independently.
   For each key in base:
@@ -777,6 +778,11 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
       A review annotation is written under the section header:
         # [CMT-MRG-W015] REVIEW: section [X] is commented out in base but active ...
 
+  Report accuracy:
+    - A key commented out in both files is a comment, not a release-only
+      parameter.  EMPTY_BASE_OVERRIDE is raised only when base is empty and
+      the release value is not.
+
   Commented lines (context):
     - Base comment lines are copied into the output next to the parameter
       they describe (never dropped); lines already in release are not duplicated.
@@ -812,6 +818,12 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
 
   Section ordering:
     - Sections follow release file order.
+    - A section header that appears more than once in a file keeps each
+      block in its own place; base and release blocks are paired by
+      occurrence (1st with 1st, 2nd with 2nd).
+    - Blank lines and comments between sections are copied from the file;
+      no blank lines are inserted, and the output ends exactly like the
+      release file (same final newline / trailing blank lines).
     - Base-only sections are inserted at their natural relative position.
 
   Duplicate key detection:

@@ -122,7 +122,7 @@ def parse_kv_doc(file_path: str, known_keys: Optional[Set[str]] = None) -> KVDoc
             # ── Section header ──────────────────────────────────────────
             m_sec = re.match(r'^\s*\[(.+)\]\s*(?:#.*)?$', stripped)
             if m_sec and stripped.lstrip().startswith('['):
-                current_section = f"[{m_sec.group(1).strip()}]"
+                current_section = _section_occurrence(doc, f"[{m_sec.group(1).strip()}]")
                 if current_section not in doc.sections:
                     doc.sections[current_section] = []
                     doc.section_order.append(current_section)
@@ -145,10 +145,14 @@ def parse_kv_doc(file_path: str, known_keys: Optional[Set[str]] = None) -> KVDoc
                 # Check for commented-out section header: #[SectionName]
                 m_csec = re.match(r'^\[(.+)\]\s*$', stripped_inner)
                 if m_csec:
-                    current_section = f"#[{m_csec.group(1)}]"
+                    current_section = _section_occurrence(doc, f"#[{m_csec.group(1)}]")
                     if current_section not in doc.sections:
                         doc.sections[current_section] = []
                         doc.section_order.append(current_section)
+                        # Keep the header line and the lines above it, as for active headers
+                        doc.section_raw_lines[current_section] = line
+                        if comment_buffer:
+                            doc.section_preamble[current_section] = comment_buffer[:]
                     comment_buffer = []
                     continue
 
@@ -217,6 +221,18 @@ def parse_kv_doc(file_path: str, known_keys: Optional[Set[str]] = None) -> KVDoc
 
     _detect_groups(doc)
     return doc
+
+
+def _section_occurrence(doc: KVDocument, name: str) -> str:
+    """Section key for a header line.  A header repeated in the same file becomes its own
+    section (``[A]``, ``[A] (2)``, …) so each block keeps its place and header line (F-020d);
+    base and release blocks are paired by occurrence."""
+    if name not in doc.sections:
+        return name
+    n = 2
+    while f"{name} ({n})" in doc.sections:
+        n += 1
+    return f"{name} ({n})"
 
 
 def _is_kv_line(s: str) -> bool:
@@ -400,16 +416,8 @@ def merge_kv(
             preamble = (rel_doc.section_preamble.get(section)
                         or base_doc.section_preamble.get(section)
                         or [])
-            _preamble_first_blank_skipped = False
+            # Preamble lines (blank lines included) are emitted as in the source file.
             for _pc in preamble:
-                # Deduplicate: skip only the FIRST blank preamble line when the
-                # previous section's separator already provided a blank.  Allow
-                # additional blank lines through so triple-blank separators in the
-                # source file are faithfully reproduced.
-                if (not _preamble_first_blank_skipped and not _pc.strip()
-                        and out_lines and not out_lines[-1].strip()):
-                    _preamble_first_blank_skipped = True
-                    continue
                 out_lines.append(_pc if _pc.endswith("\n") else _pc + "\n")
 
             # Prefer base doc's raw line (base is canonical); fall back to release or reconstruct
@@ -528,6 +536,10 @@ def merge_kv(
                 r_idx: max_b + 1 + i for i, r_idx in enumerate(rel_only_sorted)
             }
             group_totals[prefix] = len(b_grps) + len(rel_only_sorted)
+
+        # Release comment/commented lines already written while emitting a base group —
+        # the spine walk must not write them a second time (F-020c).
+        emitted_rel_ids: set = set()
 
         # Track which base / release group indices have been emitted
         emitted_b_groups: Dict[str, set] = defaultdict(set)
@@ -685,6 +697,7 @@ def merge_kv(
                         # documentation.  Prefer release entry so release comments are used.
                         src = rel_doc.lookup.get(ge_compound) or ge
                         _emit_verbatim(src.raw_line, src.comments)
+                        emitted_rel_ids.add(id(src))
                     emitted_keys.add(ge_compound)
                     continue
 
@@ -694,6 +707,7 @@ def merge_kv(
                         rann_compound = f"{section}|{rann.key}"
                         if rann_compound == ge_compound and rann.is_commented:
                             _emit_verbatim(rann.raw_line, rann.comments)
+                            emitted_rel_ids.add(id(rann))
                             break
                 else:
                     # Emit base annotation if no release annotation
@@ -803,6 +817,9 @@ def merge_kv(
                     emit_release_only_group(prefix, r_idx)
                 continue
 
+            if entry.is_commented and id(entry) in emitted_rel_ids:
+                continue   # already written together with its base group
+
             if compound in emitted_keys:
                 # Post-annotation: a commented release entry for an already-emitted
                 # key (appears AFTER the active key).  These are "alternative value"
@@ -810,6 +827,11 @@ def merge_kv(
                 # be emitted verbatim so the user sees all the options.
                 if entry.is_commented:
                     _emit_verbatim(entry.raw_line, entry.comments)
+                else:
+                    # Later duplicate of an active key: the line collapses into the first
+                    # occurrence (DUPLICATE_KEY, last value wins) but its comments are kept.
+                    for c in entry.comments:
+                        out_lines.append(c if c.endswith("\n") else c + "\n")
                 continue
 
             # ── Release annotation BEFORE its active key ────────────────
@@ -958,13 +980,14 @@ def merge_kv(
                     log_structured(logger, "WARNING", "KV", "REVIEW_COMMENTED_IN_BASE", rel_file,
                                    compound, "commented out in base, active in release; release value "
                                    "kept — confirm the correct value")
-                # Release-only
+                # Release-only.  A commented release line is a comment, not a parameter.
                 _emit_entry(out_lines, entry, entry.value, entry.comments)
-                report.append(ReportEntry(
-                    type=EntryType.RELEASE_ONLY_PARAMETER_ADDED,
-                    file=rel_file, element=compound,
-                    old=entry.value, new=entry.value, section=section,
-                ))
+                if not entry.is_commented:
+                    report.append(ReportEntry(
+                        type=EntryType.RELEASE_ONLY_PARAMETER_ADDED,
+                        file=rel_file, element=compound,
+                        old=entry.value, new=entry.value, section=section,
+                    ))
             emitted_keys.add(compound)
 
         # ── Post-walk: unemitted base groups ─────────────────────────────
@@ -1009,11 +1032,8 @@ def merge_kv(
         for _tl in _sec_trailing:
             out_lines.append(_tl if _tl.endswith("\n") else _tl + "\n")
 
-        # Only add blank separator between sections if this section emitted content.
-        # Skipping it for empty sections (e.g. an empty DEFAULT when the file starts
-        # with a named section like [Defaults]) prevents spurious leading blank lines.
-        if len(out_lines) > _sec_start_pos:
-            out_lines.append("\n")
+        # No blank separator is invented between sections: the blank lines that precede a
+        # section header are part of that section's preamble and are emitted from there (F-020f).
 
     # Remove any trailing blank lines generated by the last section's separator.
     # All content lines are already newline-terminated, so no extra newline is needed.
@@ -1074,8 +1094,9 @@ def _merge_single_entry(
     else:
         merged_comments = base_entry.comments
 
-    # Empty base override
-    if base_entry.value.strip() == "" and not base_entry.is_commented:
+    # Empty base override — only when the release actually has a value to override
+    if (base_entry.value.strip() == "" and not base_entry.is_commented
+            and release_val.strip() != ""):
         rpt = ReportEntry(
             type=EntryType.EMPTY_BASE_OVERRIDE,
             file=rel_file,
@@ -1263,7 +1284,9 @@ def _report_duplicates(
 # Processor class
 # ---------------------------------------------------------------------------
 
-@register(".cfg", ".ini", ".conf", ".properties", ".sh", ".acl")
+# .sh is deliberately not registered: shell scripts are not key/value files and are
+# deployed from release as-is (GenericProcessor) — KV parsing dropped script lines (F-020e).
+@register(".cfg", ".ini", ".conf", ".properties", ".acl")
 class KVProcessor(BaseProcessor):
 
     def process(
@@ -1319,21 +1342,17 @@ class KVProcessor(BaseProcessor):
                 log_structured(logger, "ERROR", "KV", "EMPTY_BASE_OVERRIDE", rel_file, entry.element,
                                "base value empty — release value forced empty; review required")
 
-        # Preserve trailing blank line: if the release file ends with a blank line
-        # (i.e. \n\n at EOF), the merged output must too.  merge_kv strips all
-        # trailing blanks to avoid spurious separators, so re-add exactly one
-        # blank line when the release file had one.
-        if rel_raw.endswith("\n\n"):
-            out_lines.append("\n")
-
         # Separate excluded params from the main report
         excluded = [r for r in report if r.type == EntryType.EXCLUDED_BASE_ONLY_PARAMETER]
         report   = [r for r in report if r.type != EntryType.EXCLUDED_BASE_ONLY_PARAMETER]
 
         if not config.dry_run:
             ensure_dir(out_file)
+            # End exactly like the release file: same trailing newlines / blank lines (F-020 EOF)
+            body = "".join(out_lines).rstrip("\n")
+            ending = rel_raw[len(rel_raw.rstrip("\r\n")):].replace("\r\n", "\n")
             with open(out_file, "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(out_lines)
+                f.write(body + ending if body else ending)
 
         # Attach excluded back so engine can route them to MergeResult.excluded_params
         report.extend(excluded)

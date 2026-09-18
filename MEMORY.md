@@ -83,6 +83,11 @@ node has a duplicate; match = otherwise (incl. commented); extra = key not in ba
 12. **Whitespace-only differences are ignored (2026-09-18)**: if base and release are identical once all whitespace
     is removed (every mapped base must qualify), the release file is copied byte-for-byte — no merge rewrite,
     no report rows (`CMT-MRG-I003`, log only). Note: this also treats `a b` vs `ab` as equal (accepted literal rule).
+13. **KV fidelity (2026-09-18)**: a file merged with itself must come out unchanged (harness: identity merge of
+    all real KV files — 145/253 before these fixes → 177/253 after; the rest are Telstra audit files with interleaved
+    indexed groups (F-020g) plus by-design DUPLICATE_KEY collapse / K-20 trailing spaces). A section repeated in one
+    file keeps both blocks in place (decision 1a). `.sh` files are deployed from release, never KV-merged (2a);
+    audit mode still reads `.sh` as KV (open question).
 8. **Critical entries are traceable**: every critical report entry is also logged with a `CMT-*` code; an
    unparseable JSON/XML input is critical (`INVALID_JSON` / `INVALID_XML`, exit 1), never silently dropped.
 
