@@ -2546,6 +2546,12 @@ def _serialise_result(result: "AuditResult") -> dict:
 # HTML template
 # ---------------------------------------------------------------------------
 
+def _tool_version() -> str:
+    """ConfigMergeTool version, stamped into the audit log and every report page."""
+    from .. import __version__   # lazy: configmerge/__init__ imports submodules first
+    return __version__
+
+
 # Stands in for the AUDIT_DATA JSON while the page template is rendered; never in output.
 _DATA_SLOT = "\x00AUDIT_DATA_SLOT\x00"
 
@@ -2588,6 +2594,7 @@ def _render_html_parts(result: "AuditResult", files_js=None, pagination=None):
     data_js = re.sub(r'</(script)', r'<\/\1', data_js, flags=re.IGNORECASE)
     data_js = re.sub(r'<(script\b)', r'\\u003c\1', data_js, flags=re.IGNORECASE)
 
+    tool_version = _tool_version()
     ts_display = (
         result.run_timestamp[:4]   + "-" +
         result.run_timestamp[4:6]  + "-" +
@@ -2678,6 +2685,7 @@ def _render_html_parts(result: "AuditResult", files_js=None, pagination=None):
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="generator" content="ConfigMergeTool {tool_version}">
 <title>Config Audit Report &mdash; {ts_display}</title>
 <style>{_CSS}
 .part-nav-bar{{background:#1a3a6a;padding:5px 22px;font-size:12px;
@@ -2696,6 +2704,7 @@ def _render_html_parts(result: "AuditResult", files_js=None, pagination=None):
     <div class="meta">
       <span><label>Nodes:</label>{node_list}</span>
       <span><label>Generated:</label>{ts_display}</span>
+      <span><label>Version:</label>ConfigMergeTool v{tool_version}</span>
       <span><label>Files:</label>{total_files} compared, {files_differ} with differences</span>
     </div>
   </div>
@@ -2972,6 +2981,7 @@ def _split_into_parts(result: "AuditResult"):
 
 def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
     """Build an interactive index page with directory tree, diff filter, and skipped files."""
+    tool_version = _tool_version()
     ts_display = (
         result.run_timestamp[:4]    + "-" +
         result.run_timestamp[4:6]   + "-" +
@@ -3205,6 +3215,7 @@ def _build_index_html(result: "AuditResult", parts_meta: list) -> str:
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="generator" content="ConfigMergeTool {tool_version}">
 <title>Config Audit Report &mdash; Index &mdash; {ts_display}</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -3303,7 +3314,7 @@ body{{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;
   <div class="hdr">
     <div class="hdr-title">
       <h1>Config Audit Report &mdash; Index</h1>
-      <div class="meta">Generated: {ts_display} &nbsp;|&nbsp; Nodes: {node_list}</div>
+      <div class="meta">Generated: {ts_display} &nbsp;|&nbsp; Nodes: {node_list} &nbsp;|&nbsp; ConfigMergeTool v{tool_version}</div>
     </div>
     <div class="hdr-actions">
       <a class="hdr-btn" href="audit_diffs.xlsx" download title="Download formatted XLSX report of files with differences">&#8659; Export Diffs XLSX</a>

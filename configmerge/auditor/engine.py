@@ -63,7 +63,7 @@ from ..models import BaseDirConfig
 from ..processors.kv import _has_valid_kv_key, _is_kv_line, _split_kv
 from ..utils import open_text, file_sha256
 from .file_filter import FileFilter
-from .html_report import write_audit_html
+from .html_report import _tool_version, write_audit_html
 from .sstp_parser import SstpParser, categorise_block_diff
 
 
@@ -322,6 +322,7 @@ class AuditEngine:
                 self._flush_log()
                 raise SystemExit(2)
 
+        self._log("INFO ", f"ConfigMergeTool v{_tool_version()}")
         self._log("INFO ", f"Audit started — nodes: {', '.join(node_names)}")
         self._log("INFO ", f"Report dir: {self.run_dir}")
         if self._quiet:

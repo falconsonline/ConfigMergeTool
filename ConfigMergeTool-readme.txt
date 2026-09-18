@@ -1487,6 +1487,7 @@ v2.1.0 (2026-09-18) — Audit accuracy, merge fidelity and memory
   + Audit: backup detection covers _bkp200821 / name_240226.properties styles
   + Audit: a +path force-include no longer switches the filter to include-only
   + Audit: section names shown in their original case ([CouchBase])
+  + Audit: tool version stamped in audit.log and in every report page header
   + Audit: much lower memory use — feedback history appended in place and
     report pages written in pieces (Telstra-RSC1: ~750 MB -> ~300 MB)
   + Merge: release-only files copied; ambiguous filename matches skipped

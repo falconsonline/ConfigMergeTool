@@ -91,3 +91,30 @@ def test_report_write_memory_budget(tmp_path):
     finally:
         tracemalloc.stop()
     assert peak < 3.5 * raw, f"report write peak {peak / raw:.2f}x raw content"
+
+
+def test_version_is_stamped_in_audit_log_and_every_report_page(tmp_path, monkeypatch):
+    import glob
+    import pathlib
+    from configmerge import __version__
+    from configmerge.auditor.engine import AuditEngine
+    from configmerge.models import BaseDirConfig
+
+    monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.setattr(H, "_PART_SIZE_LIMIT", 1)      # force part pages + index page
+    for node, val in (("n1", "a"), ("n2", "b")):
+        for name in ("x.properties", "y.properties"):
+            (tmp_path / node / "c").mkdir(parents=True, exist_ok=True)
+            (tmp_path / node / "c" / name).write_text(f"[CouchBase]\nk={val}\n", encoding="utf-8")
+    eng = AuditEngine(nodes=[BaseDirConfig(base_dir=str(tmp_path / n), name=n) for n in ("n1", "n2")],
+                      report_dir=str(tmp_path / "reports"), quiet=True)
+    eng.run()
+
+    log = open(glob.glob(str(tmp_path / "reports" / "audit_*" / "audit*.log"))[0], encoding="utf-8").read()
+    assert f"ConfigMergeTool v{__version__}" in log.splitlines()[0]
+    pages = glob.glob(str(tmp_path / "reports" / "audit_*" / "*.html"))
+    assert len(pages) == 3                              # index + 2 parts
+    for p in pages:
+        html = open(p, encoding="utf-8").read()
+        assert f'<meta name="generator" content="ConfigMergeTool {__version__}">' in html
+        assert f"ConfigMergeTool v{__version__}" in html.split("<body")[1]   # visible header
