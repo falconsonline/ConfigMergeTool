@@ -1,0 +1,181 @@
+# =============================================================================
+# ConfigMergeTool — Sample Filter File
+# =============================================================================
+#
+# Use with:  configmergetool --audit-config-file audit.json --filter-file sample-filter.txt
+#
+# Rules are evaluated in this order:
+#   1. Force-include (+path)          — overrides directory excludes
+#   2. Explicit excludes (!)          — names, globs, directory paths
+#   3. Include rules                  — suffixes, named files, dirs, globs, paths
+#   4. Built-in binary exclusions     — always active, even without a filter file
+#   5. Default                        — if no include rules defined: pass everything
+#                                       if include rules defined: skip unmatched files
+#
+# Lines starting with # are comments.  Blank lines are ignored.
+# All matching is case-insensitive.
+# =============================================================================
+
+
+# =============================================================================
+# SECTION A — Suffix-only includes
+#   Format:  <extension>   (with or without leading dot)
+#   Effect:  Include ALL files with this extension, regardless of location.
+# =============================================================================
+
+properties
+cfg
+xml
+json
+conf
+ini
+yaml
+yml
+# SmartSTP routing rules (semantic SSTP diff)
+sstp
+
+# Files with no extension at all (e.g. Makefile, Dockerfile, named configs)
+noext
+
+
+# =============================================================================
+# SECTION B — Named-file includes
+#   Format:  <extension>::<filename>[,<filename2>,...]
+#   Effect:  Include ONLY the listed filenames that have the given extension.
+#   Tip:     Use when you want to include sysctl.conf but not every .conf file.
+# =============================================================================
+
+conf::sysctl.conf,sctp.conf,spread.conf,ntp.conf
+txt::config.txt,system.txt,version.txt
+log::access.log,error.log
+
+
+# =============================================================================
+# SECTION C — Directory-type includes
+#   Format:  <extension>::<dirname>[,<dirname2>,...]
+#   Effect:  Include files with the given extension ONLY when they are inside a
+#            directory whose name matches one of the listed fragments.
+#   Note:    Items without a dot are treated as directory names (not filenames).
+# =============================================================================
+
+html::runtime,test,config
+cfg::production,staging
+
+
+# =============================================================================
+# SECTION D — Directory-path includes
+#   Format:  <relative/path/to/dir>   (contains a / — no leading !)
+#   Effect:  Include ALL files anywhere under the named directory subtree.
+#   Tip:     Use for entire config subdirectories you always want audited.
+# =============================================================================
+
+config/routing
+config/security
+app/conf
+
+
+# =============================================================================
+# SECTION E — Glob filename includes
+#   Format:  <glob-pattern>   (contains * ? or [ — no leading !)
+#   Effect:  Include filenames matching the glob (applied to the basename only).
+#   Examples:
+#     *.jar.*          — versioned jar wrappers (jar.1, jar.2.bak)
+#     jar.[0-9].*      — jar followed by a digit
+#     Appl1*        — any file starting with Appl
+#     *.conf.*         — conf files with extra suffixes
+# =============================================================================
+
+*.jar.*
+jar.[0-9].*
+Appl*
+*.conf.*
+
+
+# =============================================================================
+# SECTION F — Force-include within excluded directories
+#   Format:  +<relative/path>   (leading +)
+#   Effect:  Override directory exclude rules for this specific path.
+#            Use when a subtree is excluded but a specific sub-path must still
+#            be audited.
+#   Evaluation: Phase 1 — evaluated BEFORE any exclude rules.
+# =============================================================================
+
++config/security/certs/active
++logs/archive/current-session
+
+
+# =============================================================================
+# SECTION G — Explicit name excludes
+#   Format:  !<filename>   (leading !)
+#   Effect:  Always skip this exact filename regardless of include rules.
+# =============================================================================
+
+!nohup.out
+!.DS_Store
+!Thumbs.db
+!desktop.ini
+
+
+# =============================================================================
+# SECTION H — Glob excludes
+#   Format:  !<glob-pattern>   (leading ! + glob chars)
+#   Effect:  Skip any filename matching the glob pattern.
+# =============================================================================
+
+!*.tmp
+!*.swp
+!*.bak
+!*~
+!*.pid
+!*.lock
+
+
+# =============================================================================
+# SECTION I — Directory-path excludes
+#   Format:  !<relative/path>   (leading ! + contains /)
+#   Effect:  Skip all files under this directory subtree.
+#   Tip:     Combine with force-include (+) to carve out exceptions.
+# =============================================================================
+
+!logs/archive
+!backup
+!old
+!tmp
+
+
+# =============================================================================
+# SECTION J — Built-in binary archive exclusions (always active)
+#   These are hard-coded in the tool and cannot be overridden by this file.
+#   Documented here for reference only.
+# =============================================================================
+
+# !*.tar       !*.tar.gz    !*.tgz       !*.gz
+# !*.bz2       !*.xz
+# !*.rpm       !*.deb
+# !*.zip       !*.7z        !*.rar
+# !*.jar       !*.war       !*.ear
+# !*.jks       !*.keystore  !*.p12       !*.pfx
+# !*.pem       !*.crt       !*.cer       !*.der
+# !*.so        !*.dll       !*.exe       !*.dylib
+# !*.class     !*.pyc
+# !*.bin       !*.img       !*.iso
+
+
+# =============================================================================
+# REAL-WORLD EXAMPLE: 
+# =============================================================================
+# Uncomment the block below and comment out everything above to use as a
+# starting point for a deployment audit.
+# =============================================================================
+
+# properties
+# cfg
+# xml
+# json
+# conf::sysctl.conf,sctp.conf,spread.conf
+# !nohup.out
+# !*.pid
+# !*.lock
+# config/routing
+# !logs/archive
+# +config/routing/override
