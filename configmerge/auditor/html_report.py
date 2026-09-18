@@ -234,8 +234,9 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 .node-sel-all,.node-sel-none{background:none;border:1px solid #aaa;border-radius:4px;
                               padding:3px 8px;font-size:11px;cursor:pointer;color:#555}
 
+/* Section names are shown exactly as written in the file ([CouchBase], not [COUCHBASE]) */
 .section-divider td{background:#f0f2f6;font-size:11px;font-weight:700;color:#555;
-                     padding:5px 10px;letter-spacing:.3px;text-transform:uppercase;
+                     padding:5px 10px;letter-spacing:.3px;
                      border-top:2px solid #dde3ed;position:relative;z-index:0}
 .section-divider-controls{float:right;display:flex;gap:4px}
 .sec-skip-btn{background:#607d8b;color:#fff;border:none;border-radius:3px;

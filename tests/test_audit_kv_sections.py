@@ -302,3 +302,14 @@ def test_sstp_identical_files_match(tmp_path):
 def test_sstp_unparseable_but_different_files_are_a_mismatch(tmp_path):
     af = _sstp(tmp_path, {"n1": "no blocks here a=1\n", "n2": "no blocks here a=2\n"})
     assert af.mismatch_count >= 1
+
+
+def test_section_names_keep_their_case_in_data_and_display(tmp_path):
+    af = _compare(tmp_path, {"n1": "[CouchBase]\npools=default\n", "n2": "[CouchBase]\npools=other\n"})
+    data = _serialise_result(_result(tmp_path, af, ["n1", "n2"]))
+    assert [s["name"] for s in data["files"][0]["sections"]] == ["[CouchBase]"]
+    assert data["files"][0]["params"][0]["compound"] == "[CouchBase]|pools"
+    import re
+    from configmerge.auditor.html_report import _CSS
+    rule = re.search(r"\.section-divider td\{[^}]*\}", _CSS).group(0)
+    assert "uppercase" not in rule
