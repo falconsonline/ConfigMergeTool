@@ -158,8 +158,12 @@ class FileFilter:
         # 2. Explicit exclude rules (names, globs, directory paths)
         for rule in self._rules:
             if rule.kind == "exclude_name":
+                # `!name` excludes a file with that name or a directory with that name (F-022)
                 if fname_lower in rule.names:
                     return FilterResult(False, f"exclude rule: {fname!r}")
+                hit = next((d for d in parts_lower if d in rule.names), None)
+                if hit:
+                    return FilterResult(False, f"exclude dir name: {hit!r}")
             elif rule.kind == "exclude_glob":
                 if fnmatch.fnmatch(fname_lower, rule.glob):
                     return FilterResult(False, f"exclude glob: {rule.glob!r}")
@@ -190,7 +194,9 @@ class FileFilter:
                         if rel_lower.startswith(dir_path + "/") or ("/" + dir_path + "/") in rel_lower:
                             return FilterResult(True, f"dir-path rule: {dir_path!r}")
                 elif rule.kind == "include_glob":
-                    if fnmatch.fnmatch(fname_lower, rule.glob):
+                    # A glob containing '/' is matched against the relative path (F-023)
+                    target = rel_lower if "/" in rule.glob else fname_lower
+                    if fnmatch.fnmatch(target, rule.glob):
                         return FilterResult(True, f"glob rule: {rule.glob!r}")
 
             # An include filter is active but no rule matched — skip.
@@ -245,11 +251,12 @@ class FileFilter:
             if line.startswith("+"):
                 path = line[1:].strip().lower().rstrip("/")
                 if path:
+                    # Not an include rule: it only rescues paths from exclude rules, so it
+                    # must not switch the filter into include-only mode (F-021).
                     self._rules.append(_Rule(
                         kind="include_force", suffix="",
                         names=set(), dirs=set(), glob=path,
                     ))
-                    self._has_include_rules = True
                 continue
 
             # suffix::names_or_dirs

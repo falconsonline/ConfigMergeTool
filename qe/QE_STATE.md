@@ -47,6 +47,12 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 | F-020c | P2 | Comments duplicated (493 lines) / lost (63 lines) across 96 real files, e.g. fsmapp `#trans.filter.1.results` twice, `#For parameter description…` dropped | FIXED (uncommitted) — group comment duplicates + dropped-duplicate comments |
 | F-020d | P2 | Section repeated in one file (e.g. release icampaignservice/fsmapp.properties [EventTrigger Redistribution Poller] L282 & L308) → folded into one; 2nd header lost, its keys moved under the first | FIXED (uncommitted) — decision 1a; real icampaignservice fsmapp: 26→1 lines differing from release |
 | F-020e | P1 (latent) | `.sh` registered as KV: shell script lines (fi/done/if …) dropped — 214 lines in Telstra Tomcat scripts; no .sh in current merge data | FIXED (uncommitted) — decision 2a (.sh → GenericProcessor); audit now compares .sh as text (real: 9 legacy Tomcat scripts) |
+| F-021 | P1 | Filter: a `+path` force-include switches the filter into include-mode — a filter with only excludes + one force-include silently skips every other file (readme's own example) | FIXED (uncommitted) |
+| F-022 | P2 | Filter: `!backup` / `!old` / `!tmp` (readme rule h "directory exclude") only match a FILE named so; directories are still audited | VERIFIED; real Telstra filter.txt uses them — 88 files under backup/, 56 under old/ audited | FIXED (uncommitted) — decision yes; real: 0 files change (Telstra filter already include-mode) |
+| F-023 | P3 | Filter: glob include containing '/' (e.g. `config/*.xml`) never matches (glob tested against filename only) | FIXED (uncommitted) |
+| F-024 | P1 | Backup: `<file>_bkp200821`, `_bak17062026`, `_bkpprobetrouleshoot` (no separator after bkp/bak) not detected — ~70 real backups with original present audited as live config (.properties/.cfg/.xml/.conf/.sstp) | FIXED (uncommitted) — real: 122 more backups skipped incl. F-025, all originals present |
+| F-025 | P2 | Backup: marker before the extension (`fsmapp_240226.properties`, `dbwriter_bkp040322.cfg`, `style_old_11jan07.css`) not detected though `fsmapp.properties` exists | FIXED (uncommitted) — decision yes |
+| F-026 | P3 | Backup: readme lists `_v[0-9]*` and `_YYYYMMDDHHmmss` but code detects neither | RESOLVED — decision no: _v not a backup; 14-digit timestamp added; readme corrected |
 | F-020g | P3 | Telstra (audit-only) files: comment blocks of interleaved indexed groups duplicated/reordered (31 files) | OPEN — not in current merge data |
 | F-020f | P3 | Synthetic blank separator between sections (+ preamble dedupe) adds/removes blank lines — 49 files whitespace-only | FIXED (uncommitted) — no synthetic separator, commented-header preamble kept, EOF = release |
 | F-017 | P2 | KV commented key with space before delimiter (`#a = B`) not recognised → base comment leaks to end of output (vs `#a=B` merged) | VERIFIED; literal trim rule sim: 2322 commented lines/109 files newly keys; merge output changes 4 files/node (blank lines in doc-comment headers) — needs Q9 scope |
@@ -70,4 +76,5 @@ LAST COMPLETED ACTION: commit 52765a3; S1 review verified + real-data exposure m
 LAST: commit f9eb4f7 (review annotations); processor fixes implemented + side-by-side verification sent
 LAST: commit a39f9d2; F-020 investigated (identity-merge harness scratch sep.*/ident.py, classify.py)
 LAST: commit 7ce9138 (F-020) + audit .sh as text
-NEXT ACTION: F-020g (optional) or S2 filter/backup-detection review
+LAST: S2 filter/backup review done by orchestrator (no delegation)
+NEXT ACTION: commit filter/backup batch on approval

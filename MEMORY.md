@@ -88,6 +88,10 @@ node has a duplicate; match = otherwise (incl. commented); extra = key not in ba
     indexed groups (F-020g) plus by-design DUPLICATE_KEY collapse / K-20 trailing spaces). A section repeated in one
     file keeps both blocks in place (decision 1a). `.sh` files are deployed from release, never KV-merged (2a);
     audit mode compares `.sh` as text (agreed 2026-09-18).
+14. **Audit filter & backups (2026-09-18)**: `!name` excludes a file or a directory of that name; `+path` never
+    switches the filter to include-only; a glob with `/` matches the relative path. Backup = marker
+    (bkp/bak/backup/orig/org/old/save + any text, or a 6/8/14-digit date) after the full name or before the
+    extension, and ONLY when the original exists next to it. `_v2` is not a backup (can be a real version).
 8. **Critical entries are traceable**: every critical report entry is also logged with a `CMT-*` code; an
    unparseable JSON/XML input is critical (`INVALID_JSON` / `INVALID_XML`, exit 1), never silently dropped.
 

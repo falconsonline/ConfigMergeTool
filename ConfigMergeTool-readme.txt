@@ -412,7 +412,8 @@ A complete sample filter file is provided in:  sample-filter.txt
      app/conf
 
   e) Glob filename include — include filenames matching a glob pattern
-     (contains *, ?, or [ — no leading "!")
+     (contains *, ?, or [ — no leading "!").  A glob that contains "/" is
+     matched against the relative path, e.g.  config/*.xml
      *.jar.*
      GTPProxy*
      jar.[0-9].*
@@ -421,9 +422,11 @@ A complete sample filter file is provided in:  sample-filter.txt
  EXCLUDE RULES  (evaluated after force-includes, before include rules)
 --------------------------------------------------------------------------------
 
-  f) Explicit name exclude — always skip this exact filename
+  f) Explicit name exclude — skip a file with this exact name, and
+     everything inside a directory with this name
      !nohup.out
      !.DS_Store
+     !backup           (skips backup/, config/backup/, ...)
 
   g) Glob exclude — skip filenames matching a glob pattern
      !*.tmp
@@ -433,8 +436,6 @@ A complete sample filter file is provided in:  sample-filter.txt
   h) Directory-path exclude — skip everything under a subtree
      (contains "/" after "!")
      !logs/archive
-     !backup
-     !old
 
   i) Built-in binary exclusions — ALWAYS active, cannot be overridden
      .tar  .gz  .bz2  .xz  .tgz  .rpm  .deb
@@ -451,7 +452,8 @@ A complete sample filter file is provided in:  sample-filter.txt
 --------------------------------------------------------------------------------
 
   j) Force-include a path within an excluded directory
-     (leading "+")
+     (leading "+").  A force-include is not an include rule: a filter with
+     only excludes and force-includes still audits every other file.
      +config/security/certs/active
      +logs/archive/current-session
 
@@ -507,13 +509,16 @@ The auditor automatically detects and skips backup files based on their
 filename patterns and whether an active counterpart exists in the same
 directory.
 
-Auto-detected suffixes / patterns:
-  _bkp            _bkp_*         _backup        _backup_*
-  _org            _orig          _old           _old_*
-  _save           .bak           .bkp
-  _DDMMYYYY       _DDMMYYYY_*    _YYYYMMDD      _YYYYMMDD_*
-  _YYYYMMDDHHmmss .properties_DDMMYYYY
-  _v[0-9]*        .properties_bkp
+Auto-detected suffixes / patterns (case-insensitive):
+  _bkp / .bkp / _bak / .bak / _backup / _orig / _org / _old / .old / _save
+    followed by anything or nothing:  _bkp  _bkp_27072024  _bkp200821
+                                      _bak17062026  _bkpprobetrouleshoot
+  _DDMMYY  _DDMMYYYY  _YYYYMMDD  _YYYYMMDDHHmmss  (optionally followed by _...)
+  The marker may follow the full name or sit before the extension:
+    fsmapp.properties_bkp200821    ->  original fsmapp.properties
+    fsmapp_240226.properties       ->  original fsmapp.properties
+    dbwriter_bkp040322.cfg         ->  original dbwriter.cfg
+  Version suffixes such as _v2 are NOT backups (gtpproxy_v2.mib is audited).
 
 Heuristic:
   A file is only skipped as a backup when BOTH conditions are true:
@@ -526,6 +531,7 @@ Example:
   GTPProxy.cfg              <- active file (processed normally)
   GTPProxy.cfg_bkp_27072024 <- detected as backup, skipped
   GTPProxy.cfg_20240727     <- detected as backup, skipped
+  GTPProxy_bkp0209.cfg      <- detected as backup, skipped
 
 Whitelist (opt out of auto-detection):
   In the audit config JSON, add "no_skip_files" to any node entry:

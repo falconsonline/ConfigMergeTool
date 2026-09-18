@@ -49,15 +49,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 _BACKUP_SUFFIX_RE = re.compile(
     r"""
     (?:
-        [_.]bkp(?:[_.\-].+)?      # _bkp  _bkp_27072024  _bkp_OLD
-      | [_.]backup(?:[_.\-].+)?   # _backup  .backup
-      | [_.]orig(?:[_.\-].+)?     # _orig  _orig_20240101
-      | [_.]org(?:[_.\-].+)?      # _org
-      | [_.]bak(?:[_.\-].+)?      # .bak  _bak
+        [_.](?:bkp|backup|orig|org|bak|old|save).*   # _bkp  _bkp_27072024  _bkp200821  _bak17062026  .old
+      | _\d{14}(?:[_.\-].+)?      # _20240727153000  (YYYYMMDDHHmmss)
       | _\d{8}(?:[_.\-].+)?       # _20240705  _20240705_v2  _27072024
       | _\d{6}(?:[_.\-].+)?       # _240705  (DDMMYY)
-      | [_.]old(?:[_.\-].+)?      # _old  .old
-      | [_.]save(?:[_.\-].+)?     # _save
     )$
     """,
     re.VERBOSE | re.IGNORECASE,
@@ -706,15 +701,17 @@ class AuditEngine:
         """
         if fname in self._no_skip_files:
             return False
+        # Marker after the full name: fsmapp.properties_bkp200821 → fsmapp.properties
         m = _BACKUP_SUFFIX_RE.search(fname)
-        if not m:
-            return False
-        # Derive the canonical stem (everything before the backup suffix)
-        stem = fname[: m.start()]
-        if not stem:
-            return False
-        # Only skip when the canonical file actually exists next to this one
-        return stem in siblings
+        if m and fname[: m.start()] and fname[: m.start()] in siblings:
+            return True
+        # Marker before the extension (F-025): fsmapp_240226.properties → fsmapp.properties
+        root, ext = os.path.splitext(fname)
+        m = _BACKUP_SUFFIX_RE.search(root) if ext else None
+        if m and root[: m.start()] and root[: m.start()] + ext in siblings:
+            return True
+        # Only ever a backup when the original actually exists next to it
+        return False
 
     # ------------------------------------------------------------------
     # Per-file comparison dispatch
