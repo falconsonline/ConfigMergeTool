@@ -1,5 +1,5 @@
 ================================================================================
- ConfigMergeTool v2.0.1 — User Guide
+ ConfigMergeTool v2.1.0 — User Guide
  Author: Shiju Abraham
 ================================================================================
 
@@ -47,13 +47,13 @@ Step 1 — Create a virtual environment (recommended):
 
 Step 2 — Install from wheel:
 
-  pip install configmergetool-2.0.1-py3-none-any.whl
+  pip install configmergetool-2.1.0-py3-none-any.whl
 
   # With optional auto-encoding detection (recommended for non-UTF-8 sites):
-  pip install "configmergetool-2.0.1-py3-none-any.whl[encoding]"
+  pip install "configmergetool-2.1.0-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-2.0.1-py3-none-any.whl[all]"
+  pip install "configmergetool-2.1.0-py3-none-any.whl[all]"
 
 Step 3 — Verify:
 
@@ -87,13 +87,13 @@ Step 3 — Activate the virtual environment:
 
 Step 4 — Install from wheel (copy the .whl file to a local folder first):
 
-  pip install configmergetool-2.0.1-py3-none-any.whl
+  pip install configmergetool-2.1.0-py3-none-any.whl
 
   # With optional encoding detection:
-  pip install "configmergetool-2.0.1-py3-none-any.whl[encoding]"
+  pip install "configmergetool-2.1.0-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-2.0.1-py3-none-any.whl[all]"
+  pip install "configmergetool-2.1.0-py3-none-any.whl[all]"
 
 Step 5 — Verify:
 
@@ -111,20 +111,20 @@ spaces must be quoted:
  UPGRADING FROM A PREVIOUS VERSION
 --------------------------------------------------------------------------------
 
-To upgrade to a new .whl (e.g. from 2.0.0 to 2.0.1), activate your virtual
+To upgrade to a new .whl (e.g. from 2.0.1 to 2.1.0), activate your virtual
 environment and run pip with --upgrade:
 
   # Linux / macOS
   source ~/.venvs/configmergetool/bin/activate
-  pip install --upgrade configmergetool-2.0.1-py3-none-any.whl
+  pip install --upgrade configmergetool-2.1.0-py3-none-any.whl
 
   # Windows (Command Prompt)
   C:\venvs\configmergetool\Scripts\activate.bat
-  pip install --upgrade configmergetool-2.0.1-py3-none-any.whl
+  pip install --upgrade configmergetool-2.1.0-py3-none-any.whl
 
   # Windows (PowerShell)
   C:\venvs\configmergetool\Scripts\Activate.ps1
-  pip install --upgrade configmergetool-2.0.1-py3-none-any.whl
+  pip install --upgrade configmergetool-2.1.0-py3-none-any.whl
 
 Confirm the new version is active:
   configmergetool --version
@@ -1479,6 +1479,21 @@ DON'T:
 ================================================================================
  VERSION HISTORY
 ================================================================================
+
+v2.1.0 (2026-09-18) — Audit accuracy, merge fidelity and memory
+  + Audit: KV files compared section by section against the base node
+  + Audit: duplicate keys in a section use the last value (warning shown)
+  + Audit: .sh scripts compared as text; SSTP blocks parsed correctly
+  + Audit: backup detection covers _bkp200821 / name_240226.properties styles
+  + Audit: a +path force-include no longer switches the filter to include-only
+  + Audit: section names shown in their original case ([CouchBase])
+  + Audit: much lower memory use — feedback history appended in place and
+    report pages written in pieces (Telstra-RSC1: ~750 MB -> ~300 MB)
+  + Merge: release-only files copied; ambiguous filename matches skipped
+  + Merge: KV comments, repeated sections and review annotations preserved
+  + Stable error identifiers CMT-<AREA>-<E|W|I><nnn> on every message
+  + To audit jar/class/other binaries, list their extensions in the filter
+    file (include rules override the built-in binary exclusion list)
 
 v2.0.1 (2026-04-07) — Audit report UX improvements
   + Index page "Files with differences" quick-list above directory tree

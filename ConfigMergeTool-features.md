@@ -1,6 +1,6 @@
 # ConfigMergeTool — Features Reference
 
-> Developer reference. Describes every feature implemented in the current codebase (v2.0.1).
+> Developer reference. Describes every feature implemented in the current codebase (v2.1.0).
 > Update this file whenever features are added, changed, or removed.
 
 ---
@@ -48,7 +48,7 @@ ConfigMergeTool/
 ├── requirements.txt            — Core runtime deps (openpyxl)
 ├── requirements-dev.txt        — Dev/test deps (pytest, build, twine, chardet)
 └── configmerge/
-    ├── __init__.py             — Public API + __version__ = "2.0.1"
+    ├── __init__.py             — Public API + __version__ = "2.1.0"
     ├── __main__.py             — Enables: python -m configmerge
     ├── cli.py                  — main() / _main() / parse_args() — pip entry point
     ├── models.py               — BaseDirConfig, RemoteConfig, MergeConfig, MergeResult,
@@ -671,7 +671,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | Feature | Detail |
 |---|---|
 | Package name | `configmergetool` |
-| Version | `2.0.1` |
+| Version | `2.1.0` |
 | Entry point | `configmergetool = "configmerge.cli:main"` |
 | Module invocation | `python -m configmerge` |
 | Legacy invocation | `python ConfigMergeTool.py` (backward compatible) |
@@ -680,8 +680,8 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | Optional `[ssh]` | `paramiko>=3.0` — Phase 11 SSH remote node access |
 | Optional `[email]` | `imapclient>=2.3` — Phase 12 email-triggered audit |
 | Optional `[all]` | All optional extras |
-| Build | `python -m build` → `dist/configmergetool-2.0.1-py3-none-any.whl` |
-| Install | `pip install configmergetool-2.0.1-py3-none-any.whl` |
+| Build | `python -m build` → `dist/configmergetool-2.1.0-py3-none-any.whl` |
+| Install | `pip install configmergetool-2.1.0-py3-none-any.whl` |
 | Type hints | `py.typed` marker present (PEP 561) |
 | Python | 3.9+ |
 
@@ -739,6 +739,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | 2026-09-17 | Review follow-up: production Java class replaced by release class → in-file `[CMT-MRG-W017]` annotation with the production value; base comments equal to the active value not copied; commented lines emitted byte-for-byte; JSON base `{}` now takes release keys (flagged), `[]` keeps base |
 | 2026-09-17 | Comments as context: base comment lines copied next to their parameter (alternative values, commented-in-base params); `#key = value` recognised when the key is a real parameter; review annotations `[CMT-MRG-W014]` (param) / `[CMT-MRG-W015]` (section) written into output and never re-copied on later runs; JSON base `{}`/`[]` kept over populated release and flagged `[CMT-MRG-W016]` |
 | 2026-09-17 | KV indexed groups matched by `name` subkey (index fallback); comma-list group headers merged as union (base items then release-only); base `prefix.count` kept but flagged `GROUP_COUNT_MISMATCH` when it differs from the merged total; XML named base-only elements inserted even when release has the same tag with other names (respects `--exclude-params-in-baseonlyconfig`) |
+| 2026-09-18 | **v2.1.0** — audit section-by-section KV comparison, merge fidelity and QE fixes (F-001–F-030), audit memory reduction (M-1, M-2), binary filter guidance |
 | 2026-09-18 | Audit report: KV section names shown exactly as written (`[CouchBase]`); the section row CSS no longer uppercases them (display only — data and patches always kept the original case) |
 | 2026-09-18 | Audit memory: feedback history appended in place instead of load-and-rewrite (a 195 MB history cost +350 MB peak per audit); HTML report pages rendered/validated/written as pieces instead of one joined string. Telstra-RSC1 audits: peak RSS 748 → 308 MB (3 nodes/823 files) and 730 → 274 MB (2 nodes/745 files); outputs byte-identical |
 | 2026-09-17 | Mapping: One-to-Many supported (F-14, warning `CMT-MRG-W006` retired); Many-to-One now merges every base for XML and JSON with the KV first-wins rule (F-06, `W011`/`W012` retired). Unparseable JSON/XML inputs are critical (`INVALID_JSON`/`INVALID_XML`, exit 1) instead of silently missing from output. Empty-base overrides logged with `CMT-MRG-E012`–`E014` |
