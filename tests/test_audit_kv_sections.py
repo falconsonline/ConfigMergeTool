@@ -208,3 +208,17 @@ def test_diffs_workbook_lists_every_duplicate_value_with_its_line(tmp_path):
     ws = openpyxl.load_workbook(path)["Parameter Diffs"]
     values = [c.value for c in ws[2]]
     assert values[2:6] == ["[S]", "default", "A", "B (L2) | A (L3)"]
+
+
+def test_shell_script_is_compared_as_text_not_kv(tmp_path):
+    """Shell scripts are not key/value files (agreed 2026-09-18): audit compares them as text."""
+    abs_paths = {}
+    for node, text in (("n1", "X=1\nif [ a ]; then\n  run\nfi\n"), ("n2", "X=2\nif [ a ]; then\n  run\nfi\n")):
+        path = tmp_path / node / "bin/start.sh"
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        abs_paths[node] = str(path)
+    engine = AuditEngine(nodes=[], report_dir=str(tmp_path / "reports"))
+    af = engine._compare_file("bin/start.sh", ["n1", "n2"], abs_paths, ["n1", "n2"])
+    assert af.file_type == "text"
+    assert af.mismatch_count >= 1

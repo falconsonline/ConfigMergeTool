@@ -87,7 +87,7 @@ node has a duplicate; match = otherwise (incl. commented); extra = key not in ba
     all real KV files — 145/253 before these fixes → 177/253 after; the rest are Telstra audit files with interleaved
     indexed groups (F-020g) plus by-design DUPLICATE_KEY collapse / K-20 trailing spaces). A section repeated in one
     file keeps both blocks in place (decision 1a). `.sh` files are deployed from release, never KV-merged (2a);
-    audit mode still reads `.sh` as KV (open question).
+    audit mode compares `.sh` as text (agreed 2026-09-18).
 8. **Critical entries are traceable**: every critical report entry is also logged with a `CMT-*` code; an
    unparseable JSON/XML input is critical (`INVALID_JSON` / `INVALID_XML`, exit 1), never silently dropped.
 

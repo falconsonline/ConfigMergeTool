@@ -1042,7 +1042,8 @@ Right panel — parameter table:
     Purple -- logical diff (expected to differ; not flagged as error)
     Striped -- file absent from this node (FILE ABSENT cell)
 
-  KV files (.properties / .cfg / .ini / .conf / .sh) are compared section by
+  Shell scripts (.sh) are compared as plain text.
+  KV files (.properties / .cfg / .ini / .conf) are compared section by
   section against the base node -- the first node in the audit config that has
   the file.  Each [section] header row shows a section check:
     base <node>: N param(s)   <node>: M match . D differ . X missing . +E extra

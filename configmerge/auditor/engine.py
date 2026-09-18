@@ -242,7 +242,8 @@ class AuditResult:
 class AuditEngine:
     """Compare configuration files across multiple site nodes."""
 
-    KV_EXTS   = {'.properties', '.cfg', '.ini', '.conf', '.sh'}
+    # .sh is compared as text: shell scripts are not key/value files (agreed 2026-09-18)
+    KV_EXTS   = {'.properties', '.cfg', '.ini', '.conf'}
     JSON_EXTS = {'.json'}
     SSTP_EXTS = {'.sstp'}
 

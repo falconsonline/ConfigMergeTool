@@ -730,6 +730,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-18 | Audit: `.sh` shell scripts compared as text instead of KV (matches merge, where `.sh` is deployed from release) |
 | 2026-09-18 | KV fidelity (F-020): no EMPTY_BASE_OVERRIDE when release is also empty (real runs now exit 0); keys commented in both files not reported as release-only; repeated section headers kept in place (paired by occurrence); no invented blank lines between sections; commented section headers keep their preceding lines; output ends exactly like release; comments not duplicated, comments of a collapsed duplicate key kept; `.sh` no longer KV-merged — release copy deployed |
 | 2026-09-18 | Whitespace-only base/release pairs (identical once all whitespace is removed; every mapped base must qualify) are copied from release byte-for-byte (`CMT-MRG-I003`); merged XML keeps the release file's trailing newline (F-019). Real data: 19 files/node copied from release, 15 outputs change whitespace only, 72 spurious MergeChanges rows gone |
 | 2026-09-17 | Processor fixes (S1 review): XML element blocks matched with balanced same-tag nesting and never inside `<!-- -->` comments (F-012/F-018); JSON inline-array formatting no longer alters string contents (F-013); KV lines split at the first `=`/`:` (F-014); JSON values compared type-strictly — `true` ≠ `1` (F-015) |
