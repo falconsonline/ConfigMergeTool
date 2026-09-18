@@ -66,7 +66,9 @@ _RE_SPC          = re.compile(r'SPC\s*=\s*([^\s,)]+)', re.IGNORECASE)
 _RE_DIGITS       = re.compile(r'DIGITS\s*\(([^)]+)\)', re.IGNORECASE)
 _RE_ROUTE        = re.compile(r'ROUTE\s+(?:APP|STACK)\s+(0x[0-9a-fA-F]+)', re.IGNORECASE)
 _RE_SPREAD       = re.compile(r'SPREAD\s*\(([^)]+)\)', re.IGNORECASE)
-_RE_BLOCK_HDR    = re.compile(r'^\s*([A-Z_][A-Z0-9_]*)\s*(\([^)]*\))?\s*\[', re.IGNORECASE)
+# No '^': used with .match(text, pos), which already anchors at pos — a '^' only ever matched
+# at offset 0, so blocks after leading comments were never parsed (F-030).
+_RE_BLOCK_HDR    = re.compile(r'\s*([A-Z_][A-Z0-9_]*)\s*(\([^)]*\))?\s*\[', re.IGNORECASE)
 
 # Normalise SET CDPA (A) AND SET CDPA (B) → SET CDPA (A,B)
 _RE_MULTI_SETCDPA = re.compile(

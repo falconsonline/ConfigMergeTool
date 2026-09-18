@@ -23,11 +23,11 @@ hid active keys (false "missing") and pushed sections the first node lacks to th
 5. **Section check** on each section header row: base parameter count, and per node match / differ /
    missing / extra, or "section absent".
 6. A **commented-out key** counts as present (commented), not missing.
-7. The same key twice in one section on a node (**duplicate in section**) shows both values with line
-   numbers, is flagged, and counts as a mismatch — **including identical duplicates** (re-confirmed with full
-   Telstra run data: e.g. 20 repeated keys in single-node `iMASCodes_en_US.properties`, `txnwriter.alias=default`
-   twice; run total 1,933 vs 1,898 in v2.0.1). A repeated section header (e.g. `[Profile Engine]` twice) merges
-   into one section, so its keys become duplicates.
+7. **Revised 2026-09-18:** the same key twice in one section on a node (**duplicate in section**) shows both
+   values with line numbers; the **last (second) value is the effective value** and is compared. The duplicate is
+   a warning (CMT-AUD-W007, names the value used), **not** a mismatch — identical files with duplicates now match
+   (was: counted as a mismatch, see Telstra `iMASCodes_en_US.properties`, `cliapp-irdbreport.properties`).
+   A repeated section header (e.g. `[Profile Engine]` twice) merges into one section, so its keys become duplicates.
 8. **Empty sections** are listed; a node lacking the header is flagged "section absent". Keys before the first
    header form the "(no section)" block with its own check.
 
@@ -38,8 +38,8 @@ hid active keys (false "missing") and pushed sections the first node lacks to th
     is absent on a node that has the file (base included). Matched headers still hide; empty sections stay
     visible when the filter is off.
 
-Derived counting: missing = no entry (active or commented); differ = both active and values differ, or the
-node has a duplicate; match = otherwise (incl. commented); extra = key not in base.
+Derived counting: missing = no entry (active or commented); differ = both active and (last) values differ;
+match = otherwise (incl. commented); extra = key not in base.
 
 **Rejected:** folding a key into one row across different sections (e.g. `pools` in `[CouchBase]` vs
 `[DBConnectionPool]`) — real data showed different sections with different meanings/values.
@@ -92,6 +92,10 @@ node has a duplicate; match = otherwise (incl. commented); extra = key not in ba
     switches the filter to include-only; a glob with `/` matches the relative path. Backup = marker
     (bkp/bak/backup/orig/org/old/save + any text, or a 6/8/14-digit date) after the full name or before the
     extension, and ONLY when the original exists next to it. `_v2` is not a backup (can be a real version).
+15. **Audit text/XML & SSTP (2026-09-18)**: text/XML compared with all whitespace removed (indentation-only
+    differences match, CMT-AUD-I001). SSTP parser never parsed any block before F-030 (`^` in the header regex used
+    with `.match(text, pos)`), so every .sstp compare was a silent match; fixed, plus a text fallback when a node
+    yields no blocks (CMT-AUD-W010). Filters must include `sstp` to audit routing rules (added to sample/Telstra filter).
 8. **Critical entries are traceable**: every critical report entry is also logged with a `CMT-*` code; an
    unparseable JSON/XML input is critical (`INVALID_JSON` / `INVALID_XML`, exit 1), never silently dropped.
 

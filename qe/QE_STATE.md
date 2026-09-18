@@ -53,6 +53,10 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 | F-024 | P1 | Backup: `<file>_bkp200821`, `_bak17062026`, `_bkpprobetrouleshoot` (no separator after bkp/bak) not detected — ~70 real backups with original present audited as live config (.properties/.cfg/.xml/.conf/.sstp) | FIXED (uncommitted) — real: 122 more backups skipped incl. F-025, all originals present |
 | F-025 | P2 | Backup: marker before the extension (`fsmapp_240226.properties`, `dbwriter_bkp040322.cfg`, `style_old_11jan07.css`) not detected though `fsmapp.properties` exists | FIXED (uncommitted) — decision yes |
 | F-026 | P3 | Backup: readme lists `_v[0-9]*` and `_YYYYMMDDHHmmss` but code detects neither | RESOLVED — decision no: _v not a backup; 14-digit timestamp added; readme corrected |
+| F-027 | P2 | Audit: key duplicated within one section on a node counts as a mismatch even when every node is byte-identical or the file exists on one node only — real: 3 identical + 5 single-node KV files flagged (cliapp-irdbreport.properties, iMASCodes_en_US.properties, ss7txnwriter*.cfg); inflates mismatches / exit 1 | FIXED (uncommitted) — last value used, W007 warning; real: 0 identical/single-node mismatches |
+| F-028 | P3 | Audit: text/xml comparison ignores trailing spaces + line endings but not indentation — real: subscription/cea/package.xml tabs vs 4 spaces = mismatch (23 other whitespace-only XML = match) | FIXED (uncommitted) — whitespace-insensitive, I001; real package.xml matches |
+| F-029 | P2 (config) | Telstra filter.txt has no `sstp` include — SmartSTP routing-rule.sstp / rule-template.sstp never audited (7 files run a, 4 run b) | FIXED (uncommitted) — sstp in sample-filter.txt + Telstra-RSC1/filter.txt (user copies to OneDrive) |
+| F-030 | P1 | SSTP parser `_RE_BLOCK_HDR` had `^` used with `.match(text, pos)` → 0 blocks for every real file (and repo sample) → every .sstp audit a silent MATCH; real routing-rule.sstp drift (SRC 0x…e vs 0x…d) hidden | FIXED (uncommitted) — regex + text fallback W010; real: 4 (a) / 2 (b) differing blocks now reported |
 | F-020g | P3 | Telstra (audit-only) files: comment blocks of interleaved indexed groups duplicated/reordered (31 files) | OPEN — not in current merge data |
 | F-020f | P3 | Synthetic blank separator between sections (+ preamble dedupe) adds/removes blank lines — 49 files whitespace-only | FIXED (uncommitted) — no synthetic separator, commented-header preamble kept, EOF = release |
 | F-017 | P2 | KV commented key with space before delimiter (`#a = B`) not recognised → base comment leaks to end of output (vs `#a=B` merged) | VERIFIED; literal trim rule sim: 2322 commented lines/109 files newly keys; merge output changes 4 files/node (blank lines in doc-comment headers) — needs Q9 scope |
@@ -68,7 +72,7 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 - Review follow-up FINAL (uncommitted): W017 in-file annotation for production Java class replaced (real: executor.class); base comments equal to active value not copied; comment lines byte-for-byte. Real: only fsmapp.properties changes (+7 lines/node, +1 APP-02)
 - Q11 ANSWERED (IMPLEMENTED): insert named base-only XML elements unless --exclude-params-in-baseonlyconfig
 
-## TESTS: 81 passed; earlier 71 passed (incl. 6 processor fixes, 6 whitespace); previously 59 passed (13 audit KV + 11 merge engine + 9 mappings + 6 groups/xml + 12 review annotations + 5 patch + 3 error codes), 0.46s
+## TESTS: 108 passed; earlier 81 passed; earlier 71 passed (incl. 6 processor fixes, 6 whitespace); previously 59 passed (13 audit KV + 11 merge engine + 9 mappings + 6 groups/xml + 12 review annotations + 5 patch + 3 error codes), 0.46s
 ## PERFORMANCE BASELINES: none measured
 ## SONNET TASKS COMPLETED: 1 (S1: 5 findings, 4 exact + 1 corrected by orchestrator) | OPUS TASKS COMPLETED: 0
 
@@ -77,4 +81,5 @@ LAST: commit f9eb4f7 (review annotations); processor fixes implemented + side-by
 LAST: commit a39f9d2; F-020 investigated (identity-merge harness scratch sep.*/ident.py, classify.py)
 LAST: commit 7ce9138 (F-020) + audit .sh as text
 LAST: S2 filter/backup review done by orchestrator (no delegation)
-NEXT ACTION: commit filter/backup batch on approval
+LAST: PR #2 opened; Telstra-RSC1 audits (a) 3 nodes 820 files 4.4s/740MB, (b) 2 nodes 743 files 2.5s/758MB; oracle check: 0 missed drifts
+NEXT ACTION: commit + push to PR #2 (plan approved); user copies sstp line into OneDrive Telstra-RSC/filter.txt

@@ -31,6 +31,8 @@ conf
 ini
 yaml
 yml
+# SmartSTP routing rules (semantic SSTP diff)
+sstp
 
 # Files with no extension at all (e.g. Makefile, Dockerfile, named configs)
 noext

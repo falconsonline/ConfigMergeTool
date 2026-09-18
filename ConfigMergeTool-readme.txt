@@ -1049,6 +1049,11 @@ Right panel — parameter table:
     Striped -- file absent from this node (FILE ABSENT cell)
 
   Shell scripts (.sh) are compared as plain text.
+  XML and other text files are compared with all whitespace ignored:
+  nodes that differ only in indentation, blank lines or line endings match
+  (noted as [CMT-AUD-I001]).
+  SSTP routing-rule files are compared block by block; if a node's file has
+  no recognisable blocks it is compared as text instead [CMT-AUD-W010].
   KV files (.properties / .cfg / .ini / .conf) are compared section by
   section against the base node -- the first node in the audit config that has
   the file.  Each [section] header row shows a section check:
@@ -1060,7 +1065,9 @@ Right panel — parameter table:
       to the real section above.
     - A commented-out key (#key=value) counts as present (shown greyed).
     - The same key twice in one section on a node shows every value with its
-      line number, tagged "duplicate in section", and counts as a mismatch.
+      line number, tagged "duplicate — L<n> value used".  The LAST (second)
+      value is the effective value and is what gets compared; the duplicate
+      itself is a warning [CMT-AUD-W007] naming the value used, not a mismatch.
     - Keys before the first header appear under "(no section)".
     - "Show differences only" still shows a section header when that section
       is absent on a node.
@@ -1329,9 +1336,11 @@ Search logs for the code; codes are never renumbered or reused.
   CMT-AUD-W004   Invalid JSON on a node
   CMT-AUD-W005   File cannot be read on a node
   CMT-AUD-W006   Raw/display content truncated
-  CMT-AUD-W007   Same key duplicated within one section on a node
+  CMT-AUD-W007   Same key duplicated within one section on a node; last value is used
   CMT-AUD-W008   Duplicate log-name prefixes detected
   CMT-AUD-W009   Generated HTML report failed the sanity check
+  CMT-AUD-W010   SSTP file has no recognisable blocks on a node; compared as text
+  CMT-AUD-I001   Text/XML nodes differ only in whitespace; treated as a match
   CMT-PAT-E001   Patch file cannot be read or is not valid JSON
   CMT-PAT-E002   Patch JSON is missing a required field
   CMT-PAT-E003   Patch change entry is malformed

@@ -254,7 +254,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 /* Duplicate in section: every active value with its source line */
 .dup-val{font-family:monospace}
 .dup-line{color:#888;font-size:10px}
-.dup-tag{display:inline-block;margin-top:2px;font-size:10px;color:#fff;background:#c62828;
+.dup-tag{display:inline-block;margin-top:2px;font-size:10px;color:#fff;background:#e65100;
          border-radius:3px;padding:0 5px}
 .param-row td{border-bottom:1px solid #eef0f4;padding:0;vertical-align:top}
 .param-row:hover td{background:#fafbfc}
@@ -1557,7 +1557,7 @@ function renderCell(file, idx, param, pi, node, nodeIdx, isExpDiff) {
     let lines = (param.lines || {})[node] || [];
     valDisplay = param.dupValues[node].map((v, i) =>
       `<div class="dup-val">${esc(String(v))} <span class="dup-line">L${lines[i] !== undefined ? lines[i] : '?'}</span></div>`
-    ).join('') + `<span class="dup-tag">duplicate in section</span>`;
+    ).join('') + `<span class="dup-tag">duplicate — L${lines.length ? lines[lines.length - 1] : '?'} value used</span>`;
   } else {
     valDisplay = esc(String(effVal !== null && effVal !== undefined ? effVal : ''));
     if (isCommented) valDisplay = `<span style="color:#888">#${valDisplay}</span>`;
@@ -3728,7 +3728,9 @@ def _write_diffs_xlsx(result: "AuditResult", run_dir: str) -> str:
             else:
                 # Duplicate in section: every active value with its source line
                 dups = (p.dup_values or {}).get(node)
-                text = (" | ".join(f"{v} (L{ln})" for v, ln in zip(dups, p.lines.get(node, [])))
+                node_lines = p.lines.get(node, [])
+                text = (" | ".join(f"{v} (L{ln})" for v, ln in zip(dups, node_lines))
+                        + (f" → L{node_lines[-1]} used" if node_lines else "")
                         if dups else str(node_val))
                 _set_cell(ws4, row_i, col_i, text, font=NORMAL, fill=RED_FILL)
 

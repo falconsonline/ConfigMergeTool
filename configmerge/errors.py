@@ -79,9 +79,11 @@ CODES: Dict[str, str] = {
     "CMT-AUD-W004": "Invalid JSON on a node",
     "CMT-AUD-W005": "File cannot be read on a node",
     "CMT-AUD-W006": "Raw/display content truncated",
-    "CMT-AUD-W007": "Same key duplicated within one section on a node",
+    "CMT-AUD-W007": "Same key duplicated within one section on a node; last value is used",
     "CMT-AUD-W008": "Duplicate log-name prefixes detected",
     "CMT-AUD-W009": "Generated HTML report failed the sanity check",
+    "CMT-AUD-W010": "SSTP file has no recognisable blocks on a node; compared as text",
+    "CMT-AUD-I001": "Text/XML nodes differ only in whitespace; treated as a match",
     # ── Apply audit patch ───────────────────────────────────────────────
     "CMT-PAT-E001": "Patch file cannot be read or is not valid JSON",
     "CMT-PAT-E002": "Patch JSON is missing a required field",

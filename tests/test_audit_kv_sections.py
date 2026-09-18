@@ -8,7 +8,8 @@ Rules (agreed with user, 2026-09-15):
   4. Sections/keys the base lacks appear at their file position (no repeated section blocks).
   5. Each section carries a check: base param count and per-node match/differ/missing/extra.
   6. A commented-out key counts as present (commented), not missing.
-  7. The same key twice in one section on a node shows both values and is a mismatch.
+  7. The same key twice in one section on a node shows both values; the last (second) value is the
+     effective one and is compared — the duplicate is a warning, not a mismatch (revised 2026-09-18).
   8. Empty sections are listed; keys before the first header form the DEFAULT section.
 """
 
@@ -97,7 +98,7 @@ def test_same_key_in_two_sections_stays_two_rows(tmp_path):
 
 # ── Rule 7: duplicate key within one section ───────────────────────────────
 
-def test_duplicate_key_in_section_shows_both_values_and_is_mismatch(tmp_path):
+def test_duplicate_key_uses_last_value_and_is_a_warning_not_a_mismatch(tmp_path):
     af = _compare(tmp_path, {
         "n1": "[S]\ndefault=A\n",
         "n2": "[S]\ndefault=B\ndefault=A\n",
@@ -105,8 +106,54 @@ def test_duplicate_key_in_section_shows_both_values_and_is_mismatch(tmp_path):
     row = _row(af, "[S]", "default")
     assert row.dup_values == {"n2": ["B", "A"]}
     assert row.lines["n2"] == [2, 3]
-    assert row.has_mismatch is True
-    assert any("'default' duplicated in [S]" in w and w.startswith("n2:") for w in af.warnings)
+    assert row.values["n2"] == "A"
+    assert row.has_mismatch is False
+    assert af.mismatch_count == 0
+    assert any(w.startswith("n2:") and "'default' duplicated in [S]" in w and "last value 'A' (L3) is used" in w
+               and "[CMT-AUD-W007]" in w for w in af.warnings)
+
+
+def test_duplicate_key_with_different_last_value_is_a_mismatch(tmp_path):
+    af = _compare(tmp_path, {
+        "n1": "[S]\ndefault=A\n",
+        "n2": "[S]\ndefault=A\ndefault=B\n",
+    })
+    assert _row(af, "[S]", "default").has_mismatch is True
+
+
+def test_identical_files_with_duplicate_key_match(tmp_path):
+    text = "[CouchBase]\ntimeout=100\nhost=h\ntimeout=200\n"
+    af = _compare(tmp_path, {"n1": text, "n2": text})
+    assert af.mismatch_count == 0
+
+
+def test_single_node_file_with_duplicate_key_is_not_a_mismatch(tmp_path):
+    af = _compare(tmp_path, {"n1": "[S]\nk=1\nk=2\n"}, all_nodes=["n1", "n2"])
+    assert af.mismatch_count == 0
+
+
+def test_xml_whitespace_only_difference_between_nodes_is_a_match(tmp_path):
+    abs_paths = {}
+    for node, text in (("n1", "<a>\n\t<b>1</b>\n</a>\n"), ("n2", "<a>\n    <b>1</b>\n\n</a>")):
+        path = tmp_path / node / "p/package.xml"
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        abs_paths[node] = str(path)
+    engine = AuditEngine(nodes=[], report_dir=str(tmp_path / "reports"))
+    af = engine._compare_file("p/package.xml", ["n1", "n2"], abs_paths, ["n1", "n2"])
+    assert af.mismatch_count == 0
+    assert any("[CMT-AUD-I001]" in w for w in af.warnings)
+
+
+def test_xml_content_difference_between_nodes_is_a_mismatch(tmp_path):
+    abs_paths = {}
+    for node, text in (("n1", "<a><b>1</b></a>\n"), ("n2", "<a><b>2</b></a>\n")):
+        path = tmp_path / node / "p/package.xml"
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        abs_paths[node] = str(path)
+    engine = AuditEngine(nodes=[], report_dir=str(tmp_path / "reports"))
+    assert engine._compare_file("p/package.xml", ["n1", "n2"], abs_paths, ["n1", "n2"]).mismatch_count >= 1
 
 
 # ── Rule 6: commented key ──────────────────────────────────────────────────
@@ -196,18 +243,18 @@ def test_report_data_carries_section_check_and_duplicate_lines(tmp_path):
     data = _serialise_result(_result(tmp_path, af, ["n1", "n2"]))
     f = data["files"][0]
     assert [(s["name"], s["counts"]) for s in f["sections"]] == [
-        ("[S]", {"n2": {"match": 0, "differ": 1, "missing": 0, "extra": 0}}),
+        ("[S]", {"n2": {"match": 1, "differ": 0, "missing": 0, "extra": 0}}),   # last value A == base
     ]
     assert f["params"][0]["dupValues"] == {"n2": ["B", "A"]}
     assert f["params"][0]["lines"] == {"n1": [2], "n2": [2, 3]}
 
 
 def test_diffs_workbook_lists_every_duplicate_value_with_its_line(tmp_path):
-    af = _compare(tmp_path, {"n1": "[S]\ndefault=A\n", "n2": "[S]\ndefault=B\ndefault=A\n"})
+    af = _compare(tmp_path, {"n1": "[S]\ndefault=A\n", "n2": "[S]\ndefault=A\ndefault=B\n"})
     path = _write_diffs_xlsx(_result(tmp_path, af, ["n1", "n2"]), str(tmp_path))
     ws = openpyxl.load_workbook(path)["Parameter Diffs"]
     values = [c.value for c in ws[2]]
-    assert values[2:6] == ["[S]", "default", "A", "B (L2) | A (L3)"]
+    assert values[2:6] == ["[S]", "default", "A", "A (L2) | B (L3) → L3 used"]
 
 
 def test_shell_script_is_compared_as_text_not_kv(tmp_path):
@@ -221,4 +268,37 @@ def test_shell_script_is_compared_as_text_not_kv(tmp_path):
     engine = AuditEngine(nodes=[], report_dir=str(tmp_path / "reports"))
     af = engine._compare_file("bin/start.sh", ["n1", "n2"], abs_paths, ["n1", "n2"])
     assert af.file_type == "text"
+    assert af.mismatch_count >= 1
+
+
+SSTP_A = "# Copyright\n# comment\nMAPTIMEOUT\n[\n  SET GCT (SRC=0x1e);\n  LOG \"x\";\n]\nROUTING\n[\n  ROUTE APP 0x10\n]\n"
+
+
+def _sstp(tmp_path, texts):
+    abs_paths = {}
+    for node, text in texts.items():
+        path = tmp_path / node / "cfg/routing-rule.sstp"
+        path.parent.mkdir(parents=True)
+        path.write_text(text, encoding="utf-8")
+        abs_paths[node] = str(path)
+    engine = AuditEngine(nodes=[], report_dir=str(tmp_path / "reports"))
+    return engine._compare_file("cfg/routing-rule.sstp", list(texts), abs_paths, list(texts))
+
+
+def test_sstp_blocks_after_leading_comments_are_parsed(tmp_path):
+    from configmerge.auditor.sstp_parser import SstpParser
+    assert [b.name for b in SstpParser.parse(SSTP_A).blocks] == ["MAPTIMEOUT", "ROUTING"]
+
+
+def test_sstp_value_difference_is_a_mismatch(tmp_path):
+    af = _sstp(tmp_path, {"n1": SSTP_A, "n2": SSTP_A.replace("0x1e", "0x1d")})
+    assert af.mismatch_count >= 1
+
+
+def test_sstp_identical_files_match(tmp_path):
+    assert _sstp(tmp_path, {"n1": SSTP_A, "n2": SSTP_A}).mismatch_count == 0
+
+
+def test_sstp_unparseable_but_different_files_are_a_mismatch(tmp_path):
+    af = _sstp(tmp_path, {"n1": "no blocks here a=1\n", "n2": "no blocks here a=2\n"})
     assert af.mismatch_count >= 1

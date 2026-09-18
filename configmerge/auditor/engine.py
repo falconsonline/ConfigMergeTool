@@ -207,8 +207,6 @@ def _section_check_kind(values: Dict[str, Optional[str]], commented: Dict[str, b
         return "missing"
     if base_val is None:
         return "extra"
-    if node in dup_values:
-        return "differ"
     if not commented.get(base) and not commented.get(node) and base_val != node_val:
         return "differ"
     return "match"
@@ -869,6 +867,15 @@ class AuditEngine:
                 warnings.append(f"{node}: [CMT-AUD-W003] SSTP parse error — {exc}")
                 docs[node] = None
 
+        # Safety net (F-030): a node whose file yields no SSTP blocks cannot be compared
+        # semantically — compare as text so a real difference is never reported as a match.
+        unparsed = [n for n in present_in if docs.get(n) is None or not docs[n].blocks]
+        if unparsed:
+            af = self._compare_text(rel_path, "text", present_in, abs_paths, all_nodes)
+            af.warnings = warnings + [f"{n}: [CMT-AUD-W010] no SSTP blocks recognised — compared as text"
+                                      for n in unparsed] + af.warnings
+            return af
+
         # Build union of all block compounds
         seen_compounds: Dict[str, None] = {}
         for node in present_in:
@@ -1024,9 +1031,12 @@ class AuditEngine:
                         values[node]    = None
                         commented[node] = False
 
+                # A key repeated in one section: the last (second) value is the effective one and
+                # is what gets compared; the duplicate itself is only a warning (agreed 2026-09-18).
                 for node in dup_values:
                     where = ", ".join(f"L{ln}" for ln in lines[node])
-                    warnings.append(f"{node}: '{key}' duplicated in {sec} ({where}) [CMT-AUD-W007]")
+                    warnings.append(f"{node}: '{key}' duplicated in {sec} ({where}) — last value "
+                                    f"'{values[node]}' (L{lines[node][-1]}) is used [CMT-AUD-W007]")
 
                 active_vals = {v for n, v in values.items()
                                if not commented[n] and v is not None}
@@ -1038,7 +1048,7 @@ class AuditEngine:
                     key          = key,
                     values       = values,
                     commented    = commented,
-                    has_mismatch = len(active_vals) > 1 or any_missing or bool(dup_values),
+                    has_mismatch = len(active_vals) > 1 or any_missing,
                     lines        = lines,
                     dup_values   = dup_values,
                 ))
@@ -1193,6 +1203,7 @@ class AuditEngine:
                       all_nodes: List[str]) -> AuditFile:
         raw_content: Dict[str, str]          = {}
         md5_vals   : Dict[str, Optional[str]] = {}
+        exact_md5  : Dict[str, str]           = {}
         warnings   : List[str]               = []
 
         for node in all_nodes:
@@ -1205,7 +1216,11 @@ class AuditEngine:
                 # Normalise: strip BOM artefacts, CRLF→LF, trailing whitespace per line
                 norm = "\n".join(ln.rstrip() for ln in text.replace("\r\n", "\n").replace("\r", "\n").splitlines())
                 import hashlib as _hl
-                md5_vals[node] = _hl.md5(norm.encode("utf-8", errors="replace")).hexdigest()
+                exact_md5[node] = _hl.md5(norm.encode("utf-8", errors="replace")).hexdigest()
+                # Compared with all whitespace removed: indentation / blank-line differences are
+                # not drift (agreed 2026-09-18, same rule as merge whitespace-only files).
+                squeezed = "".join(text.split())
+                md5_vals[node] = _hl.md5(squeezed.encode("utf-8", errors="replace")).hexdigest()
 
                 if len(text.encode("utf-8", errors="replace")) > _MAX_RAW_BYTES:
                     raw_content[node] = text[:_MAX_RAW_BYTES] + "\n[...truncated...]"
@@ -1222,6 +1237,8 @@ class AuditEngine:
         absent_count = len(all_nodes) - len(present_in)
         has_mismatch = len(present_md5s) > 1      # content diff among present nodes only
         mismatch     = 1 if has_mismatch else 0
+        if not has_mismatch and len({v for n, v in exact_md5.items() if n in present_in}) > 1:
+            warnings.append("whitespace-only differences between nodes ignored [CMT-AUD-I001]")
 
         param = AuditParam(
             compound     = "__md5__",
