@@ -660,8 +660,21 @@ class AuditEngine:
         import pathlib
         history_dir  = pathlib.Path.home() / ".configmergetool"
         history_path = history_dir / "feedback_history.json"
+        run = {
+            "timestamp":       self._ts,
+            "nodes":           node_names,
+            "run_dir":         self.run_dir,
+            "skipped_backups": [e.get("rel_path") for e in skipped_backups],
+            "logical_diffs":   [e.get("compound") for e in logical_diffs],
+            "log_warnings":    log_warnings,
+            "filtered_files":  [e.get("rel_path") for e in filtered_files],
+        }
         try:
             history_dir.mkdir(parents=True, exist_ok=True)
+            # M-1: the history grows with every run (hundreds of MB seen in the
+            # field); loading it all just to append one entry dominated peak RSS.
+            if self._append_history_in_place(history_path, run):
+                return
             history: dict = {}
             if history_path.exists():
                 try:
@@ -672,21 +685,39 @@ class AuditEngine:
             if not isinstance(history, dict) or "runs" not in history:
                 history = {"runs": []}
 
-            history["runs"].append({
-                "timestamp":       self._ts,
-                "nodes":           node_names,
-                "run_dir":         self.run_dir,
-                "skipped_backups": [e.get("rel_path") for e in skipped_backups],
-                "logical_diffs":   [e.get("compound") for e in logical_diffs],
-                "log_warnings":    log_warnings,
-                "filtered_files":  [e.get("rel_path") for e in filtered_files],
-            })
+            history["runs"].append(run)
 
             with open(str(history_path), "w", encoding="utf-8", newline="\n") as hf:
                 json.dump(history, hf, indent=2)
         except Exception as _fh_exc:
             # Feedback history is advisory — never abort the run, but do warn
             self._log("WARN ", tag("CMT-AUD-W002", f"Could not write feedback history: {_fh_exc}"))
+
+    _HISTORY_HEAD = b'{\n  "runs": [\n'
+    _HISTORY_TAIL = b'\n  ]\n}'
+
+    @classmethod
+    def _append_history_in_place(cls, history_path, run: dict) -> bool:
+        """Append *run* without loading the file; bytes equal a full json.dump(indent=2).
+
+        Only used when the file has exactly the layout json.dump(indent=2) writes for
+        a non-empty {"runs": [...]}; returns False otherwise so the caller falls back
+        to load-and-rewrite.
+        """
+        head, tail = cls._HISTORY_HEAD, cls._HISTORY_TAIL
+        if not history_path.is_file() or history_path.stat().st_size < len(head) + len(tail):
+            return False
+        with open(str(history_path), "r+b") as hf:
+            if hf.read(len(head)) != head:
+                return False
+            hf.seek(-len(tail), os.SEEK_END)
+            if hf.read() != tail:
+                return False
+            single = json.dumps({"runs": [run]}, indent=2).encode("utf-8")
+            entry = single[len(head):-len(tail)]
+            hf.seek(-len(tail), os.SEEK_END)
+            hf.write(b",\n" + entry + tail)
+        return True
 
     # ------------------------------------------------------------------
     # Backup-file detection helpers

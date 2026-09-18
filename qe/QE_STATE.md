@@ -2,7 +2,7 @@
 
 PROJECT VERSION: 2.0.1 — branch fix/audit-kv-section-compare @ 547f785 (fixes uncommitted)
 CURRENT PHASE: 2 — P0–P3 fixes DONE, verified (2026-09-17)
-CURRENT OBJECTIVE: commit decision; then S1 (processor edge-case review)
+CURRENT OBJECTIVE: MEMORY OPTIMIZATION — M-1 + M-2 VERIFIED + committed to PR #2; M-5 left by user decision
 
 ## VERIFIED ARCHITECTURE
 - cli.py::_main routes: --feedback-summary → --apply-audit-patch → --audit-config-file → merge
@@ -73,7 +73,27 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 - Q11 ANSWERED (IMPLEMENTED): insert named base-only XML elements unless --exclude-params-in-baseonlyconfig
 
 ## TESTS: 108 passed; earlier 81 passed; earlier 71 passed (incl. 6 processor fixes, 6 whitespace); previously 59 passed (13 audit KV + 11 merge engine + 9 mappings + 6 groups/xml + 12 review annotations + 5 patch + 3 error codes), 0.46s
-## PERFORMANCE BASELINES: none measured
+## PERFORMANCE BASELINES (2026-09-18, Py 3.14.6, macOS 26.6.2, 12 CPU/24 GB, single process, no concurrency)
+Workload (a) Telstra-RSC1 audit-rsc-all: 3 nodes, 823 audited files (after filter.txt), node dirs 0.55–1.0 GB (mostly jars/binaries, hashed streaming)
+Workload (b) Telstra-RSC1 audit-rsc: 2 nodes, 745 audited files
+Baseline peak RSS (3 runs, /usr/bin/time -l): (a) 700/749/748 MB, 4.80/4.17/4.19 s; (b) 710/709/730 MB, 2.66/2.77/2.68 s
+Counterfactual empty ~/.configmergetool/feedback_history.json (HOME isolated, no code change): (a) 392/399/394 MB, 3.35–3.64 s; (b) 330/330/329 MB, 1.81–1.85 s
+Phase profile (a, isolated HOME): scan 51 MB → compare loop 105 MB (tracemalloc 66 MB live) → xlsx 118 → part1 _build_html 227 → part2 371 → index 397 MB. tracemalloc peak 245 MB vs RSS 432 MB (≈190 MB allocator retention)
+Measurement harness: scratchpad mem/prof.py (phase + per-file ru_maxrss attribution); ALWAYS run with HOME=<scratch> — real runs append to ~/.configmergetool
+
+## MEMORY CHECKPOINT (2026-09-18) — M-1 + M-2
+Golden: frozen-clock runs (scratch mem/golden.py, digest.py), 34 outputs (HTML parts, xlsx cells, feedback JSON, log, history) byte-identical g0 = g0b (determinism) = g1 (M-1) = g2 (M-1+M-2); exit codes 1/1 unchanged; no W009
+After (3 runs, 195 MB history seeded): (a) 305/308/309 MB, 3.23–3.54 s (was 700–749 MB, 4.2–4.8 s) = −59%; (b) 274/274/275 MB, 1.71–1.79 s (was 709–730 MB, 2.7–2.8 s) = −62%
+tracemalloc peak (a) 245 → 203 MB. Tests 108 → 125 passed
+User history: ~/.configmergetool/feedback_history.json renamed to feedback_history.backup-20260918.json (archived, intact); removal of this session's 8 entries (20260918_144827..144950) BLOCKED by permission classifier — pending user
+
+## MEMORY FINDINGS
+| M-1 | P1 | _append_feedback_history json.load()s + rewrites the whole cross-run history every audit. Real file 195 MB / 53 runs / 1.93 M filtered_files paths (≤228k/run) → +350 MB peak, +0.8 s; grows every run, unbounded | FIXED (uncommitted, user chose A) — in-place append, bytes = json.dump(indent=2); real (195 MB history): (a) 748→387–395 MB, (b) 730→328–330 MB; tests/test_audit_feedback_history.py (7, mutation-checked) |
+| M-2 | P2 | _build_html holds ~5 copies of each page (json.dumps indent=2 → 2× re.sub → f-string → encode) and page str is UCS-2 because template contains U+2713 → 24 Mchar page = 48 MB/copy, ≈+100–120 MB per part; _validate_html feeds whole page to HTMLParser | FIXED (uncommitted) — head/data/tail rendered, validated (_validate_html_parts) and written piecewise; (a) 395→305–309 MB, (b) 330→274 MB; tests/test_audit_report_pieces.py (10 incl. memory budget <3.5x raw: old 5.3x FAILS, new 2.1x) |
+| M-3 | P3 | RSS ratchets across parts (freed page strings not returned to OS): part1 227 → part2 371 MB | PARTLY — stale previous-part page ref gone with M-2; allocator ratchet remains |
+| M-4 | P3 | --feedback-summary loads the same 195 MB file (≈660 MB peak) | OPEN — small after history archived; grows again ~3.7 MB/run |
+| M-5 | P3 | _render_html_parts: json.dumps(indent=2) (pure-Python encoder, millions of chunk strs) + 2 re.sub copies: +48/+82 MB per part | OPEN — streaming iterencode to file would rely on CPython chunk boundaries for </script escaping; user decision 2026-09-18: LEAVE (305 MB acceptable; no reliance on CPython chunking) |
+Not causes (measured): binaries/jars (streamed sha256, 0 per-file jumps), scan (2 MB), compare loop total ~55 MB, xlsx +13 MB, _serialise_result +3 MB
 ## SONNET TASKS COMPLETED: 1 (S1: 5 findings, 4 exact + 1 corrected by orchestrator) | OPUS TASKS COMPLETED: 0
 
 LAST COMPLETED ACTION: commit 52765a3; S1 review verified + real-data exposure measured
@@ -82,4 +102,5 @@ LAST: commit a39f9d2; F-020 investigated (identity-merge harness scratch sep.*/i
 LAST: commit 7ce9138 (F-020) + audit .sh as text
 LAST: S2 filter/backup review done by orchestrator (no delegation)
 LAST: PR #2 opened; Telstra-RSC1 audits (a) 3 nodes 820 files 4.4s/740MB, (b) 2 nodes 743 files 2.5s/758MB; oracle check: 0 missed drifts
-NEXT ACTION: commit + push to PR #2 (plan approved); user copies sstp line into OneDrive Telstra-RSC/filter.txt
+LAST: Memory Phase 1 baseline + root cause (M-1..M-4)
+NEXT ACTION (memory): user: remove 8 session entries from archived history manually. Earlier: commit + push to PR #2 (plan approved); user copies sstp line into OneDrive Telstra-RSC/filter.txt

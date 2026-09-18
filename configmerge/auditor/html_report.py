@@ -2545,8 +2545,16 @@ def _serialise_result(result: "AuditResult") -> dict:
 # HTML template
 # ---------------------------------------------------------------------------
 
-def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
-    """Build a self-contained audit report HTML string.
+# Stands in for the AUDIT_DATA JSON while the page template is rendered; never in output.
+_DATA_SLOT = "\x00AUDIT_DATA_SLOT\x00"
+
+
+def _render_html_parts(result: "AuditResult", files_js=None, pagination=None):
+    """Render a self-contained audit report as (head, data_js, tail).
+
+    head + data_js + tail is the page.  Kept apart so the (large) page is never
+    concatenated in memory: the template holds non-Latin-1 characters, which
+    would store the whole joined page at 2 bytes/char (M-2).
 
     Parameters
     ----------
@@ -2665,7 +2673,7 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
                 f'</div>'
             )
 
-    return f"""<!DOCTYPE html>
+    page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2896,13 +2904,20 @@ def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
 </div>
 
 <script>
-const AUDIT_DATA = {data_js};
+const AUDIT_DATA = {_DATA_SLOT};
 </script>
 <script>
 {_JS}
 </script>
 </body>
 </html>"""
+    head, tail = page.split(_DATA_SLOT)
+    return head, data_js, tail
+
+
+def _build_html(result: "AuditResult", files_js=None, pagination=None) -> str:
+    """Build a self-contained audit report HTML string (see _render_html_parts)."""
+    return "".join(_render_html_parts(result, files_js=files_js, pagination=pagination))
 
 
 # ---------------------------------------------------------------------------
@@ -3432,20 +3447,31 @@ def _validate_html(html_str: str, path: str) -> bool:
     Prints a warning to stderr if issues are detected.
     Returns True when the check passes, False otherwise.
     """
-    issues: list = []
+    return _validate_html_parts(html_str, "", "", path)
 
-    # Structural markers
-    if "<!DOCTYPE html>" not in html_str:
+
+def _validate_html_parts(head: str, data_js: str, tail: str, path: str) -> bool:
+    """_validate_html for a page kept as head + data_js + tail, without joining it.
+
+    data_js is the AUDIT_DATA JSON inside a <script> element; with no "</script"
+    in it (the escaping in _render_html_parts guarantees that) the parser treats
+    it as opaque script text, so parsing head + tail gives the same verdict.
+    """
+    issues: list = []
+    pieces = (head, data_js, tail)
+
+    # Structural markers (the pieces meet at "= {" and "};", so none straddles a join)
+    if not any("<!DOCTYPE html>" in p for p in pieces):
         issues.append("missing <!DOCTYPE html>")
-    if "</html>" not in html_str:
+    if not any("</html>" in p for p in pieces):
         issues.append("missing </html>")
-    if "</body>" not in html_str:
+    if not any("</body>" in p for p in pieces):
         issues.append("missing </body>")
 
     # <script> / </script> balance — unbalanced tags indicate raw-content leakage
     # Use case-insensitive regex so </SCRIPT> variants are also counted.
-    open_count  = len(re.findall(r'<script\b', html_str, re.IGNORECASE))
-    close_count = len(re.findall(r'</script\b', html_str, re.IGNORECASE))
+    open_count  = sum(len(re.findall(r'<script\b', p, re.IGNORECASE)) for p in pieces)
+    close_count = sum(len(re.findall(r'</script\b', p, re.IGNORECASE)) for p in pieces)
     if open_count != close_count:
         issues.append(
             f"unbalanced <script> tags "
@@ -3455,7 +3481,10 @@ def _validate_html(html_str: str, path: str) -> bool:
     # Feed through HTMLParser to catch catastrophic parse failures
     checker = _HTMLChecker()
     try:
-        checker.feed(html_str)
+        if re.search(r'</script', data_js, re.IGNORECASE):
+            checker.feed(head + data_js + tail)
+        else:
+            checker.feed(head + tail)
         checker.close()
     except Exception as exc:
         issues.append(f"HTMLParser raised: {exc}")
@@ -3853,6 +3882,16 @@ def _write_diffs_xlsx(result: "AuditResult", run_dir: str) -> str:
     return xlsx_path
 
 
+def _write_html_parts(path: str, parts) -> None:
+    """Validate and write a page given as (head, data_js, tail) without joining it."""
+    head, data_js, tail = parts
+    _validate_html_parts(head, data_js, tail, path)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(head)
+        f.write(data_js)
+        f.write(tail)
+
+
 def write_audit_html(result: "AuditResult", run_dir: str) -> str:
     """Write the audit report HTML.
 
@@ -3874,10 +3913,7 @@ def write_audit_html(result: "AuditResult", run_dir: str) -> str:
     if len(parts_chunks) == 1:
         # Single-part: write the classic single-file report
         out_path = os.path.join(run_dir, "audit_report.html")
-        html     = _build_html(result, files_js=parts_chunks[0])
-        _validate_html(html, out_path)
-        with open(out_path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(html)
+        _write_html_parts(out_path, _render_html_parts(result, files_js=parts_chunks[0]))
         return out_path
 
     # Multi-part: write one file per chunk and an index page
@@ -3910,11 +3946,9 @@ def write_audit_html(result: "AuditResult", run_dir: str) -> str:
                 for j, m in enumerate(parts_meta)
             ],
         }
-        html      = _build_html(result, files_js=meta["files"], pagination=pagination)
         part_path = os.path.join(run_dir, meta["url"])
-        _validate_html(html, part_path)
-        with open(part_path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(html)
+        _write_html_parts(part_path, _render_html_parts(
+            result, files_js=meta["files"], pagination=pagination))
         part_pages.append(part_path)
 
     # Write the index page

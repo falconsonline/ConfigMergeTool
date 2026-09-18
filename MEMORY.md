@@ -101,6 +101,19 @@ match = otherwise (incl. commented); extra = key not in base.
 
 ---
 
+## Audit memory (confirmed 2026-09-18)
+
+1. **Feedback history is appended in place (option A).** `~/.configmergetool/feedback_history.json` keeps its
+   format and full content (filtered-file paths included); each run splices its entry before the closing
+   `]}` without loading the file. Bytes equal a full `json.dump(indent=2)`. Any other layout falls back to
+   load-and-rewrite. Rejected: storing counts only (B), capping to last N runs (C).
+2. **Audit HTML pages are never joined in memory.** Rendered as head + AUDIT_DATA JSON + tail, validated and
+   written piecewise; output bytes unchanged. `_validate_html_parts` parses head + tail (the escaped JSON is
+   opaque script text) and falls back to the full page if the JSON ever contains `</script`.
+3. **Measure memory with `HOME` isolated.** Real audit runs append to the user's history file.
+
+---
+
 ## Working rules
 
 - **Data first, no assumptions (2026-09-15).** Before proposing a plan, share a snapshot with actual data,
