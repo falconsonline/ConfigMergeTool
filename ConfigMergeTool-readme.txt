@@ -190,6 +190,9 @@ Option details:
 
   --output-dir PATH
       Directory where merged config files are written.
+      When a base file and its release file differ only in whitespace
+      (spaces, tabs, blank lines, line breaks), the release file is copied
+      byte-for-byte instead of being merged [CMT-MRG-I003, log only].
       Cleaned and recreated on every run (skipped with --dry-run).
       Must not be, contain, or sit inside any base or release directory —
       such runs are refused before anything is deleted [CMT-MRG-E010], exit 2.
@@ -1298,6 +1301,7 @@ Search logs for the code; codes are never renumbered or reused.
   CMT-MRG-W017   KV production Java class name replaced by release class; review annotation added
   CMT-MRG-I001   Mapping: several base files mapped to one release file (first listed wins)
   CMT-MRG-I002   Mapping: one base file mapped to several release files
+  CMT-MRG-I003   Base and release differ only in whitespace; release file copied as-is
   CMT-AUD-E001   Node directory not found; audit aborted
   CMT-AUD-E002   File could not be compared (render error)
   CMT-AUD-W001   Invalid logical_diff_pattern regex ignored

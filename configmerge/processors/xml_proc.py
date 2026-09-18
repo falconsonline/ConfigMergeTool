@@ -211,29 +211,55 @@ def _detect_xml_duplicates(
 # Find / replace blocks (text-level, keeps formatting)
 # ---------------------------------------------------------------------------
 
+_XML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+class _BlockMatch:
+    """Minimal stand-in for re.Match: the span and text of one complete element block."""
+
+    def __init__(self, text: str, start: int, end: int):
+        self._text, self._start, self._end = text, start, end
+
+    def group(self, _index: int = 0) -> str:
+        return self._text[self._start:self._end]
+
+    def span(self) -> Tuple[int, int]:
+        return self._start, self._end
+
+    def start(self) -> int:
+        return self._start
+
+
 def _find_matching_block(
     text: str, tag: str, name: Optional[str]
-) -> Optional[re.Match]:
-    if name:
-        # Full block with name attribute
-        pattern = re.compile(
-            rf'<(?:[\w-]+:)?{re.escape(tag)}\b[^>]*\bname="{re.escape(name)}"[^>]*>.*?</(?:[\w-]+:)?{re.escape(tag)}>',
-            re.DOTALL
-        )
-        matches = list(pattern.finditer(text))
-        if matches:
-            return max(matches, key=lambda m: len(m.group(0)))
-        # Self-closing fallback
-        pattern_sc = re.compile(
-            rf'<(?:[\w-]+:)?{re.escape(tag)}\b[^>]*\bname="{re.escape(name)}"[^>]*/>', re.DOTALL
-        )
-        return pattern_sc.search(text)
-    else:
-        pattern = re.compile(
-            rf'<(?:[\w-]+:)?{re.escape(tag)}\b[^>]*>.*?</(?:[\w-]+:)?{re.escape(tag)}>',
-            re.DOTALL
-        )
-        return pattern.search(text)
+) -> Optional[_BlockMatch]:
+    """First element <tag ...> (with name="..." when *name* is given) including its whole
+    body.  Nested elements with the same tag are balanced, so a parent block is never cut
+    at a child's closing tag."""
+    t = re.escape(tag)
+    name_attr = rf'[^>]*\bname="{re.escape(name)}"' if name else ""
+    opener = re.compile(rf'<(?:[\w-]+:)?{t}\b{name_attr}[^>]*>', re.DOTALL)
+    tag_token = re.compile(rf'<(/?)(?:[\w-]+:)?{t}\b[^>]*?(/?)>', re.DOTALL)
+    comments = [c.span() for c in _XML_COMMENT_RE.finditer(text)]
+
+    def in_comment(pos: int) -> bool:
+        return any(start <= pos < end for start, end in comments)
+
+    for m in opener.finditer(text):
+        if in_comment(m.start()):
+            continue
+        if m.group(0).endswith("/>"):
+            return _BlockMatch(text, m.start(), m.end())
+        depth, pos = 1, m.end()
+        for tok in tag_token.finditer(text, pos):
+            closing, self_closing = tok.group(1), tok.group(2)
+            if self_closing or in_comment(tok.start()):
+                continue
+            depth += -1 if closing else 1
+            if depth == 0:
+                return _BlockMatch(text, m.start(), tok.end())
+        return None
+    return None
 
 
 def _replace_elements(
@@ -518,8 +544,11 @@ class XMLProcessor(BaseProcessor):
         rel_text = _normalize_namespaces(rel_text, original_rel_open)
 
         if not config.dry_run:
+            # F-019: parsing strips the text; restore the release file's own trailing
+            # whitespace (e.g. the final newline) so the output ends like the release.
+            rel_raw = open_text(rel_file)
             ensure_dir(out_file)
             with open(out_file, "w", encoding="utf-8", newline="\n") as f:
-                f.write(rel_text)
+                f.write(rel_text.rstrip() + rel_raw[len(rel_raw.rstrip()):])
 
         return report

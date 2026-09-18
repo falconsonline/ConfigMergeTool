@@ -37,6 +37,23 @@ from .reporter.excel import write_excel
 from .reporter.html_reporter import write_html
 
 
+def _whitespace_equal(base_files: List[str], rel_file: str) -> bool:
+    """True when every base file equals the release file once all whitespace (spaces, tabs,
+    newlines) is removed.  Binary or unreadable files never qualify."""
+    def squeezed(path: str) -> Optional[bytes]:
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError:
+            return None
+        if b"\0" in data:
+            return None
+        return b"".join(data.split())
+
+    rel = squeezed(rel_file)
+    return rel is not None and all(squeezed(b) == rel for b in base_files)
+
+
 class MergeEngine:
     """
     Orchestrates the full merge pipeline.  Iterates over every BaseDirConfig
@@ -207,9 +224,18 @@ class MergeEngine:
             )
 
             try:
-                entries = processor.process(
-                    base_files, rel_file, out_file, base_config, logger
-                )
+                if _whitespace_equal(base_files, rel_file):
+                    # Base and release differ only in whitespace: nothing to merge —
+                    # deploy the release file byte-for-byte.
+                    if not config.dry_run:
+                        copy_file(rel_file, out_file, logger)
+                    log_structured(logger, "INFO", "FILE", "WHITESPACE_ONLY", file_match.rel_path, "",
+                                   "base and release differ only in whitespace — release copied as-is")
+                    entries = []
+                else:
+                    entries = processor.process(
+                        base_files, rel_file, out_file, base_config, logger
+                    )
             except Exception as e:
                 log_structured(logger, "ERROR", "ENGINE", "PROCESSOR_FAILED",
                                file_match.rel_path, "", str(e))

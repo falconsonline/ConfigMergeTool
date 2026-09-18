@@ -69,6 +69,7 @@ CODES: Dict[str, str] = {
     "CMT-MRG-W017": "KV production Java class name replaced by release class; review annotation added",
     "CMT-MRG-I001": "Mapping: several base files mapped to one release file (first listed wins)",
     "CMT-MRG-I002": "Mapping: one base file mapped to several release files",
+    "CMT-MRG-I003": "Base and release differ only in whitespace; release file copied as-is",
     # ── Audit mode ──────────────────────────────────────────────────────
     "CMT-AUD-E001": "Node directory not found; audit aborted",
     "CMT-AUD-E002": "File could not be compared (render error)",
@@ -117,6 +118,7 @@ STRUCTURED_CODES: Dict[Tuple[str, str], str] = {
     ("FILE",      "MULTI_RELEASE_DIR_FIRST"):    "CMT-MRG-W010",
     ("MAPPING",   "MULTI_BASE"):                 "CMT-MRG-I001",
     ("MAPPING",   "BASE_TO_MANY_RELEASES"):      "CMT-MRG-I002",
+    ("FILE",      "WHITESPACE_ONLY"):            "CMT-MRG-I003",
     ("KV",        "EMPTY_BASE_OVERRIDE"):        "CMT-MRG-E012",
     ("KV",        "GROUP_COUNT_MISMATCH"):       "CMT-MRG-W013",
     ("KV",        "REVIEW_COMMENTED_IN_BASE"):   "CMT-MRG-W014",

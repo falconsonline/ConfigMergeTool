@@ -80,6 +80,9 @@ node has a duplicate; match = otherwise (incl. commented); extra = key not in ba
     byte-for-byte. Production Java class replaced by release (JAVA_CLASS_NAME_FROM_RELEASE) → in-file W017
     annotation naming the production class (real: fsmapp.properties executor.class BaseRuleExecutor →
     EmbeddedRuleExecutor).
+12. **Whitespace-only differences are ignored (2026-09-18)**: if base and release are identical once all whitespace
+    is removed (every mapped base must qualify), the release file is copied byte-for-byte — no merge rewrite,
+    no report rows (`CMT-MRG-I003`, log only). Note: this also treats `a b` vs `ab` as equal (accepted literal rule).
 8. **Critical entries are traceable**: every critical report entry is also logged with a `CMT-*` code; an
    unparseable JSON/XML input is critical (`INVALID_JSON` / `INVALID_XML`, exit 1), never silently dropped.
 

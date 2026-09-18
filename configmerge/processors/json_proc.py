@@ -45,12 +45,6 @@ def _safe_load_json(
         return None
 
 
-_PRIMITIVE_ARRAY_RE = re.compile(
-    r'\[([^\[\]{}]*?)\]',
-    re.DOTALL,
-)
-
-
 def _collapse_primitive_arrays(text: str) -> str:
     """Collapse expanded JSON arrays that contain only primitive values back to
     a single line.
@@ -64,16 +58,62 @@ def _collapse_primitive_arrays(text: str) -> str:
     ``{`` characters (i.e. no nested arrays or objects — only strings, numbers,
     booleans, and null) and collapses whitespace so it reads on one line.
 
-    Arrays that contain nested structures are left untouched.
+    Arrays that contain nested structures are left untouched.  String literals are
+    copied as-is: brackets or commas inside a string are never treated as structure.
     """
-    def _collapse(m: re.Match) -> str:
-        inner = m.group(1)
-        # Split on commas, strip surrounding whitespace from each item
-        items = [item.strip() for item in inner.split(",")]
-        items = [i for i in items if i]   # drop empty strings (trailing comma)
-        return "[" + ", ".join(items) + "]"
+    out: List[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == '"':
+            end = _string_end(text, i)
+            out.append(text[i:end])
+            i = end
+            continue
+        if ch == "[":
+            items, current, j, primitive = [], [], i + 1, True
+            while j < n and text[j] != "]":
+                c = text[j]
+                if c == '"':
+                    end = _string_end(text, j)
+                    current.append(text[j:end])
+                    j = end
+                    continue
+                if c in "[{":
+                    primitive = False
+                    break
+                if c == ",":
+                    items.append("".join(current).strip())
+                    current = []
+                else:
+                    current.append(c)
+                j += 1
+            if primitive and j < n:
+                items.append("".join(current).strip())
+                out.append("[" + ", ".join(item for item in items if item) + "]")
+                i = j + 1
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
-    return _PRIMITIVE_ARRAY_RE.sub(_collapse, text)
+
+def _string_end(text: str, start: int) -> int:
+    """Index just past the JSON string literal that opens at *start*."""
+    j = start + 1
+    while j < len(text):
+        if text[j] == "\\":
+            j += 2
+            continue
+        if text[j] == '"':
+            return j + 1
+        j += 1
+    return len(text)
+
+
+def _same_json(a: Any, b: Any) -> bool:
+    """JSON equality: unlike Python ==, true != 1 and false != 0."""
+    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
 
 
 def _detect_indent(text: str):
@@ -179,7 +219,7 @@ def _merge(
                     recommended=json.dumps(old_val),
                 ))
                 rel[k] = new_val
-            elif old_val != new_val:
+            elif not _same_json(old_val, new_val):
                 old_s = json.dumps(old_val)
                 new_s = json.dumps(new_val)
                 if isinstance(old_val, str) and isinstance(new_val, str) and \

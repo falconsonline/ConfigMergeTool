@@ -277,6 +277,9 @@ def _has_valid_kv_key(s: str) -> bool:
     no whitespace.  Prevents comment lines like '# Description   : some text' from
     being misidentified as commented KV entries.  Real keys such as 'trap.version'
     or 'log.max.size' never have spaces before the delimiter."""
+    # Deliberately checks '=' before ':' (not the first delimiter): prose such as
+    # '# Format: "SEC or sec" ... = ...' must not become a commented key, while
+    # '#jdbc.url: jdbc:...?opt=val' (no spaces before '=') still qualifies.
     for delim in ("=", ":"):
         if delim in s:
             key_part = s.split(delim, 1)[0]
@@ -285,12 +288,19 @@ def _has_valid_kv_key(s: str) -> bool:
 
 
 def _split_kv(s: str) -> Tuple[str, str, str]:
-    """Split 'key = value' or 'key: value'. Returns (key, value, delimiter)."""
-    for delim in ("=", ":"):
-        if delim in s:
-            k, v = s.split(delim, 1)
-            return k.strip(), v.strip(), delim
+    """Split 'key = value' or 'key: value' at the FIRST delimiter, so a value may contain the
+    other one (e.g. 'jdbc.url: jdbc:...?opt=val'). Returns (key, value, delimiter)."""
+    delim = _first_delimiter(s)
+    if delim:
+        k, v = s.split(delim, 1)
+        return k.strip(), v.strip(), delim
     return "", "", "="
+
+
+def _first_delimiter(s: str) -> str:
+    """'=' or ':' — whichever occurs first in *s*; '' when neither does."""
+    positions = [(s.find(d), d) for d in ("=", ":") if d in s]
+    return min(positions)[1] if positions else ""
 
 
 def _track_duplicate(doc: KVDocument, compound: str, value: str) -> None:
