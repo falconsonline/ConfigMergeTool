@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool run artefacts (merge / audit / patch output)
+/reports/
+/report/
+/logs/
+/output*/
+/corrections/
+
+# Local customer site data — never commit (see CLAUDE.md)
+/Telstra-RSC*/
+/singtel*/
+/base*/
+/release*/
+/testing/
+/config-samples/
+*.tar
+*.zip
+
+# Editor / agent tooling
+.DS_Store
+.serena/
+.claude/worktrees/
+.claude/settings.local.json
