@@ -134,6 +134,7 @@ result = AuditEngine(nodes, report_dir="reports").run()
 |---|---|---|
 | `--audit-config-file` | Yes | JSON array of node directories to compare |
 | `--filter-file` | No | Filter file controlling which file types/names are audited |
+| `--mapping-file` | No | `NODE/path=NODE/path` file or directory pairs; the left file is compared in the right path's row (A-17) |
 | `--quiet` | No | Suppress MATCH lines; print only DIFF/WARN/ERROR/SUMMARY |
 | `--report-dir` | No | Directory for audit report output (default: `reports/`) |
 
@@ -427,7 +428,7 @@ configmergetool --audit-config-file audit.json --filter-file filters.txt --quiet
 | A-01 | Multi-node diff | Compares every file across all nodes; produces per-file, per-parameter diff results |
 | A-02 | KV semantic comparison | Section-by-section comparison against the **base node** (first node in the audit config that has the file). A key is compared only within its section — the same key in two sections is two rows. A commented header `#[X]` is a comment: active keys after it belong to the enclosing real section. A commented-out key counts as present (commented). Header rule: `[Name]` optionally followed by `# comment` |
 | A-03 | JSON comparison | Deep parse and per-key comparison |
-| A-04 | Text/XML comparison | Normalised text comparison (strip BOM, CRLF→LF, trailing whitespace); SHA-256 not used for text |
+| A-04 | Text/XML comparison | Whitespace-insensitive checksum decides match/mismatch; on mismatch every node is line-diffed (`difflib`, whitespace removed, blank lines skipped) against the first present node and each changed block becomes a read-only `AuditParam` (`__blk__<n>`, key `L<a>–L<b>`, `lines` per node); `mismatch_count` = blocks (A-18) |
 | A-05 | Binary comparison | SHA-256 + file size; replaces legacy MD5 |
 | A-05b | Absent-file mismatch (all types) | KV and JSON comparisons now set `mismatch_count ≥ 1` when the file is absent from any node, consistent with binary/text/SSTP behaviour |
 | A-06 | Logical diff patterns | `logical_diff_patterns` regex list marks expected node-specific params as `is_logical_diff=True` — excluded from mismatch count |
@@ -440,6 +441,8 @@ configmergetool --audit-config-file audit.json --filter-file filters.txt --quiet
 | A-13 | CRLF output | All written files use `newline="\n"` — consistent across Windows/Linux |
 | A-14 | KV section check | `AuditFile.sections`: per section — base node, base param count (None when base lacks the section), per-node `match` / `differ` / `missing` / `extra`, or section absent. Empty sections are listed; keys before the first header form the `DEFAULT` "(no section)" block |
 | A-15 | KV duplicate in section | Same active key twice in one section on a node: `AuditParam.dup_values` / `lines` keep every value with its line number; row counts as a mismatch; warning `node: 'key' duplicated in [Section] (Lx, Ly)` |
+| A-17 | Audit mapping | `auditor/mapping.py`: `--mapping-file` pairs resolved after scanning; row = right path, left node's file placed in it (one source → several instance rows); source row dropped unless another node shares it; dir lines expand, file lines win; `AuditFile.node_paths` / JS `nodePaths` carry each node's real path for downloads, patch export and XLSX; W011 when one side is missing |
+| A-18 | Text block diff UI | Block rows render node lines in `<pre>`, no Use-for-all/Override/+Add; side-by-side view numbered with block lines highlighted; "Show" scrolls to them; W012 above 500 blocks |
 | A-16 | KV merged ordering | Sections and keys follow the base node's file; sections/keys it lacks are inserted after their predecessor in the file that has them — no repeated section blocks |
 
 ---
@@ -730,6 +733,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-23 | Audit: `--mapping-file` honoured (A-17) — mapped files were reported absent (Helm charts `dra-SA` → `dra-SA-1`/`-2`); file and directory lines, W011 for one-sided pairs, E018 for unknown node prefix. Text/XML (yaml, tpl, …) differences listed as changed-line blocks instead of only a checksum (A-18, W012). STC Helm audit: 227 rows, 0 Staging-only leftovers, `Mapping.cfg` and per-file mapping give identical rows |
 | 2026-09-18 | Audit: key repeated in a section — last value used and compared, warning W007 names it, no longer a mismatch (F-027); text/XML whitespace-only differences match, I001 (F-028); `sstp` added to sample filter (F-029); SSTP parser fixed — no block was ever parsed, so routing-rule drift was reported as a match; text fallback W010 when a node has no blocks (F-030). Real Telstra audits: 0 false matches / 0 false mismatches vs raw bytes |
 | 2026-09-18 | Audit filter/backup (F-021..F-026): `+path` no longer switches the filter to include-only; `!name` also excludes a directory with that name; globs with `/` match the relative path; backup markers may be followed by any text (`_bkp200821`) or sit before the extension (`fsmapp_240226.properties`), `_YYYYMMDDHHmmss` detected; `_v2` is not a backup (readme corrected). Real: 122 more backups skipped (all with original present), nothing newly audited |
 | 2026-09-18 | Audit: `.sh` shell scripts compared as text instead of KV (matches merge, where `.sh` is deployed from release) |

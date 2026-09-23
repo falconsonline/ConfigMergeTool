@@ -32,7 +32,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--base-dir",
                    help="Base (production/site) config directory [single-base mode]")
     p.add_argument("--mapping-file",
-                   help="Optional base-to-release filename mapping file")
+                   help="Optional base-to-release filename mapping file. In audit mode: "
+                        "NODE/path=NODE/path lines (files or directories) that put a file "
+                        "into the report row of a differently named path on another node")
     p.add_argument("--copy-baseonlyconfigfile",
                    help="List of base files to copy as-is without processing")
 
@@ -287,6 +289,7 @@ def _main(argv=None) -> int:
             no_skip_files=no_skip_files,
             filter_file=getattr(args, 'filter_file', None),
             output_dir=cfg_output_dir,
+            mapping_file=args.mapping_file,
         )
         result = engine.run()
         # Exit 1 when mismatches found OR when any file failed to process

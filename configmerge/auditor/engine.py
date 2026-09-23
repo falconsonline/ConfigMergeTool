@@ -27,6 +27,7 @@ Reuses:
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -64,6 +65,7 @@ from ..processors.kv import _has_valid_kv_key, _is_kv_line, _split_kv
 from ..utils import open_text, file_sha256
 from .file_filter import FileFilter
 from .html_report import _tool_version, write_audit_html
+from .mapping import load_audit_mapping, resolve_mapping
 from .sstp_parser import SstpParser, categorise_block_diff
 
 
@@ -119,6 +121,8 @@ class AuditFile:
     #   name, base (node checked against), present {node: bool}, base_count (None when base lacks
     #   the section), counts {node: {match, differ, missing, extra}}, param_counts {node: int}
     sections: List[dict] = field(default_factory=list)
+    # --mapping-file: node -> actual rel path, only for nodes whose file is not at rel_path
+    node_paths: Dict[str, str] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +216,81 @@ def _section_check_kind(values: Dict[str, Optional[str]], commented: Dict[str, b
     return "match"
 
 
+# ---------------------------------------------------------------------------
+# Text / XML line diff (audit only) — one row per changed block (agreed 2026-09-23)
+# ---------------------------------------------------------------------------
+
+# Beyond this many blocks a file is reported as-is with a CMT-AUD-W012 warning
+_MAX_TEXT_BLOCKS = 500
+
+
+def _text_blocks(texts: Dict[str, str], order: List[str]) -> List[Tuple[str, Dict[str, Optional[str]], Dict[str, List[int]]]]:
+    """Changed blocks of each node against the first node in ``order``.
+
+    Lines are compared with all whitespace removed and blank lines left out (the audit
+    whitespace rule); values keep the original lines. Returns (key, values, lines) per
+    block, where values[node] is None when that node has no lines in the block.
+    """
+    items = {n: [(i, "".join(ln.split()), ln)
+                 for i, ln in enumerate(texts[n].splitlines(), 1) if ln.strip()]
+             for n in order}
+    base = order[0]
+    base_norm = [norm for _, norm, _ in items[base]]
+    ops = {n: difflib.SequenceMatcher(None, base_norm, [norm for _, norm, _ in items[n]],
+                                      autojunk=False).get_opcodes()
+           for n in order[1:]}
+
+    # Base index ranges that differ on any node; touching ranges form one block
+    spans = sorted((i1, i2) for n in ops for op, i1, i2, _, _ in ops[n] if op != "equal")
+    blocks: List[List[int]] = []
+    for i1, i2 in spans:
+        if blocks and i1 <= blocks[-1][1]:
+            blocks[-1][1] = max(blocks[-1][1], i2)
+        else:
+            blocks.append([i1, i2])
+
+    def node_range(n: str, a: int, b: int) -> Tuple[int, int]:
+        if n == base:
+            return a, b
+        lo = hi = None
+        for op, i1, i2, j1, j2 in ops[n]:
+            if op == "equal":
+                s, e = max(a, i1), min(b, i2)
+                if s < e:
+                    lo = j1 + (s - i1) if lo is None else min(lo, j1 + (s - i1))
+                    hi = j1 + (e - i1) if hi is None else max(hi, j1 + (e - i1))
+            elif a <= i1 and i2 <= b:
+                lo = j1 if lo is None else min(lo, j1)
+                hi = j2 if hi is None else max(hi, j2)
+        if lo is None:
+            # Nothing on this node inside the block: an empty range at the block's position
+            for op, i1, i2, j1, _ in ops[n]:
+                if op == "equal" and i1 <= a <= i2:
+                    return j1 + (a - i1), j1 + (a - i1)
+            return 0, 0
+        return lo, hi
+
+    out = []
+    base_items = items[base]
+    for a, b in blocks:
+        if a < b:
+            first, last = base_items[a][0], base_items[b - 1][0]
+            key = f"L{first}" if first == last else f"L{first}\u2013L{last}"
+        elif a > 0:
+            key = f"after L{base_items[a - 1][0]}"
+        else:
+            key = "before L1"
+        values: Dict[str, Optional[str]] = {}
+        lines : Dict[str, List[int]]     = {}
+        for n in order:
+            lo, hi = node_range(n, a, b)
+            chunk = items[n][lo:hi]
+            values[n] = "\n".join(raw for _, _, raw in chunk) if chunk else None
+            lines[n]  = [i for i, _, _ in chunk]
+        out.append((key, values, lines))
+    return out
+
+
 @dataclass
 class AuditResult:
     """Top-level result returned by AuditEngine.run()."""
@@ -245,8 +324,11 @@ class AuditEngine:
                  quiet: bool = False,
                  no_skip_files: Optional[List[str]] = None,
                  filter_file: Optional[str] = None,
-                 output_dir: str = ""):
+                 output_dir: str = "",
+                 mapping_file: Optional[str] = None):
         self.nodes      = nodes
+        # Parsed up front so a bad mapping file fails before any scanning (CMT-CLI-E018)
+        self._mapping   = load_audit_mapping(mapping_file, nodes) if mapping_file else None
         self.report_dir = report_dir
         self._output_dir = output_dir
         self._quiet     = quiet
@@ -338,8 +420,19 @@ class AuditEngine:
             node_files[node.name] = self._scan_dir(node.base_dir)
             self._log("INFO ", f"  {len(node_files[node.name])} files found in {node.name}")
 
-        # 2. Union of all rel_paths -> sorted
-        all_paths = sorted(set().union(*node_files.values()))
+        # 2. Report rows: union of rel_paths, with --mapping-file pairs merged in
+        mapped = resolve_mapping(node_files, self._mapping or [])
+        row_paths = mapped.rows
+        if self._mapping is not None:
+            self._log("INFO ", f"Mapping: {len(self._mapping)} line(s), "
+                               f"{mapped.applied} file(s) placed into mapped rows")
+            for w in mapped.warnings:
+                self._log("INFO ", w)
+            if mapped.warnings:
+                print(tag("CMT-AUD-W011",
+                          f"[WARN] {len(mapped.warnings)} mapping pair(s) skipped — see audit.log"),
+                      flush=True)
+        all_paths = sorted(row_paths)
         self._log("INFO ", f"Total unique files to compare: {len(all_paths)}")
 
         # 3. Compare each file across nodes
@@ -350,8 +443,9 @@ class AuditEngine:
         _progress_interval = 25
 
         for file_idx, rel_path in enumerate(all_paths):
-            present_in = [n for n in node_names if rel_path in node_files[n]]
-            abs_paths  = {n: os.path.join(node_dirs[n], rel_path)
+            actual     = row_paths[rel_path]
+            present_in = [n for n in node_names if n in actual]
+            abs_paths  = {n: os.path.join(node_dirs[n], actual[n])
                           for n in present_in}
 
             try:
@@ -375,6 +469,7 @@ class AuditEngine:
                     mismatch_count = 0,
                     warnings       = [f"Processing error: {exc}"],
                 )
+            af.node_paths = {n: p for n, p in actual.items() if p != rel_path}
             audit_files.append(af)
             if af.mismatch_count:
                 diffs_so_far += 1
@@ -1280,6 +1375,36 @@ class AuditEngine:
             commented    = {n: False for n in all_nodes},
             has_mismatch = has_mismatch,
         )
+        params = [param]
+
+        # Content differs: list each changed block against the first present node
+        readable = [n for n in present_in if n in raw_content]
+        if has_mismatch and len(readable) > 1:
+            blocks = _text_blocks({n: raw_content[n] for n in readable}, readable)
+            if len(blocks) > _MAX_TEXT_BLOCKS:
+                warnings.append(f"{len(blocks)} changed blocks — only the first {_MAX_TEXT_BLOCKS} "
+                                f"are listed [CMT-AUD-W012]")
+                blocks = blocks[:_MAX_TEXT_BLOCKS]
+            for bi, (key, values, lines) in enumerate(blocks):
+                params.append(AuditParam(
+                    compound     = f"__blk__{bi}",
+                    section      = "",
+                    key          = key,
+                    values       = values,
+                    commented    = {n: False for n in values},
+                    has_mismatch = True,
+                    lines        = lines,
+                ))
+            logical_diff_count = self._classify_logical_diffs(params[1:])
+            block_mismatches   = sum(1 for p in params[1:] if p.has_mismatch)
+            # Every block expected (logical) -> no actionable mismatch left in the file
+            if blocks and block_mismatches == 0:
+                param.has_mismatch = False
+                mismatch = 0
+            else:
+                mismatch = max(1, block_mismatches)
+        else:
+            logical_diff_count = 0
 
         file_sizes   = self._get_file_sizes(abs_paths)
         skip_content = self._should_skip_content(file_sizes, mismatch, absent_count)
@@ -1290,13 +1415,14 @@ class AuditEngine:
             rel_path        = rel_path,
             file_type       = file_type,
             present_in      = present_in,
-            params          = [] if skip_content else [param],
+            params          = [] if skip_content else params,
             binary          = {},
             raw_content     = raw_content,
             mismatch_count  = mismatch,
             warnings        = warnings,
+            logical_diff_count = logical_diff_count,
             absent_count    = absent_count,
             content_skipped = skip_content,
-            param_count     = 1,
+            param_count     = len(params),
             file_sizes      = file_sizes,
         )

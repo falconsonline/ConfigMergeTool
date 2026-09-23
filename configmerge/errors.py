@@ -35,6 +35,7 @@ CODES: Dict[str, str] = {
     "CMT-CLI-E015": "--remote-audit requires --audit-config-file",
     "CMT-CLI-E016": "--remote-audit SSH connectivity is not yet implemented",
     "CMT-CLI-E017": "Merge arguments failed validation (e.g. directory not found)",
+    "CMT-CLI-E018": "Audit --mapping-file cannot be read or a line does not name a node",
     # ── Merge mode ──────────────────────────────────────────────────────
     "CMT-MRG-E001": "Processor failed for a file",
     "CMT-MRG-E002": "Ambiguous filename match: several base candidates, file skipped",
@@ -83,6 +84,8 @@ CODES: Dict[str, str] = {
     "CMT-AUD-W008": "Duplicate log-name prefixes detected",
     "CMT-AUD-W009": "Generated HTML report failed the sanity check",
     "CMT-AUD-W010": "SSTP file has no recognisable blocks on a node; compared as text",
+    "CMT-AUD-W011": "Audit mapping pair skipped (file not found, filtered, or already present on that node)",
+    "CMT-AUD-W012": "Text diff stopped at the block limit; remaining differences not listed",
     "CMT-AUD-I001": "Text/XML nodes differ only in whitespace; treated as a match",
     # ── Apply audit patch ───────────────────────────────────────────────
     "CMT-PAT-E001": "Patch file cannot be read or is not valid JSON",

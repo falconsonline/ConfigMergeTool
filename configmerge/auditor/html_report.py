@@ -359,6 +359,15 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
              white-space:pre-wrap;word-break:break-all;
              background:#fafafa;margin:0;line-height:1.5;width:100%}
 
+.raw-lines{white-space:normal;padding:6px 0}
+.rl{white-space:pre-wrap;word-break:break-all;padding:0 10px 0 0;min-height:1.5em}
+.rl-no{display:inline-block;min-width:38px;padding-right:8px;margin-right:8px;text-align:right;
+       color:#aab;border-right:1px solid #e3e6ec;user-select:none}
+.rl-hl{background:#fff3c4}
+.rl-hl .rl-no{color:#b26a00;font-weight:600}
+.blk-val{margin:0;font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all}
+.mapped-from{font-size:10px;font-weight:normal;color:#6a4f9e}
+
 /* ── EXPECTED DIFF (auto-detected instance-specific) ── */
 .expected-diff-row td{background:#e0f7fa}
 .expected-diff-row:hover td{background:#b2ebf2}
@@ -1117,7 +1126,10 @@ function renderFilePanel(idx) {
   let file  = FILES[idx];
   let panel = document.getElementById('main-panel');
 
-  let presentList = file.presentIn.map(n => `<span class="node-tag">${esc(n)}</span>`).join(' ');
+  let nodePaths   = file.nodePaths || {};
+  let presentList = file.presentIn.map(n => nodePaths[n]
+    ? `<span class="node-tag" title="Mapped from ${esa(nodePaths[n])}">${esc(n)} <span class="mapped-from">&#8618; ${esc(nodePaths[n])}</span></span>`
+    : `<span class="node-tag">${esc(n)}</span>`).join(' ');
   let absentNodes = NODES.filter(n => !file.presentIn.includes(n));
   let absentList  = absentNodes.length
     ? `<span class="absent-tag">&#9888; Absent in: ${absentNodes.map(esc).join(', ')}</span>` : '';
@@ -1128,7 +1140,7 @@ function renderFilePanel(idx) {
       .filter(n => file.presentIn.includes(n) || _anyPendingForFileNode(idx, n))
       .map(n => {
         let targetPath = OUTPUT_DIR
-          ? OUTPUT_DIR.replace(/\/+$/,'') + '/' + n + '/' + file.path
+          ? OUTPUT_DIR.replace(/\/+$/,'') + '/' + n + '/' + (nodePaths[n] || file.path)
           : '';
         let titleAttr = targetPath ? ` title="Save to: ${esc(targetPath)}"` : '';
         return `<button class="dl-btn" onclick="downloadConfig(${idx},'${esj(n)}','${esj(targetPath)}')"${titleAttr}>&#11015; ${esc(n)}</button>`;
@@ -1321,11 +1333,27 @@ function renderTextCompare(file, idx) {
   });
   md5Table += `</tbody></table>`;
 
+  // Lines inside a changed block are highlighted per node
+  let marked = {};
+  file.params.forEach(p => {
+    if (!String(p.compound).startsWith('__blk__') || isSkipped(idx, p.compound)) return;
+    Object.entries(p.lines || {}).forEach(([n, lns]) => {
+      marked[n] = marked[n] || new Set();
+      lns.forEach(l => marked[n].add(l));
+    });
+  });
   let cols = file.presentIn.map(n => {
-    let raw = (file.rawContent||{})[n] || '';
-    return `<td class="raw-col"><pre class="raw-content">${esc(raw)}</pre></td>`;
+    let raw  = (file.rawContent||{})[n] || '';
+    let hl   = marked[n] || new Set();
+    let body = raw.split('\n').map((t, i) =>
+      `<div class="rl${hl.has(i + 1) ? ' rl-hl' : ''}" id="rl-${idx}-${eid(n)}-${i + 1}">` +
+      `<span class="rl-no">${i + 1}</span>${esc(t) || ' '}</div>`).join('');
+    return `<td class="raw-col"><div class="raw-content raw-lines">${body}</div></td>`;
   }).join('');
-  let hdrs = file.presentIn.map(n => `<th>${esc(n)}</th>`).join('');
+  let hdrs = file.presentIn.map(n => {
+    let from = (file.nodePaths || {})[n];
+    return `<th>${esc(n)}${from ? ` <span class="mapped-from">&#8618; ${esc(from)}</span>` : ''}</th>`;
+  }).join('');
 
   return md5Table +
     `<p class="raw-hdr">File Content (side-by-side)</p>
@@ -1333,6 +1361,20 @@ function renderTextCompare(file, idx) {
        <thead><tr>${hdrs}</tr></thead>
        <tbody><tr>${cols}</tr></tbody>
      </table>`;
+}
+
+function showBlockLines(fileIdx, pi) {
+  let p = FILES[fileIdx].params[pi];
+  let first = null;
+  Object.entries(p.lines || {}).forEach(([n, lns]) => {
+    lns.forEach(l => {
+      let el = document.getElementById(`rl-${fileIdx}-${eid(n)}-${l}`);
+      if (!el) return;
+      if (!first) first = el;
+      el.classList.remove('mm-nav-pulse'); void el.offsetWidth; el.classList.add('mm-nav-pulse');
+    });
+  });
+  if (first) first.scrollIntoView({block:'center', behavior:'smooth'});
 }
 
 // ── Node visibility (Phase 3.0) ──────────────────────────────────────
@@ -1502,6 +1544,8 @@ function renderRow(file, idx, param, pi) {
   }
 
   let skippedLbl = isSkip ? `<span class="skipped-lbl">[Skipped]</span>` : '';
+  if (String(param.compound).startsWith('__blk__'))
+    skippedLbl += `<button class="skip-btn" onclick="showBlockLines(${idx},${pi})" title="Scroll the side-by-side view to these lines">&#8595; Show</button>`;
   let logicalLbl = param.isLogicalDiff
     ? `<span class="logical-lbl">&#126; expected node-specific</span>` : '';
   let expDiffLbl = isExpDiff && !param.isLogicalDiff
@@ -1534,6 +1578,17 @@ function renderCell(file, idx, param, pi, node, nodeIdx, isExpDiff) {
 
   if (!isPresent)
     return `<td class="file-absent-cell${colCls}" data-idx="${nodeIdx}"><span class="absent-lbl">FILE ABSENT</span></td>`;
+
+  // Text / XML rows are read-only: checksum row and changed-block rows
+  if (file.type === 'text' || file.type === 'xml') {
+    if (origVal === null || origVal === undefined)
+      return `<td class="key-missing-cell${colCls}" data-idx="${nodeIdx}"><span class="missing-lbl">&mdash; no lines</span></td>`;
+    let tcls = `val-cell${colCls}` + (isExpDiff ? ' cell-expected-diff' : param.hasMismatch ? ' cell-mismatch' : '');
+    let body = param.compound === '__md5__'
+      ? esc(String(origVal))
+      : `<pre class="blk-val">${esc(String(origVal))}</pre>`;
+    return `<td class="${tcls}" data-idx="${nodeIdx}"><div class="val-display">${body}</div></td>`;
+  }
 
   if ((origVal === null || origVal === undefined) && pendVal === undefined) {
     return `<td class="key-missing-cell${colCls}" data-idx="${nodeIdx}">
@@ -1815,7 +1870,7 @@ function exportPatch() {
     output_dir:  OUTPUT_DIR,
     run_dir:     AUDIT_DATA.runDir || '',
     changes:     changeLog.map(e => ({
-      file:      e.file,
+      file:      (FILES[e.fileIdx].nodePaths || {})[e.node] || e.file,
       file_type: FILES[e.fileIdx].type,
       node:      e.node,
       compound:  e.compound,
@@ -2106,7 +2161,7 @@ function downloadConfig(fileIdx, node, targetPath) {
   let content = reconstructContent(fileIdx, file, node);
   if (content === null) { alert('No content available to download.'); return; }
   // Use just the filename for the browser download; target path shown in tooltip
-  let fname = file.path.split('/').pop();
+  let fname = ((file.nodePaths || {})[node] || file.path).split('/').pop();
   _blobDownload(content, fname, 'text/plain');
   // If output_dir is configured, show the target path as a confirmation
   if (targetPath) {
@@ -2513,6 +2568,7 @@ def _serialise_result(result: "AuditResult") -> dict:
             "contentSkipped":  af.content_skipped,
             "paramCount":      af.param_count,
             "fileSizes":       af.file_sizes,
+            "nodePaths":       af.node_paths,
         })
 
     # Skipped-files and error data for the Skipped Files / Report Errors panels
@@ -3798,7 +3854,7 @@ def _write_diffs_xlsx(result: "AuditResult", run_dir: str) -> str:
         hashes: dict = {}
         for node in nodes:
             node_dir = (result.node_dirs or {}).get(node, "")
-            fpath = os.path.join(node_dir, af.rel_path)
+            fpath = os.path.join(node_dir, af.node_paths.get(node, af.rel_path))
             try:
                 hashes[node] = _hashlib.sha256(open(fpath, "rb").read()).hexdigest()
             except OSError:
