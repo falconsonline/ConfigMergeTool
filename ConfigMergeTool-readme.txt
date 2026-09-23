@@ -305,6 +305,29 @@ Audit config file (audit.json):
     { "base_dir": "prod/node2", "name": "APP-02" }
   ]
 
+Mapped paths (--mapping-file in audit mode):
+  When the same file lives at a different path on another node (e.g. Staging
+  runs one chart "dra-SA" while Prod/DR run two instances "dra-SA-1" and
+  "dra-SA-2"), list the pairs in a mapping file:
+
+    STG/dra-SA/Chart.yaml=PROD/dra-SA-1/Chart.yaml     <- one file
+    STG/dra-SA=PROD/dra-SA-1                           <- whole directory
+    STG/dra-SA=PROD/dra-SA-2
+    STG/dra-SA=DR/dra-SA-1
+
+  The first path component names the node: its base_dir (or the last folder
+  of it) or its "name"; a leading "/" is ignored; # lines are comments.
+  The left file is shown in the report row of the right path, so the Staging
+  copy is compared in both dra-SA-1/... and dra-SA-2/... rows, and the
+  Staging-only dra-SA/... row disappears.  Directory lines map every file of
+  the subtree; a file line overrides a directory line for the same file.
+  The node tag and column header show "<- dra-SA/Chart.yaml" for a mapped
+  node, and its download uses that file name.
+  A pair whose file exists on only one side is skipped [CMT-AUD-W011]
+  (listed in audit.log); a pair missing on both sides (hidden, filtered or
+  binary) is skipped silently.  A line naming no known node stops the run
+  [CMT-CLI-E018].
+
 Result:
   reports/                        <- report_dir (default "reports")
     audit_20260401_143022/        <- one subdirectory per run (YYYYMMDD_HHMMSS)
@@ -1049,9 +1072,16 @@ Right panel — parameter table:
     Striped -- file absent from this node (FILE ABSENT cell)
 
   Shell scripts (.sh) are compared as plain text.
-  XML and other text files are compared with all whitespace ignored:
-  nodes that differ only in indentation, blank lines or line endings match
-  (noted as [CMT-AUD-I001]).
+  XML and other text files (yaml, tpl, txt, md, ...) are compared with all
+  whitespace ignored: nodes that differ only in indentation, blank lines or
+  line endings match (noted as [CMT-AUD-I001]).
+  When their content differs, each node is compared line by line with the
+  first node that has the file; every changed block becomes a yellow row
+  under "File checksum" (e.g. "L88-L91") showing each node's lines, counted
+  as one mismatch and reachable with Prev/Next.  "Show" scrolls the
+  side-by-side view, where changed lines are highlighted with line numbers.
+  These rows are read-only (download the node's file to edit it).  After 500
+  blocks the rest are not listed [CMT-AUD-W012].
   SSTP routing-rule files are compared block by block; if a node's file has
   no recognisable blocks it is compared as text instead [CMT-AUD-W010].
   KV files (.properties / .cfg / .ini / .conf) are compared section by
@@ -1294,6 +1324,7 @@ Search logs for the code; codes are never renumbered or reused.
   CMT-CLI-E015   --remote-audit requires --audit-config-file
   CMT-CLI-E016   --remote-audit SSH connectivity is not yet implemented
   CMT-CLI-E017   Merge arguments failed validation (e.g. directory not found)
+  CMT-CLI-E018   Audit --mapping-file cannot be read or a line does not name a node
   CMT-MRG-E001   Processor failed for a file
   CMT-MRG-E002   Ambiguous filename match: several base candidates, file skipped
   CMT-MRG-E003   Invalid JSON input
@@ -1340,6 +1371,8 @@ Search logs for the code; codes are never renumbered or reused.
   CMT-AUD-W008   Duplicate log-name prefixes detected
   CMT-AUD-W009   Generated HTML report failed the sanity check
   CMT-AUD-W010   SSTP file has no recognisable blocks on a node; compared as text
+  CMT-AUD-W011   Audit mapping pair skipped (file not found, filtered, or already present on that node)
+  CMT-AUD-W012   Text diff stopped at the block limit; remaining differences not listed
   CMT-AUD-I001   Text/XML nodes differ only in whitespace; treated as a match
   CMT-PAT-E001   Patch file cannot be read or is not valid JSON
   CMT-PAT-E002   Patch JSON is missing a required field

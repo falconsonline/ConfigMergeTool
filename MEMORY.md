@@ -114,6 +114,21 @@ match = otherwise (incl. commented); extra = key not in base.
 
 ---
 
+## Audit mapping & text diff (confirmed 2026-09-23)
+
+1. **Audit honours `--mapping-file`; one row per instance (option A).** `LEFT=RIGHT` puts the LEFT node's
+   file into the RIGHT path's row, so Staging `dra-SA` mapped to Prod/DR `dra-SA-1` and `dra-SA-2` is
+   compared in both instance rows; its own row goes away unless another node has that path. No PROD↔DR
+   chaining (rejected option B): differently named DR instances land in separate rows.
+2. **Mapping lines**: file or directory; first component = node (base_dir, its basename, or name); leading
+   `/` ignored; file line beats directory line; one side missing → W011, both missing → silent (hidden,
+   filtered, binary on purpose); a node's own file at the target path is never replaced.
+3. **Text/XML line diff (all text types), read-only.** Whole-file whitespace-free checksum still decides
+   match; on mismatch each changed block vs the first present node is one mismatch row. YAML key-path
+   parsing rejected: 177/311 STC YAML files are Helm templates. Editing text blocks deferred.
+
+---
+
 ## Working rules
 
 - **Data first, no assumptions (2026-09-15).** Before proposing a plan, share a snapshot with actual data,
