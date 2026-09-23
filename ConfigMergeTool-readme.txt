@@ -42,8 +42,8 @@ Requirements
 
 Step 1 — Create a virtual environment (recommended):
 
-  python3 -m venv ~/.venvs/configmergetool
-  source ~/.venvs/configmergetool/bin/activate
+  python3 -m venv ~/venv
+  source ~/venv/bin/activate
 
 Step 2 — Install from wheel:
 
@@ -64,6 +64,69 @@ To deactivate the virtual environment when done:
   deactivate
 
 --------------------------------------------------------------------------------
+ INSTALLING INTO A FOLDER YOU CHOOSE (no admin / sudo)
+--------------------------------------------------------------------------------
+
+Everything is installed below ONE folder you pick, e.g. ~/venv (= /home/user/venv).
+Nothing goes to /usr, /opt, /etc or the system Python's site-packages.
+
+  INSTALL_DIR=~/venv                              # any folder you can write to
+  [ -x "$INSTALL_DIR/bin/python" ] || python3 -m venv "$INSTALL_DIR"   # reuse if it exists
+  "$INSTALL_DIR/bin/pip" install --no-cache-dir \
+      "configmergetool-3.0.0-py3-none-any.whl[encoding]"
+  "$INSTALL_DIR/bin/configmergetool" --version     # configmergetool 3.0.0
+
+Resulting layout (Linux/macOS; Windows uses Scripts\ and Lib\ instead):
+
+  /home/user/venv/
+    bin/configmergetool        <- the command you run
+    bin/python, bin/pip        <- private Python + pip for this install
+    bin/activate               <- optional: "source" it to put bin/ on PATH
+    bin/chardetect             <- from chardet (only with [encoding])
+    lib/python3.X/site-packages/
+      configmerge/             <- ConfigMergeTool code
+      openpyxl/  et_xmlfile/   <- required libraries
+      chardet/                 <- optional library ([encoding])
+      *.dist-info/             <- package metadata (used by pip)
+    pyvenv.cfg                 <- records which Python created the folder
+  A new folder holding only this tool is about 21 MB with [encoding].
+
+Run it without typing the full path (pick one):
+  mkdir -p ~/.local/bin                                  # link ONLY this command
+  ln -sf ~/venv/bin/configmergetool ~/.local/bin/configmergetool
+  # (~/.local/bin must be on PATH: add  export PATH="$HOME/.local/bin:$PATH"
+  #  to ~/.bashrc or ~/.zshrc if it is not)
+  source ~/venv/bin/activate                             # or activate per session
+  Do not put ~/venv/bin itself on PATH permanently: its python3 and pip
+  would then replace your normal ones in every terminal.
+
+What is written OUTSIDE the install folder:
+  At install time:  nothing (with --no-cache-dir; otherwise pip caches
+                    downloads in ~/.cache/pip on Linux,
+                    ~/Library/Caches/pip on macOS).
+  At run time:      reports/ and logs/ under the folder you run from
+                    (or --report-dir / --log-dir), and
+                    ~/.configmergetool/feedback_history.json (audit runs).
+
+Rules for this folder:
+  - Create it where it will stay. The scripts in bin/ record the full
+    path, so a moved or copied folder stops working
+    ("bad interpreter"). To move it, delete it and create it again.
+  - It uses the Python it was created with (the "home" line in
+    pyvenv.cfg). If that Python is removed or upgraded to a new minor
+    version, create the folder again.
+  - Uninstall: "~/venv/bin/pip uninstall configmergetool". Delete the whole
+    folder only if no other tool is installed in it (a shared ~/venv
+    usually holds other packages too). ~/.configmergetool can be deleted
+    if the run history is not needed.
+  - Upgrading replaces only ConfigMergeTool (and openpyxl/chardet if a
+    newer version is required); other packages in ~/venv are untouched.
+
+Not recommended:  "pip install --prefix DIR" skips libraries the system
+Python already has (the folder is not self-contained) and, like
+"pip install --target DIR", only runs with PYTHONPATH pointing into it.
+
+--------------------------------------------------------------------------------
  WINDOWS INSTALLATION
 --------------------------------------------------------------------------------
 
@@ -72,15 +135,15 @@ Step 1 — Install Python 3.9+ from https://www.python.org/downloads/windows/
 
 Step 2 — Open Command Prompt or PowerShell, create a virtual environment:
 
-  python -m venv C:\venvs\configmergetool
+  python -m venv %USERPROFILE%\venv
 
 Step 3 — Activate the virtual environment:
 
   Command Prompt:
-    C:\venvs\configmergetool\Scripts\activate.bat
+    %USERPROFILE%\venv\Scripts\activate.bat
 
   PowerShell:
-    C:\venvs\configmergetool\Scripts\Activate.ps1
+    %USERPROFILE%\venv\Scripts\Activate.ps1
 
   If PowerShell blocks script execution, first run (once, as Administrator):
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -115,15 +178,15 @@ To upgrade to a new .whl (e.g. from 2.1.0 to 3.0.0), activate your virtual
 environment and run pip with --upgrade:
 
   # Linux / macOS
-  source ~/.venvs/configmergetool/bin/activate
+  source ~/venv/bin/activate
   pip install --upgrade configmergetool-3.0.0-py3-none-any.whl
 
   # Windows (Command Prompt)
-  C:\venvs\configmergetool\Scripts\activate.bat
+  %USERPROFILE%\venv\Scripts\activate.bat
   pip install --upgrade configmergetool-3.0.0-py3-none-any.whl
 
   # Windows (PowerShell)
-  C:\venvs\configmergetool\Scripts\Activate.ps1
+  %USERPROFILE%\venv\Scripts\Activate.ps1
   pip install --upgrade configmergetool-3.0.0-py3-none-any.whl
 
 Confirm the new version is active:
@@ -951,7 +1014,7 @@ Audit mode:
                                    + audit_report_p01.html, p02.html …
                                    if report exceeds 22 MB)
       audit.log                 <- full audit log
-      audit.xlsx                <- Excel summary
+      audit_diffs.xlsx          <- Excel diff workbook
       feedback/
         skipped_backups.json    <- files auto-detected as backups
         filtered_files.json     <- files excluded by --filter-file
@@ -1467,7 +1530,7 @@ Results:
   Console shows only DIFF / WARN / ERROR / SUMMARY lines.
   reports/audit_20260401_143022/
     audit_report.html          <- open in browser
-    audit.xlsx
+    audit_diffs.xlsx
     audit.log
     feedback/
       skipped_backups.json     <- review for false positives
