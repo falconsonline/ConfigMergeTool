@@ -1,6 +1,6 @@
 # ConfigMergeTool — Features Reference
 
-> Developer reference. Describes every feature implemented in the current codebase (v2.1.0).
+> Developer reference. Describes every feature implemented in the current codebase (v3.0.0).
 > Update this file whenever features are added, changed, or removed.
 
 ---
@@ -48,7 +48,7 @@ ConfigMergeTool/
 ├── requirements.txt            — Core runtime deps (openpyxl)
 ├── requirements-dev.txt        — Dev/test deps (pytest, build, twine, chardet)
 └── configmerge/
-    ├── __init__.py             — Public API + __version__ = "2.1.0"
+    ├── __init__.py             — Public API + __version__ = "3.0.0"
     ├── __main__.py             — Enables: python -m configmerge
     ├── cli.py                  — main() / _main() / parse_args() — pip entry point
     ├── models.py               — BaseDirConfig, RemoteConfig, MergeConfig, MergeResult,
@@ -674,7 +674,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | Feature | Detail |
 |---|---|
 | Package name | `configmergetool` |
-| Version | `2.1.0` |
+| Version | `3.0.0` |
 | Entry point | `configmergetool = "configmerge.cli:main"` |
 | Module invocation | `python -m configmerge` |
 | Legacy invocation | `python ConfigMergeTool.py` (backward compatible) |
@@ -683,8 +683,8 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | Optional `[ssh]` | `paramiko>=3.0` — Phase 11 SSH remote node access |
 | Optional `[email]` | `imapclient>=2.3` — Phase 12 email-triggered audit |
 | Optional `[all]` | All optional extras |
-| Build | `python -m build` → `dist/configmergetool-2.1.0-py3-none-any.whl` |
-| Install | `pip install configmergetool-2.1.0-py3-none-any.whl` |
+| Build | `python -m build` → `dist/configmergetool-3.0.0-py3-none-any.whl` |
+| Install | `pip install configmergetool-3.0.0-py3-none-any.whl` |
 | Type hints | `py.typed` marker present (PEP 561) |
 | Python | 3.9+ |
 
@@ -733,6 +733,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-23 | **v3.0.0** — audit honours `--mapping-file` (file and directory lines, one row per mapped instance) and lists text/XML differences as changed-line blocks |
 | 2026-09-23 | Audit: `--mapping-file` honoured (A-17) — mapped files were reported absent (Helm charts `dra-SA` → `dra-SA-1`/`-2`); file and directory lines, W011 for one-sided pairs, E018 for unknown node prefix. Text/XML (yaml, tpl, …) differences listed as changed-line blocks instead of only a checksum (A-18, W012). STC Helm audit: 227 rows, 0 Staging-only leftovers, `Mapping.cfg` and per-file mapping give identical rows |
 | 2026-09-18 | Audit: key repeated in a section — last value used and compared, warning W007 names it, no longer a mismatch (F-027); text/XML whitespace-only differences match, I001 (F-028); `sstp` added to sample filter (F-029); SSTP parser fixed — no block was ever parsed, so routing-rule drift was reported as a match; text fallback W010 when a node has no blocks (F-030). Real Telstra audits: 0 false matches / 0 false mismatches vs raw bytes |
 | 2026-09-18 | Audit filter/backup (F-021..F-026): `+path` no longer switches the filter to include-only; `!name` also excludes a directory with that name; globs with `/` match the relative path; backup markers may be followed by any text (`_bkp200821`) or sit before the extension (`fsmapp_240226.properties`), `_YYYYMMDDHHmmss` detected; `_v2` is not a backup (readme corrected). Real: 122 more backups skipped (all with original present), nothing newly audited |
