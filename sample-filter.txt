@@ -8,7 +8,8 @@
 #   1. Force-include (+path)          — overrides directory excludes
 #   2. Explicit excludes (!)          — names, globs, directory paths
 #   3. Include rules                  — suffixes, named files, dirs, globs, paths
-#   4. Built-in binary exclusions     — always active, even without a filter file
+#   4. Built-in binary exclusions     — active even without a filter file;
+#                                       an include rule for the extension overrides it
 #   5. Default                        — if no include rules defined: pass everything
 #                                       if include rules defined: skip unmatched files
 #
@@ -144,9 +145,10 @@ Appl*
 
 
 # =============================================================================
-# SECTION J — Built-in binary archive exclusions (always active)
-#   These are hard-coded in the tool and cannot be overridden by this file.
-#   Documented here for reference only.
+# SECTION J — Built-in binary exclusions (active even without a filter file)
+#   These extensions are skipped by default.  To audit one of them, add its
+#   extension as an include rule (e.g. a line "jar"); binary files are then
+#   compared by SHA-256 checksum and size.  Listed here for reference only.
 # =============================================================================
 
 # !*.tar       !*.tar.gz    !*.tgz       !*.gz

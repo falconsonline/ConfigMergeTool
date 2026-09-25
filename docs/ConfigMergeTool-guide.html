@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ConfigMergeTool 3.0 Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --ground:#f6f7f9; --panel:#ffffff; --ink:#18212e; --muted:#586476; --rule:#dde2ea;
+  --accent:#1f6f8b; --accent-soft:#e3f0f5; --code-bg:#141a23; --code-ink:#e3e8ef; --code-dim:#8b97a8;
+  --ok:#2e7d4f; --ok-soft:#e5f4ea; --warn:#9a5b00; --warn-soft:#fdf1dc; --bad:#b3261e; --bad-soft:#fbe7e5;
+  --opt:#6a4f9e; --opt-soft:#efeaf7;
+  --sans:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans","Arial Narrow",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#10151c; --panel:#171e28; --ink:#e4e9f0; --muted:#9aa6b7; --rule:#2a3441;
+    --accent:#6cc0dc; --accent-soft:#16303b; --code-bg:#0b0f15; --code-ink:#e3e8ef; --code-dim:#7f8b9c;
+    --ok:#6fcf97; --ok-soft:#15301f; --warn:#f0b35a; --warn-soft:#33260f; --bad:#f28b82; --bad-soft:#3a1a18;
+    --opt:#b59ce6; --opt-soft:#261f36;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#10151c; --panel:#171e28; --ink:#e4e9f0; --muted:#9aa6b7; --rule:#2a3441;
+  --accent:#6cc0dc; --accent-soft:#16303b; --code-bg:#0b0f15; --code-ink:#e3e8ef; --code-dim:#7f8b9c;
+  --ok:#6fcf97; --ok-soft:#15301f; --warn:#f0b35a; --warn-soft:#33260f; --bad:#f28b82; --bad-soft:#3a1a18;
+  --opt:#b59ce6; --opt-soft:#261f36;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font:15px/1.65 var(--sans);padding-inline:16px}
+.shell{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:230px minmax(0,1fr);gap:48px;padding-block:32px 80px}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;font-size:13px;max-height:calc(100vh - 48px);overflow:auto}
+nav.toc .label{font:600 11px/1 var(--sans);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+nav.toc a{display:block;padding:4px 10px;border-left:2px solid var(--rule);color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--ink);border-left-color:var(--accent)}
+nav.toc li.grp{margin-top:12px;font:600 11px/1.4 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-left:12px}
+main{min-width:0;max-width:820px}
+header.hero{padding-bottom:28px;border-bottom:1px solid var(--rule);margin-bottom:8px}
+.eyebrow{font:600 12px/1 var(--mono);color:var(--accent);letter-spacing:.04em}
+h1{font:700 44px/1.05 var(--cond);letter-spacing:-.01em;margin:12px 0 14px;text-wrap:balance}
+.lede{font-size:17px;color:var(--muted);max-width:62ch;margin:0}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.fact{font:500 12px/1 var(--mono);padding:7px 10px;border:1px solid var(--rule);border-radius:4px;background:var(--panel);color:var(--ink)}
+.fact b{color:var(--accent);font-weight:600}
+section{padding-top:40px}
+h2{font:700 28px/1.15 var(--cond);margin:0 0 6px;text-wrap:balance;scroll-margin-top:20px}
+h2 .n{font:600 13px/1 var(--mono);color:var(--accent);display:block;margin-bottom:8px;letter-spacing:.04em}
+h3{font:600 17px/1.3 var(--sans);margin:28px 0 8px;scroll-margin-top:20px}
+p,li{max-width:68ch}
+p{margin:0 0 12px}
+ul,ol{padding-left:22px;margin:0 0 12px}
+li{margin:3px 0}
+a{color:var(--accent)}
+code{font:0.88em/1.4 var(--mono);background:var(--accent-soft);color:var(--ink);padding:1px 5px;border-radius:3px;overflow-wrap:anywhere}
+.cmd{position:relative;margin:10px 0 16px;background:var(--code-bg);border-radius:6px;overflow:hidden}
+.cmd .cap{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px 6px 14px;font:600 11px/1 var(--mono);letter-spacing:.05em;color:var(--code-dim);border-bottom:1px solid #ffffff14}
+.cmd pre{margin:0;padding:12px 14px 14px;overflow-x:auto;font:13px/1.6 var(--mono);color:var(--code-ink)}
+.cmd pre .c{color:var(--code-dim)}
+.copy{font:600 11px/1 var(--sans);background:#ffffff14;color:var(--code-ink);border:1px solid #ffffff26;border-radius:4px;padding:5px 9px;cursor:pointer}
+.copy:hover{background:#ffffff26}
+.copy:focus-visible,.tabs button:focus-visible,nav.toc a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tablewrap{overflow-x:auto;margin:12px 0 18px;border:1px solid var(--rule);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--rule)}
+th{font:600 11px/1.3 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--ground)}
+tr:last-child td{border-bottom:none}
+td code{white-space:nowrap}
+.pill{display:inline-block;font:600 11px/1 var(--sans);padding:4px 7px;border-radius:999px;white-space:nowrap}
+.req{background:var(--ok-soft);color:var(--ok)}
+.opt{background:var(--opt-soft);color:var(--opt)}
+.no{background:var(--bad-soft);color:var(--bad)}
+.note{border:1px solid var(--rule);border-left:4px solid var(--accent);background:var(--panel);border-radius:4px;padding:12px 16px;margin:14px 0}
+.note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.note p:last-child,.note ul:last-child{margin-bottom:0}
+.note strong:first-child{display:block;margin-bottom:4px}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:14px 0 0}
+.tabs button{font:600 13px/1 var(--sans);padding:9px 14px;border:1px solid var(--rule);border-bottom:none;border-radius:6px 6px 0 0;background:var(--ground);color:var(--muted);cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--panel);color:var(--ink);border-color:var(--rule)}
+.tabpanel{border:1px solid var(--rule);border-radius:0 6px 6px 6px;background:var(--panel);padding:16px 18px 6px}
+.steps{counter-reset:s;list-style:none;padding:0}
+.steps>li{counter-increment:s;position:relative;padding-left:38px;margin:0 0 14px;max-width:none}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:1px;width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);font:600 12px/24px var(--mono);text-align:center}
+.methods{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:14px 0}
+.method{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:14px 16px}
+.method.best{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.method h4{margin:0 0 4px;font:600 15px/1.3 var(--sans)}
+.method .tag{font:600 11px/1 var(--mono);color:var(--accent);letter-spacing:.04em}
+.method p{margin:6px 0 0;font-size:13.5px;color:var(--muted)}
+kbd{font:12px var(--mono);border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;padding:0 4px;background:var(--panel)}
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-size:13px;color:var(--muted)}
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr;gap:8px;padding-block:20px 60px}
+  nav.toc{position:static;max-height:none;border:1px solid var(--rule);border-radius:6px;background:var(--panel);padding:14px}
+  nav.toc ol{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+  h1{font-size:34px}
+}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav class="toc" aria-label="Contents">
+  <p class="label">Contents</p>
+  <ol>
+    <li class="grp">Install</li>
+    <li><a href="#requirements">Requirements &amp; libraries</a></li>
+    <li><a href="#choose">Choose a method</a></li>
+    <li><a href="#custom">Your own install folder</a></li>
+    <li><a href="#venv">A · Home-folder venv</a></li>
+    <li><a href="#user">B · pip --user</a></li>
+    <li><a href="#offline">C · Offline servers</a></li>
+    <li><a href="#source">D · Run from source</a></li>
+    <li><a href="#verify">Verify</a></li>
+    <li><a href="#upgrade">Upgrade &amp; remove</a></li>
+    <li class="grp">Use</li>
+    <li><a href="#modes">What it does</a></li>
+    <li><a href="#audit">Audit nodes</a></li>
+    <li><a href="#mapping">Mapped paths</a></li>
+    <li><a href="#filter">Filter file</a></li>
+    <li><a href="#report">Reading the report</a></li>
+    <li><a href="#patch">Apply fixes</a></li>
+    <li><a href="#merge">Merge a release</a></li>
+    <li><a href="#outputs">Outputs &amp; exit codes</a></li>
+    <li><a href="#configfiles">Config file reference</a></li>
+    <li><a href="#options">All options</a></li>
+    <li><a href="#trouble">Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <div class="eyebrow">configmergetool 3.0.1 · installation &amp; user guide</div>
+  <h1>ConfigMergeTool 3.0</h1>
+  <p class="lede">Installs into your own home folder in about two minutes. You don't need administrator rights, and nothing is written to system directories. It then audits configuration drift across nodes and merges site settings into new releases.</p>
+  <div class="facts">
+    <span class="fact">Python <b>3.9+</b></span>
+    <span class="fact">1 required library: <b>openpyxl</b></span>
+    <span class="fact">no admin / sudo</span>
+    <span class="fact">no network at run time</span>
+    <span class="fact">macOS · Linux · Windows</span>
+  </div>
+  <div class="note">
+    <strong>New in 3.0.1</strong>
+    <ul>
+      <li><em>Show differences only</em> now also trims the side-by-side file view to the changed lines, with 3 lines of context.</li>
+      <li>Each node highlights only the lines that actually differ.</li>
+      <li>SSTP routing rules are compared on their original text across all nodes. Moved statements, value changes, missing blocks and changed comments are all mismatches; nothing is marked "expected" on its own.</li>
+      <li>A full <a href="#configfiles">reference for every config file</a>.</li>
+    </ul>
+    <p>Upgrading from 3.0.0 is a drop-in <a href="#upgrade">pip upgrade</a>. SSTP files may report more mismatches than before, because hidden differences are now counted.</p>
+  </div>
+</header>
+
+<!-- ───────────────────────────── REQUIREMENTS ───────────────────────────── -->
+<section id="requirements">
+  <h2><span class="n">Install</span>Requirements and dependent libraries</h2>
+  <p>This is everything ConfigMergeTool 3.0.1 needs, and nothing more. Checked by installing the wheel into a clean environment: it pulled in exactly <code>openpyxl 3.1.5</code> and <code>et_xmlfile 2.0.0</code>.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Component</th><th>Version</th><th>Status</th><th>What it is for</th><th>How it gets installed</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Python</strong></td><td><code>3.9</code> or newer</td><td><span class="pill req">Required</span></td><td>Runs the tool.</td><td>Must already be on the machine (see note below).</td></tr>
+      <tr><td><strong>pip</strong> and <strong>venv</strong></td><td>ship with Python</td><td><span class="pill req">Required</span></td><td>Install the wheel, and create an environment in your home folder.</td><td>Part of Python. Some Linux distributions ship <code>venv</code> separately (package <code>python3-venv</code>).</td></tr>
+      <tr><td><strong>configmergetool</strong></td><td><code>3.0.1</code></td><td><span class="pill req">Required</span></td><td>The tool itself.</td><td><code>configmergetool-3.0.1-py3-none-any.whl</code></td></tr>
+      <tr><td><strong>openpyxl</strong></td><td><code>&gt;=3.1, &lt;4.0</code></td><td><span class="pill req">Required</span></td><td>Writes the Excel reports: <code>audit_diffs.xlsx</code> and <code>merge_report_*.xlsx</code>.</td><td>Installed automatically with the wheel.</td></tr>
+      <tr><td><strong>et_xmlfile</strong></td><td>any (2.0.0 tested)</td><td><span class="pill req">Required</span></td><td>openpyxl's own dependency.</td><td>Installed automatically with openpyxl.</td></tr>
+      <tr><td><strong>chardet</strong></td><td><code>&gt;=5.0</code></td><td><span class="pill opt">Optional · [encoding]</span></td><td>Detects the encoding of files that aren't UTF-8. Without it, the tool falls back to latin-1, which never crashes but may show accented characters wrongly.</td><td><code>pip install "…whl[encoding]"</code></td></tr>
+      <tr><td><strong>paramiko</strong></td><td><code>&gt;=3.0</code></td><td><span class="pill no">Not needed yet</span></td><td>Reserved for the planned remote (SSH) audit, <code>--remote-audit</code>.</td><td>Only pulled in by <code>[ssh]</code> or <code>[all]</code>. Skip it.</td></tr>
+      <tr><td><strong>imapclient</strong></td><td><code>&gt;=2.3</code></td><td><span class="pill no">Not needed yet</span></td><td>Reserved for the planned email-triggered audit, <code>--email-config</code>.</td><td>Only pulled in by <code>[email]</code> or <code>[all]</code>. Skip it.</td></tr>
+      <tr><td><strong>pytest, pytest-cov, build, twine</strong></td><td>see <code>requirements-dev.txt</code></td><td><span class="pill opt">Developers only</span></td><td>Running the tests and building the wheel.</td><td><code>pip install "…whl[dev]"</code>, or <code>pip install -r requirements-dev.txt</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Already part of Python — nothing to install</h3>
+  <p>Everything else the tool uses comes from the Python standard library:
+  <code>argparse</code>, <code>json</code>, <code>xml</code>, <code>difflib</code>, <code>hashlib</code>, <code>html</code>, <code>logging</code>, <code>pathlib</code>, <code>re</code>, <code>shutil</code>, <code>tempfile</code>, <code>fnmatch</code>, <code>dataclasses</code>, <code>datetime</code>, <code>collections</code>, <code>urllib</code>.</p>
+
+  <h3>To read the results</h3>
+  <ul>
+    <li><strong>A web browser</strong> (Chrome, Edge, Firefox or Safari) for <code>audit_report.html</code> and <code>merge_diff.html</code>. Each report is a single self-contained file that works offline.</li>
+    <li><strong>A spreadsheet program</strong> (Excel, LibreOffice Calc or Numbers) for the <code>.xlsx</code> reports.</li>
+  </ul>
+
+  <div class="note">
+    <strong>Checking your Python</strong>
+    <p>Run <code>python3 --version</code> on macOS/Linux, or <code>py --version</code> on Windows. If it prints 3.9 or higher, you're ready. If Python is missing, install it once from <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org</a>. On Windows, leave <em>"Install for all users"</em> unticked in the installer: a per-user install needs no administrator rights.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────────── CHOOSE ───────────────────────────── -->
+<section id="choose">
+  <h2>Choose an install method</h2>
+  <p>Every method below installs into <strong>your home folder</strong>. None of them uses <code>sudo</code>, Administrator rights, or the system Python's package folders.</p>
+  <div class="methods">
+    <div class="method best"><span class="tag">RECOMMENDED</span><h4>A · Virtual environment in your home folder</h4><p>A folder you choose, such as <code>~/venv</code> (<code>/home/user/venv</code>). Isolated from the system Python; <a href="#custom">see exactly what goes where</a>. Works everywhere, including Homebrew and Debian/Ubuntu Pythons that block <code>pip --user</code>.</p></div>
+    <div class="method"><span class="tag">ALTERNATIVE</span><h4>B · pip --user</h4><p>Installs into your per-user Python folder. Quick, but refused by "externally managed" Pythons (Homebrew, recent Debian/Ubuntu) and shared with your other user packages.</p></div>
+    <div class="method"><span class="tag">NO INTERNET</span><h4>C · Offline server</h4><p>Download the wheel and its libraries once on a connected machine, copy them over, and install with method A. No network access is needed on the server.</p></div>
+    <div class="method"><span class="tag">NO INSTALL</span><h4>D · Run from source</h4><p>Run <code>python3 ConfigMergeTool.py</code> from a copy of the source folder. openpyxl still has to be installed somewhere, for example a home-folder venv.</p></div>
+  </div>
+
+  <h3>Where the files end up</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Method</th><th>macOS</th><th>Linux</th><th>Windows</th></tr></thead>
+    <tbody>
+      <tr><td>A · venv</td><td><code>~/venv/</code></td><td><code>~/venv/</code></td><td><code>%USERPROFILE%\venv\</code></td></tr>
+      <tr><td>B · --user (libraries)</td><td><code>~/Library/Python/3.X/lib/python/site-packages</code></td><td><code>~/.local/lib/python3.X/site-packages</code></td><td><code>%APPDATA%\Python\Python3X\site-packages</code></td></tr>
+      <tr><td>B · --user (command)</td><td><code>~/Library/Python/3.X/bin/</code></td><td><code>~/.local/bin/</code></td><td><code>%APPDATA%\Python\Python3X\Scripts\</code></td></tr>
+      <tr><td>Run history (all methods)</td><td colspan="3"><code>~/.configmergetool/feedback_history.json</code> (audit runs only)</td></tr>
+    </tbody>
+  </table></div>
+  <p>Reports and logs are written below the folder you run the command from, in <code>reports/</code>, unless you set <code>--report-dir</code>. Each run gets its own folder with its log inside.</p>
+</section>
+
+<!-- ───────────────────────────── CUSTOM FOLDER ───────────────────────────── -->
+<section id="custom">
+  <h2>Install into a folder you choose</h2>
+  <p>A virtual environment puts <strong>everything under one folder you pick</strong>: the tool, its libraries, and a private copy of the Python and pip commands. Nothing goes to <code>/usr</code>, <code>/opt</code>, <code>/etc</code>, <code>C:\Program Files</code> or the system Python's <code>site-packages</code>, and no admin rights are needed. The examples use <code>~/venv</code>, which is <code>/home/user/venv</code> on Linux and <code>/Users/&lt;you&gt;/venv</code> on macOS. Any folder you can write to works the same way.</p>
+
+  <div class="cmd"><div class="cap">macOS / Linux — any folder<button class="copy">Copy</button></div><pre>INSTALL_DIR=~/venv                      <span class="c"># or /home/user/tools/cmt, /data/apps/cmt, …</span>
+[ -x "$INSTALL_DIR/bin/python" ] || python3 -m venv "$INSTALL_DIR"   <span class="c"># reuse it if it already exists</span>
+"$INSTALL_DIR/bin/pip" install --no-cache-dir "configmergetool-3.0.1-py3-none-any.whl[encoding]"
+"$INSTALL_DIR/bin/configmergetool" --version   <span class="c"># configmergetool 3.0.1</span></pre></div>
+  <div class="cmd"><div class="cap">windows powershell — any folder<button class="copy">Copy</button></div><pre>$InstallDir = "$env:USERPROFILE\venv"     <span class="c"># or D:\tools\cmt, …</span>
+if (-not (Test-Path "$InstallDir\Scripts\python.exe")) { py -m venv $InstallDir }
+&amp; "$InstallDir\Scripts\pip.exe" install --no-cache-dir "configmergetool-3.0.1-py3-none-any.whl[encoding]"
+&amp; "$InstallDir\Scripts\configmergetool.exe" --version</pre></div>
+
+  <h3>What gets written where</h3>
+  <p>This is the layout after installing, recorded from a test install. Windows uses <code>Scripts\</code> instead of <code>bin/</code> and <code>Lib\site-packages\</code> instead of <code>lib/python3.X/site-packages/</code>.</p>
+  <div class="cmd"><div class="cap">/home/user/venv/</div><pre>bin/configmergetool            <span class="c">← the command you run</span>
+bin/python, bin/pip            <span class="c">← this folder's own Python and pip (links to the Python that created it)</span>
+bin/activate, Activate.ps1     <span class="c">← optional: puts bin/ on PATH for the current terminal</span>
+bin/chardetect                 <span class="c">← installed by chardet ([encoding] only)</span>
+lib/python3.X/site-packages/
+  configmerge/                 <span class="c">← ConfigMergeTool's code</span>
+  openpyxl/   et_xmlfile/      <span class="c">← required libraries</span>
+  chardet/                     <span class="c">← optional library ([encoding])</span>
+  *.dist-info/                 <span class="c">← package records pip uses to upgrade/uninstall</span>
+pyvenv.cfg                     <span class="c">← names the Python this folder was created from</span></pre></div>
+  <p>A new folder holding only this tool takes about 21 MB with <code>[encoding]</code>.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>When</th><th>Written outside the install folder</th><th>How to control it</th></tr></thead>
+    <tbody>
+      <tr><td>Installing</td><td>Nothing, when <code>--no-cache-dir</code> is used. Otherwise pip keeps a download cache: <code>~/.cache/pip</code> (Linux), <code>~/Library/Caches/pip</code> (macOS), <code>%LOCALAPPDATA%\pip\Cache</code> (Windows).</td><td>Pass <code>--no-cache-dir</code>, or run <code>pip cache purge</code> afterwards.</td></tr>
+      <tr><td>Every run</td><td><code>reports/</code> in the folder you run the command from (the log is inside each run folder).</td><td><code>--report-dir</code></td></tr>
+      <tr><td>Audit runs</td><td><code>~/.configmergetool/feedback_history.json</code>, which holds one summary line per run.</td><td>Always in your home folder. Delete it if you don't need the history.</td></tr>
+      <tr><td>Patch runs</td><td>The folder given with <code>--output-dir</code>, else <code>output_dir</code> from the audit config or the patch, else <code>&lt;run folder&gt;/corrections</code>.</td><td>Your choice. It must not overlap an input folder.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Run the command from anywhere</h3>
+  <p>Link <strong>only</strong> the <code>configmergetool</code> command into a folder that's already on your PATH:</p>
+  <div class="cmd"><div class="cap">macOS / Linux<button class="copy">Copy</button></div><pre>mkdir -p ~/.local/bin
+ln -sf ~/venv/bin/configmergetool ~/.local/bin/configmergetool
+<span class="c"># only if ~/.local/bin is not on PATH yet (zsh: ~/.zshrc, bash: ~/.bashrc)</span>
+echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.zshrc &amp;&amp; source ~/.zshrc</pre></div>
+  <div class="note warn"><strong>Don't put the whole <code>~/venv/bin</code> on your PATH permanently</strong><p>That folder also contains <code>python3</code> and <code>pip</code>, which would then replace your normal ones in every terminal. To use the whole environment for one session, run <code>source ~/venv/bin/activate</code>, and <code>deactivate</code> when you're done.</p></div>
+
+  <h3>Rules for the install folder</h3>
+  <ul>
+    <li><strong>Create it where it will stay.</strong> The scripts in <code>bin/</code> record the folder's full path, so a moved or copied folder fails with <code>bad interpreter</code>. To move it, delete it and create it again at the new path.</li>
+    <li><strong>It depends on the Python that created it</strong> (the <code>home</code> line in <code>pyvenv.cfg</code>). If that Python is removed, or upgraded to a new minor version such as 3.14 → 3.15, recreate the folder and reinstall.</li>
+    <li><strong>Shared folder:</strong> if <code>~/venv</code> also holds other tools, upgrading or uninstalling ConfigMergeTool touches only its own packages (and openpyxl or chardet if a newer version is required). Uninstall with <code>~/venv/bin/pip uninstall configmergetool</code>. Delete the whole folder only if nothing else lives in it.</li>
+  </ul>
+
+  <h3>Why not <code>pip --prefix</code> or <code>--target</code>?</h3>
+  <p>Both can also write into a folder of your choice, but both were less reliable when tested:</p>
+  <ul>
+    <li><code>pip install --prefix DIR</code> skipped openpyxl and et_xmlfile because the system Python already had them. The folder then only works on machines that have those libraries too, and only with <code>PYTHONPATH=DIR/lib/python3.X/site-packages</code> set.</li>
+    <li><code>pip install --target DIR</code> installs every library, but runs only with <code>PYTHONPATH=DIR</code> set, and its command script is tied to the system Python's path.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────────── A: VENV ───────────────────────────── -->
+<section id="venv">
+  <h2>A · Install into a virtual environment in your home folder</h2>
+  <p>Copy <code>configmergetool-3.0.1-py3-none-any.whl</code> to your machine first. It's in the <code>dist/</code> folder of the source tree and attached to the GitHub release <code>v3.0.1</code>.</p>
+
+  <div class="tabs" role="tablist" data-group="os">
+    <button role="tab" aria-selected="true" aria-controls="venv-nix" id="t-venv-nix" data-os="nix">macOS / Linux</button>
+    <button role="tab" aria-selected="false" aria-controls="venv-win" id="t-venv-win" data-os="win">Windows</button>
+  </div>
+  <div class="tabpanel" id="venv-nix" role="tabpanel" aria-labelledby="t-venv-nix" data-os="nix">
+    <ol class="steps">
+      <li>Create the environment in your home folder. Skip this if <code>~/venv</code> already exists; the tool is simply added to it:
+        <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>python3 -m venv ~/venv</pre></div></li>
+      <li>Install the wheel into it. <code>[encoding]</code> also installs chardet, which is recommended when sites have files that aren't UTF-8:
+        <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>~/venv/bin/pip install "configmergetool-3.0.1-py3-none-any.whl[encoding]"</pre></div></li>
+      <li>Put the command on your PATH, so you can type <code>configmergetool</code> from any folder. This links it into <code>~/.local/bin</code>, which is in your home folder:
+        <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>mkdir -p ~/.local/bin
+ln -sf ~/venv/bin/configmergetool ~/.local/bin/configmergetool
+<span class="c"># If ~/.local/bin is not on your PATH yet (zsh = macOS default; use ~/.bashrc for bash):</span>
+echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.zshrc &amp;&amp; source ~/.zshrc</pre></div></li>
+      <li>Check it: <code>configmergetool --version</code> should print <code>configmergetool 3.0.1</code>.</li>
+    </ol>
+    <div class="note"><strong>No activation needed</strong><p>With the link from step 3, you never need to run <code>source …/activate</code>. If you prefer activating, run <code>source ~/venv/bin/activate</code>, then use <code>configmergetool</code> and <code>pip</code> directly; <code>deactivate</code> leaves it.</p></div>
+  </div>
+  <div class="tabpanel" id="venv-win" role="tabpanel" aria-labelledby="t-venv-win" data-os="win" hidden>
+    <ol class="steps">
+      <li>Open <strong>PowerShell</strong> as yourself, not as Administrator, and create the environment in your profile folder (skip this if it already exists):
+        <div class="cmd"><div class="cap">powershell<button class="copy">Copy</button></div><pre>py -m venv "$env:USERPROFILE\venv"</pre></div></li>
+      <li>Install the wheel, from the folder where you saved it:
+        <div class="cmd"><div class="cap">powershell<button class="copy">Copy</button></div><pre>&amp; "$env:USERPROFILE\venv\Scripts\pip.exe" install "configmergetool-3.0.1-py3-none-any.whl[encoding]"</pre></div></li>
+      <li>Add its <code>Scripts</code> folder to <em>your own</em> PATH. This is a per-user setting, and no admin is needed. Then open a new PowerShell window:
+        <div class="cmd"><div class="cap">powershell<button class="copy">Copy</button></div><pre>$dir = "$env:USERPROFILE\venv\Scripts"
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";$dir", "User")</pre></div></li>
+      <li>Check it in the new window: <code>configmergetool --version</code> should print <code>configmergetool 3.0.1</code>.</li>
+    </ol>
+    <div class="note"><strong>Prefer activating?</strong><p>Run <code>&amp; "$env:USERPROFILE\venv\Scripts\Activate.ps1"</code>. If PowerShell refuses to run scripts, allow them for your account only, which needs no Administrator rights: <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code>. Command Prompt users can run <code>%USERPROFILE%\venv\Scripts\activate.bat</code> instead.</p></div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── B: USER ───────────────────────────── -->
+<section id="user">
+  <h2>B · Install with <code>pip --user</code></h2>
+  <p>This installs into your per-user Python folder (see <a href="#choose">where files end up</a>). Use it only when method A isn't an option.</p>
+  <div class="cmd"><div class="cap">macOS / Linux<button class="copy">Copy</button></div><pre>python3 -m pip install --user "configmergetool-3.0.1-py3-none-any.whl[encoding]"
+python3 -m site --user-base   <span class="c"># prints the base folder; the command is in its bin/ subfolder</span></pre></div>
+  <div class="cmd"><div class="cap">windows powershell<button class="copy">Copy</button></div><pre>py -m pip install --user "configmergetool-3.0.1-py3-none-any.whl[encoding]"
+py -m site --user-site      <span class="c"># the command is in the sibling Scripts\ folder</span></pre></div>
+  <p>If <code>configmergetool</code> isn't found afterwards, add the user <code>bin</code> or <code>Scripts</code> folder to your PATH, the same way as in method A step 3.</p>
+  <div class="note warn">
+    <strong>"error: externally-managed-environment"</strong>
+    <p>Homebrew Python on macOS and recent Debian/Ubuntu system Pythons refuse <code>pip --user</code> on purpose, so that user packages can't break the operating system's Python. Use <a href="#venv">method A</a> instead. Don't add <code>--break-system-packages</code>.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────────── C: OFFLINE ───────────────────────────── -->
+<section id="offline">
+  <h2>C · Install on a server without internet access</h2>
+  <p>Production nodes often can't reach the internet. Download the four files once on a connected machine, copy the folder to the server, and install from it. This procedure was tested with <code>--no-index</code>, so pip never contacts a package index.</p>
+  <ol class="steps">
+    <li><strong>On a connected machine</strong>, collect the wheel and its libraries into one folder:
+      <div class="cmd"><div class="cap">connected machine<button class="copy">Copy</button></div><pre>mkdir wheelhouse
+cp configmergetool-3.0.1-py3-none-any.whl wheelhouse/
+python3 -m pip download -d wheelhouse "wheelhouse/configmergetool-3.0.1-py3-none-any.whl[encoding]"</pre></div>
+      The folder then holds <code>configmergetool-3.0.1-py3-none-any.whl</code>, <code>openpyxl-3.1.5-py2.py3-none-any.whl</code>, <code>et_xmlfile-2.0.0-py3-none-any.whl</code>, and a <code>chardet-…whl</code>.</li>
+    <li><strong>Copy</strong> the whole <code>wheelhouse</code> folder to the server, for example with <code>scp -r wheelhouse user@server:~/</code>.</li>
+    <li><strong>On the server</strong>, install into your home folder without touching the network:
+      <div class="cmd"><div class="cap">server<button class="copy">Copy</button></div><pre>[ -x ~/venv/bin/python ] || python3 -m venv ~/venv
+~/venv/bin/pip install --no-index --find-links ~/wheelhouse "configmergetool[encoding]==3.0.1"
+~/venv/bin/configmergetool --version</pre></div>
+      Then link the command onto your PATH as in <a href="#venv">method A</a> step 3.</li>
+  </ol>
+  <div class="note warn">
+    <strong>chardet is built per platform</strong>
+    <p>openpyxl, et_xmlfile and ConfigMergeTool are pure-Python wheels (<code>py3-none-any</code>), so they install on any OS. The chardet wheel you download matches the downloading machine: a Mac downloads a <code>macosx_arm64</code> build, for example. For a Linux or Windows server, either run the download on a machine with the same OS and Python version, or tell pip the target, for example <code>--platform manylinux2014_x86_64 --python-version 3.11 --only-binary=:all:</code>.</p>
+    <p>If chardet doesn't fit, leave out <code>[encoding]</code>. The tool still works, reading files that aren't UTF-8 as latin-1.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────────── D: SOURCE ───────────────────────────── -->
+<section id="source">
+  <h2>D · Run from the source folder</h2>
+  <p>Useful for testing a copy of the repository. openpyxl still has to be available, so install it into a home-folder venv and run the script with that venv's Python:</p>
+  <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>[ -x ~/venv/bin/python ] || python3 -m venv ~/venv
+~/venv/bin/pip install -r requirements.txt chardet
+~/venv/bin/python ConfigMergeTool.py --version</pre></div>
+  <p><code>ConfigMergeTool.py</code>, <code>python -m configmerge</code> and <code>configmergetool</code> behave identically. A source copy is only as current as its checkout: run <code>git pull</code> to pick up new releases.</p>
+</section>
+
+<!-- ───────────────────────────── VERIFY ───────────────────────────── -->
+<section id="verify">
+  <h2>Verify the installation</h2>
+  <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>configmergetool --version        <span class="c"># configmergetool 3.0.1</span>
+configmergetool --help | head    <span class="c"># usage: configmergetool [-h] ...</span></pre></div>
+  <p>To check that the libraries are in place, run the venv's pip (method A) or <code>python3 -m pip</code> (method B):</p>
+  <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>~/venv/bin/pip list
+<span class="c"># chardet          7.x    (only with [encoding])
+# configmergetool  3.0.1
+# et_xmlfile       2.0.0
+# openpyxl         3.1.5</span></pre></div>
+</section>
+
+<!-- ───────────────────────────── UPGRADE ───────────────────────────── -->
+<section id="upgrade">
+  <h2>Upgrade and uninstall</h2>
+  <h3>Upgrade to a newer wheel</h3>
+  <p>For example, from 3.0.0 to 3.0.1. Your venv, PATH link and run history stay as they are.</p>
+  <div class="cmd"><div class="cap">macOS / Linux<button class="copy">Copy</button></div><pre>~/venv/bin/pip install --upgrade "configmergetool-3.0.1-py3-none-any.whl[encoding]"</pre></div>
+  <div class="cmd"><div class="cap">windows powershell<button class="copy">Copy</button></div><pre>&amp; "$env:USERPROFILE\venv\Scripts\pip.exe" install --upgrade "configmergetool-3.0.1-py3-none-any.whl[encoding]"</pre></div>
+  <p>Finish any open audit and apply its patch before upgrading. Patches are applied against the files the audit read.</p>
+  <h3>Uninstall completely</h3>
+  <ul>
+    <li><strong>Method A or C:</strong> run <code>~/venv/bin/pip uninstall configmergetool</code> and remove the <code>~/.local/bin/configmergetool</code> link. If the folder holds nothing else, you can delete the whole folder instead (<code>~/venv</code>, or <code>%USERPROFILE%\venv</code> on Windows).</li>
+    <li><strong>Method B:</strong> <code>python3 -m pip uninstall configmergetool openpyxl et_xmlfile chardet</code>. Only remove the libraries if nothing else of yours uses them.</li>
+    <li>Optionally, delete <code>~/.configmergetool/</code>, which holds the audit run history.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────────── MODES ───────────────────────────── -->
+<section id="modes">
+  <h2><span class="n">Use</span>What the tool does</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Mode</th><th>Use it to</th><th>Started by</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Audit</strong></td><td>Compare the same configuration across several nodes (Staging, Prod, DR, …), flag drift, and fix it from an interactive HTML report.</td><td><code>--audit-config-file</code></td></tr>
+      <tr><td><strong>Apply patch</strong></td><td>Write the corrections you chose in the audit report as new config files.</td><td><code>--apply-audit-patch</code></td></tr>
+      <tr><td><strong>Merge</strong></td><td>Carry a site's customised settings (base) onto a new software release's defaults. <strong>Base values win.</strong></td><td><code>--base-dir</code> / <code>--base-config-file</code> with <code>--release-dirs</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>The tool only reads the node, base and release folders. It writes to <code>reports/</code> and the output folder you name, and it refuses an <code>--output-dir</code> that overlaps an input folder.</p>
+</section>
+
+<!-- ───────────────────────────── AUDIT ───────────────────────────── -->
+<section id="audit">
+  <h2>Audit nodes for drift</h2>
+  <ol class="steps">
+    <li>Put a copy of each node's configuration in its own folder, e.g. <code>STG/</code>, <code>PROD/</code>, <code>DR/</code>.</li>
+    <li>Describe the nodes in <code>audit.json</code>. The first node is the reference that others are compared with. <code>output_dir</code> is where applied patches are written:
+      <div class="cmd"><div class="cap">audit.json<button class="copy">Copy</button></div><pre>[
+  { "base_dir": "STG",  "name": "Staging" },
+  { "base_dir": "PROD", "name": "Prod-Site" },
+  { "base_dir": "DR",   "name": "DR-Site" },
+  { "output_dir": "corrections/" }
+]</pre></div>
+      <code>base_dir</code> paths are relative to the folder you run the command from. Node names must be unique. Never put a literal <code>"password"</code> in this file; use <code>"password_env"</code> (the name of an environment variable) instead.</li>
+    <li>Run the audit from the folder that contains the node folders:
+      <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>cd ~/audits/helm-site
+configmergetool --audit-config-file audit.json \
+  --filter-file filter.txt \
+  --mapping-file Mapping.cfg \
+  --quiet</pre></div>
+      <code>--quiet</code> prints only differences, warnings and the summary. Leave it out to see progress. Every file used here is described in the <a href="#configfiles">config file reference</a>.</li>
+    <li>Open <code>reports/audit_YYYYMMDD_HHMMSS/audit_report.html</code> in your browser.</li>
+  </ol>
+  <p>How each file type is compared:</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>File type</th><th>Comparison</th></tr></thead>
+    <tbody>
+      <tr><td><code>.properties .cfg .ini .conf</code></td><td>Key by key, section by section, against the first node that has the file. Commented-out keys count as present (commented).</td></tr>
+      <tr><td><code>.json</code></td><td>Value by value, by dotted path (<code>server.port</code>).</td></tr>
+      <tr><td><code>.sstp</code></td><td>Routing-rule blocks, compared on their original text across all nodes. Only whitespace is ignored; comments count. A block missing on a node and changes outside any block are mismatches. The row label (VALUE, ORDER, TEXT_DIFF, BLOCK_ABSENT) is informational only.</td></tr>
+      <tr><td>yaml, tpl, xml, txt, md, sh and other text</td><td>Whitespace is ignored. When content differs, each <strong>changed block of lines</strong> becomes one mismatch row (new in 3.0).</td></tr>
+      <tr><td>Binaries (jar, tgz, crt, …)</td><td>SHA-256 checksum and size. Excluded unless your filter file lists their extension.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Backup copies such as <code>values.yaml_bkp200821</code> are skipped automatically, but only when the original file sits next to them. They're listed in <code>feedback/skipped_backups.json</code>.</p>
+</section>
+
+<!-- ───────────────────────────── MAPPING ───────────────────────────── -->
+<section id="mapping">
+  <h2>Compare files stored at different paths</h2>
+  <p>New in 3.0. When a file lives at a different path on another node, such as Staging running one chart <code>dra-SA</code> while Prod and DR run two instances <code>dra-SA-1</code> and <code>dra-SA-2</code>, pass a mapping file with <code>--mapping-file</code>. Without it, those files are reported as absent.</p>
+  <div class="cmd"><div class="cap">Mapping.cfg<button class="copy">Copy</button></div><pre><span class="c"># whole folders: every file below is paired</span>
+STG/dra-SA=PROD/dra-SA-1
+STG/dra-SA=PROD/dra-SA-2
+STG/dra-SA=DR/dra-SA-1
+STG/dra-SA=DR/dra-SA-2
+<span class="c"># single file (overrides a folder line for that file)</span>
+STG/smartstp/values.yaml=PROD/smartstp0/values.yaml</pre></div>
+  <ul>
+    <li>The format is one <code>LEFT=RIGHT</code> pair per line. <code>#</code> starts a comment, and a leading <code>/</code> is ignored.</li>
+    <li>The first path part names the node: its <code>base_dir</code>, the last folder of it, or its <code>name</code>.</li>
+    <li>The left file appears in the report row of the right path. The Staging copy is therefore compared in both the <code>dra-SA-1/…</code> and <code>dra-SA-2/…</code> rows, and the Staging-only <code>dra-SA/…</code> row disappears.</li>
+    <li>A pair whose file exists on only one side is skipped and listed in <code>audit.log</code> as <code>CMT-AUD-W011</code>. A pair missing on both sides (hidden, filtered or binary) is skipped silently.</li>
+    <li>A line that names no known node stops the run with <code>CMT-CLI-E018</code>.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────────── FILTER ───────────────────────────── -->
+<section id="filter">
+  <h2>Choose which files are audited</h2>
+  <p>Without <code>--filter-file</code>, every non-binary file is audited. A filter file holds one rule per line and is case-insensitive:</p>
+  <div class="cmd"><div class="cap">filter.txt<button class="copy">Copy</button></div><pre><span class="c"># include by extension</span>
+yaml
+yml
+tpl
+properties
+<span class="c"># include only named files of a type</span>
+conf::sysctl.conf,sctp.conf
+<span class="c"># exclude a name (file or folder), a glob, or a subtree</span>
+!nohup.out
+!*.swp
+!logs/archive
+<span class="c"># force-include a path inside an excluded folder</span>
++logs/archive/current-session</pre></div>
+  <p>Rules are applied in this order: force-includes (<code>+</code>), then excludes (<code>!</code>), then includes. Once a filter has any include rule, files it doesn't match are skipped. Archives, keystores, certificates and compiled files are skipped by default; list their extension (e.g. <code>jar</code>) to audit them by checksum. Skipped files are recorded in <code>feedback/filtered_files.json</code>.</p>
+</section>
+
+<!-- ───────────────────────────── REPORT ───────────────────────────── -->
+<section id="report">
+  <h2>Reading the audit report</h2>
+  <ul>
+    <li><strong>Sidebar:</strong> files with differences or missing nodes are listed first. <kbd>Ctrl</kbd>+<kbd>K</kbd> searches file names.</li>
+    <li><strong>Row colours:</strong> yellow means the value differs, teal is an instance-specific value (not counted as an error), purple is an expected difference, blue is a pending change, and a striped cell means the file is absent on that node.</li>
+    <li><strong>Mapped nodes</strong> show <code>↪ original/path</code> next to the node name. That node's download uses its own file name.</li>
+    <li><strong>Text files</strong> list each changed block (e.g. <code>L88–L91</code>) under <em>File checksum</em>. <em>Show</em> scrolls the side-by-side view, where the lines that differ on each node are highlighted with line numbers. Text rows are read-only: download the node's file to edit it.</li>
+    <li><strong>SSTP files</strong> show each node's original block lines, exactly as in the file, followed by the same side-by-side view. They are read-only too.</li>
+    <li><strong>Show differences only</strong> hides matching rows. For text, XML and SSTP files it also trims the side-by-side view to the changed lines with 3 lines of context, lined up across nodes; skipped stretches show as <em>⋯ N unchanged lines</em>, and a node without a line shows <em>no line here — between L16 and L17</em>. Files that exist on only one node show just the "absent" banner.</li>
+    <li><strong>Prev / Next</strong> steps through every mismatch in the report. Use <em>Skip</em> to set aside a row you've reviewed.</li>
+    <li>For KV and JSON rows, <strong>Use for all</strong> or <strong>Override</strong> records a correction. <strong>Export Patch</strong> saves them all as a JSON file.</li>
+    <li><strong>Export Diffs XLSX</strong> opens <code>audit_diffs.xlsx</code>, the same findings as a spreadsheet.</li>
+  </ul>
+  <p>Large runs (over 22 MB) are split into parts <code>audit_report_p01.html</code>, <code>…p02.html</code> behind an index page.</p>
+</section>
+
+<!-- ───────────────────────────── PATCH ───────────────────────────── -->
+<section id="patch">
+  <h2>Apply the fixes</h2>
+  <p>Click <strong>Export Patch</strong> in the report. It saves a file such as <code>audit_patch_2026-09-25T1015.json</code>. Apply it from the folder the audit ran in, because source files are found through the node folders stored in the patch:</p>
+  <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>configmergetool --apply-audit-patch audit_patch_2026-09-25T1015.json --output-dir corrections/</pre></div>
+  <p>Without <code>--output-dir</code>, the files go to <code>output_dir</code> from the audit config (pass <code>--audit-config-file</code>) or from the patch, and otherwise to <code>&lt;run folder&gt;/corrections</code>. Corrected files are written to <code>corrections/&lt;node&gt;/&lt;path&gt;</code>. The original node folders are never modified, and <code>corrections.log</code> lists every change. Review the files, then deploy them to the nodes yourself.</p>
+</section>
+
+<!-- ───────────────────────────── MERGE ───────────────────────────── -->
+<section id="merge">
+  <h2>Merge a site's settings into a new release</h2>
+  <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>configmergetool --base-dir base --release-dirs release --output-dir output --dry-run
+configmergetool --base-dir base --release-dirs release --output-dir output</pre></div>
+  <ul>
+    <li><strong>Base values win.</strong> A key in both folders takes the base value. A base-only key is added (unless <code>--exclude-params-in-baseonlyconfig</code> is set), and a release-only key is kept.</li>
+    <li>Release-only files are copied to the output. Files named differently in base and release are paired with <code>--mapping-file</code> using <code>base/path = release/path</code> lines.</li>
+    <li>Use <code>--copy-baseonlyconfigfile</code> for files to copy verbatim from base, such as keystores and licences.</li>
+    <li>Use <code>--base-config-file bases.json</code> to merge several nodes in one run (one pass per base).</li>
+    <li><code>--dry-run</code> analyses and reports without writing output.</li>
+  </ul>
+</section>
+
+<!-- ───────────────────────────── OUTPUTS ───────────────────────────── -->
+<section id="outputs">
+  <h2>Outputs and exit codes</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Mode</th><th>Written to</th></tr></thead>
+    <tbody>
+      <tr><td>Audit</td><td><code>reports/audit_YYYYMMDD_HHMMSS/</code>: <code>audit_report.html</code>, <code>audit.log</code> (first line states the version), <code>audit_diffs.xlsx</code>, and <code>feedback/*.json</code> (skipped backups, filtered files, expected differences, log-name warnings)</td></tr>
+      <tr><td>Merge</td><td><code>reports/run_YYYYMMDD_HHMMSS/</code>: <code>merge_diff.html</code>, <code>merge_report_&lt;base&gt;.xlsx</code>, <code>log_merge_config.log</code>; plus the merged files in <code>--output-dir</code></td></tr>
+      <tr><td>Patch</td><td><code>&lt;output-dir&gt;/&lt;node&gt;/…</code> and <code>corrections.log</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Exit</th><th>Audit</th><th>Merge</th><th>Patch</th></tr></thead>
+    <tbody>
+      <tr><td><code>0</code></td><td>All nodes match (or differ only as expected)</td><td>Merged, no critical issues</td><td>Every change written</td></tr>
+      <tr><td><code>1</code></td><td>Mismatches found, or a file could not be compared</td><td>Critical issue: empty base override, invalid JSON/XML, ambiguous match, processor error</td><td>Some files skipped or failed</td></tr>
+      <tr><td><code>2</code></td><td colspan="3">Invalid arguments or config file (e.g. a folder not found, bad mapping line)</td></tr>
+    </tbody>
+  </table></div>
+  <p>Every message carries a stable identifier, such as <code>[CMT-AUD-W011]</code>. The full list is in <code>ConfigMergeTool-readme.txt</code> under <em>Error identifiers</em>.</p>
+</section>
+
+<!-- ───────────────────────────── CONFIG FILES ───────────────────────────── -->
+<section id="configfiles">
+  <h2>Config file reference</h2>
+  <p>Every file the tool reads, the option that points at it, and everything it may contain. Paths inside the files are relative to the folder you run the command from. JSON files must be strict JSON (no comments or trailing commas). In the text files, a line starting with <code>#</code> is a comment and blank lines are ignored. A config error stops the run with a <code>CMT-CLI-E…</code> message and exit code 2.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>File</th><th>Option</th><th>Mode</th><th>Format</th></tr></thead>
+    <tbody>
+      <tr><td><a href="#cf-audit">Audit config</a></td><td><code>--audit-config-file</code></td><td>audit, patch</td><td>JSON array</td></tr>
+      <tr><td><a href="#cf-base">Base config</a></td><td><code>--base-config-file</code></td><td>merge</td><td>JSON array</td></tr>
+      <tr><td><a href="#cf-filter">Filter file</a></td><td><code>--filter-file</code></td><td>audit</td><td>one rule per line</td></tr>
+      <tr><td><a href="#cf-amap">Audit mapping</a></td><td><code>--mapping-file</code></td><td>audit</td><td><code>LEFT=RIGHT</code> lines</td></tr>
+      <tr><td><a href="#cf-mmap">Merge mapping</a></td><td><code>--mapping-file</code>, <code>mapping_file</code></td><td>merge</td><td><code>base = release</code> lines</td></tr>
+      <tr><td><a href="#cf-copy">Copy-only list</a></td><td><code>--copy-baseonlyconfigfile</code>, <code>copy_only_file</code></td><td>merge</td><td>one path per line</td></tr>
+      <tr><td><a href="#cf-patch">Audit patch</a></td><td><code>--apply-audit-patch</code></td><td>patch</td><td>JSON object (exported)</td></tr>
+      <tr><td><a href="#cf-email">Email config</a></td><td><code>--email-config</code></td><td><span class="pill no">Reserved</span></td><td>JSON object</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="cf-audit">Audit config <code>--audit-config-file</code></h3>
+  <p>A JSON array of node entries, plus an optional output entry. The first node is the base that the others are compared with.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Default</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>base_dir</code></td><td>string</td><td><span class="pill req">Yes</span></td><td>—</td><td>Folder holding this node's configuration. Must exist (<code>E010</code>).</td></tr>
+      <tr><td><code>name</code></td><td>string</td><td><span class="pill opt">No</span></td><td>last folder of <code>base_dir</code></td><td>Name in the report, folder name for corrected files, and a prefix you can use in the mapping file. Must be unique (<code>E006</code>).</td></tr>
+      <tr><td><code>no_skip_files</code></td><td>array of names</td><td><span class="pill opt">No</span></td><td><code>[]</code></td><td>File names never treated as backup copies. Lists from all entries apply to every node.</td></tr>
+      <tr><td><code>remote</code></td><td>object</td><td><span class="pill opt">No</span></td><td>—</td><td>Reserved for the planned SSH audit: <code>host</code> (required), <code>port</code> (22), <code>username</code>, <code>key_file</code>, <code>password_env</code>, <code>remote_path</code>, <code>timeout_secs</code> (30). Validated, not run yet.</td></tr>
+      <tr><td><code>{"output_dir": …}</code></td><td>separate entry</td><td><span class="pill opt">No</span></td><td>—</td><td>Where applied patches go when <code>--output-dir</code> is not given.</td></tr>
+      <tr><td><code>password</code></td><td colspan="4"><span class="pill no">Refused</span> A literal password stops the run (<code>E005</code>/<code>E008</code>). Use <code>password_env</code>, the name of an environment variable.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="cmd"><div class="cap">audit.json — every supported field<button class="copy">Copy</button></div><pre>[
+  {
+    "base_dir":      "sites/APP-01/config",
+    "name":          "APP-01",
+    "no_skip_files": ["server.xml_20240705_active"]
+  },
+  { "base_dir": "sites/APP-02/config", "name": "APP-02" },
+  { "output_dir": "corrections/" }
+]</pre></div>
+
+  <h3 id="cf-base">Base config <code>--base-config-file</code></h3>
+  <p>Merges several bases against the same release in one run. When given, <code>--base-dir</code>, <code>--mapping-file</code> and <code>--copy-baseonlyconfigfile</code> are ignored. With two or more entries, each base's files go to <code>output/&lt;name&gt;/</code> and get their own <code>merge_report_&lt;name&gt;.xlsx</code>.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>base_dir</code></td><td>string</td><td><span class="pill req">Yes</span></td><td>This base's config folder.</td></tr>
+      <tr><td><code>name</code></td><td>string</td><td><span class="pill opt">No</span></td><td>Output subfolder and report name; defaults to the last folder of <code>base_dir</code>. Unique.</td></tr>
+      <tr><td><code>mapping_file</code></td><td>string</td><td><span class="pill opt">No</span></td><td><a href="#cf-mmap">Merge mapping</a> for this base. Must exist.</td></tr>
+      <tr><td><code>copy_only_file</code></td><td>string</td><td><span class="pill opt">No</span></td><td><a href="#cf-copy">Copy-only list</a> for this base. Must exist.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="cmd"><div class="cap">base-configs.json<button class="copy">Copy</button></div><pre>[
+  { "base_dir": "base/node1", "name": "prod-eu",
+    "mapping_file": "mappings/node1-mapping.txt",
+    "copy_only_file": "mappings/node1-copy-only.txt" },
+  { "base_dir": "base/node2", "name": "prod-us" }
+]</pre></div>
+
+  <h3 id="cf-filter">Filter file <code>--filter-file</code></h3>
+  <p>One rule per line, case-insensitive. The first matching step decides: <strong>+</strong> force-include, then <strong>!</strong> excludes, then include rules, then the built-in binary types. With no include rules, everything else is audited; with any include rule, unmatched files are skipped.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Rule</th><th>Example</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td>Extension</td><td><code>yaml</code> · <code>.xml</code> · <code>noext</code></td><td>Every file with that extension (<code>noext</code> = files without one).</td></tr>
+      <tr><td>Extension::names</td><td><code>conf::sysctl.conf,sctp.conf</code></td><td>Only these file names.</td></tr>
+      <tr><td>Extension::folders</td><td><code>html::runtime,test</code></td><td>Files of that type inside folders with these names (items without a dot).</td></tr>
+      <tr><td>Folder path</td><td><code>config/routing</code></td><td>Everything below that path.</td></tr>
+      <tr><td>Glob</td><td><code>GTPProxy*</code> · <code>config/*.xml</code></td><td>Names matching the pattern; with <code>/</code>, the whole relative path.</td></tr>
+      <tr><td>Exclude</td><td><code>!nohup.out</code> · <code>!*.swp</code> · <code>!logs/archive</code></td><td>A name (file or folder), a glob, or a subtree.</td></tr>
+      <tr><td>Force-include</td><td><code>+logs/archive/current</code></td><td>Rescues a path from an exclude. Not an include rule.</td></tr>
+      <tr><td>Binary types</td><td><code>jar</code> · <code>crt</code></td><td>Archives, keystores, certificates and compiled files are skipped by default; listing the extension audits them by checksum.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="cf-amap">Audit mapping <code>--mapping-file</code></h3>
+  <p><code>LEFT=RIGHT</code> per line. Each side starts with a node prefix (full <code>base_dir</code>, its last folder, or the node <code>name</code>). A folder side maps every file below it; a file line wins over a folder line. The left file joins the report row of the right path. See <a href="#mapping">Mapped paths</a> for the full behaviour.</p>
+  <div class="cmd"><div class="cap">Mapping.cfg<button class="copy">Copy</button></div><pre>STG/dra-SA=PROD/dra-SA-1
+STG/dra-SA=PROD/dra-SA-2
+Staging/smartstp/values.yaml=DR-Site/smartstp1/values.yaml</pre></div>
+
+  <h3 id="cf-mmap">Merge mapping <code>--mapping-file</code></h3>
+  <p><code>base_path = release_path</code> per line, for files named differently in base and release. Paths may start with the folder path, its last name, or be the path inside the folder; lines without <code>=</code> are ignored. Several base files mapped to one release file merge in line order, and the first wins on shared keys. One base file mapped to several release files is merged into each.</p>
+  <div class="cmd"><div class="cap">mapping.txt<button class="copy">Copy</button></div><pre>base/config/fsmapp.cfg = release/config/app.properties
+base/config/db-primary.properties = release/config/database.properties
+base/config/db-replica.properties = release/config/database.properties</pre></div>
+
+  <h3 id="cf-copy">Copy-only list <code>--copy-baseonlyconfigfile</code></h3>
+  <p>One base file per line, copied to the output unchanged: licences, keystores, certificates. The same path forms as the merge mapping are accepted, and paths that lead outside the base folder are skipped with a warning.</p>
+  <div class="cmd"><div class="cap">copy-only.txt<button class="copy">Copy</button></div><pre>base/config/ssl/server.keystore
+base/config/licence.dat</pre></div>
+
+  <h3 id="cf-patch">Audit patch <code>--apply-audit-patch</code></h3>
+  <p>Written by <em>Export Patch</em>; you don't normally edit it. Top-level fields: <code>audit_run</code>, <code>exported_at</code>, <code>node_dirs</code> (node → folder, used to find source files), <code>output_dir</code>, <code>run_dir</code>, <code>changes</code>, and <code>skipped</code> (record only). Each change carries <code>file</code>, <code>file_type</code> (<code>kv</code> or <code>json</code>), <code>node</code>, <code>compound</code> (<code>[Section]|key</code> or a dotted JSON path), <code>key</code>, <code>section</code>, <code>original</code>, <code>corrected</code> and <code>action</code> (<code>modified</code> or <code>added</code>).</p>
+  <div class="cmd"><div class="cap">audit_patch_2026-09-25T1015.json (shortened)</div><pre>{
+  "audit_run": "20260925_101203",
+  "node_dirs": { "APP-01": "sites/APP-01/config", "APP-02": "sites/APP-02/config" },
+  "output_dir": "corrections/",
+  "changes": [
+    { "file": "fsmapp.properties", "file_type": "kv", "node": "APP-02",
+      "compound": "[Couchbase]|pool.size", "key": "pool.size", "section": "[Couchbase]",
+      "original": "8", "corrected": "16", "action": "modified" }
+  ],
+  "skipped": []
+}</pre></div>
+
+  <h3 id="cf-email">Email config <code>--email-config</code></h3>
+  <p><span class="pill no">Reserved</span> Planned for an email-triggered audit. Using it today stops with <code>CMT-CLI-E014</code>.</p>
+  <p>The plain-text readme, <code>ConfigMergeTool-readme.txt</code>, carries the same reference with every error code, under <em>Configuration files — reference</em>.</p>
+</section>
+
+<!-- ───────────────────────────── OPTIONS ───────────────────────────── -->
+<section id="options">
+  <h2>All command-line options</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Option</th><th>Mode</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>--audit-config-file FILE</code></td><td>audit</td><td>JSON list of nodes to compare. Selects audit mode.</td></tr>
+      <tr><td><code>--filter-file FILE</code></td><td>audit</td><td>Which files to audit (see <a href="#filter">Filter file</a>).</td></tr>
+      <tr><td><code>--mapping-file FILE</code></td><td>audit, merge</td><td>Audit: <code>NODE/path=NODE/path</code> file or folder pairs. Merge: <code>base = release</code> file pairs.</td></tr>
+      <tr><td><code>--quiet</code></td><td>audit</td><td>Print only DIFF, WARN, ERROR and the summary.</td></tr>
+      <tr><td><code>--apply-audit-patch FILE</code></td><td>patch</td><td>Apply a patch exported from the report.</td></tr>
+      <tr><td><code>--base-dir DIR</code></td><td>merge</td><td>Site (production) config folder.</td></tr>
+      <tr><td><code>--base-config-file FILE</code></td><td>merge</td><td>JSON list of several bases: <code>{base_dir, name?, mapping_file?, copy_only_file?}</code>.</td></tr>
+      <tr><td><code>--release-dirs DIR …</code></td><td>merge</td><td>One or more release config folders.</td></tr>
+      <tr><td><code>--output-dir DIR</code></td><td>merge, patch</td><td>Where merged or corrected files go. Must not overlap an input folder.</td></tr>
+      <tr><td><code>--copy-baseonlyconfigfile FILE</code></td><td>merge</td><td>Base files to copy unchanged.</td></tr>
+      <tr><td><code>--exclude-params-in-baseonlyconfig</code></td><td>merge</td><td>Don't add keys that exist only in base.</td></tr>
+      <tr><td><code>--dry-run</code></td><td>merge</td><td>Analyse without writing output files.</td></tr>
+      <tr><td><code>--verbose</code></td><td>all</td><td>Show INFO messages on the console.</td></tr>
+      <tr><td><code>--report-dir DIR</code></td><td>all</td><td>Report folder (default <code>reports/</code>).</td></tr>
+      <tr><td><code>--log-dir DIR</code></td><td>merge</td><td>Accepted for older scripts and ignored. The log is written into the run folder under <code>--report-dir</code>.</td></tr>
+      <tr><td><code>--feedback-summary</code></td><td>—</td><td>Summarise past audit runs from <code>~/.configmergetool/feedback_history.json</code>.</td></tr>
+      <tr><td><code>--version</code>, <code>-h</code></td><td>—</td><td>Print the version, or the help text.</td></tr>
+      <tr><td><code>--remote-audit</code>, <code>--email-config</code></td><td>—</td><td><span class="pill no">Not yet available</span> Reserved for future releases.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ───────────────────────────── TROUBLE ───────────────────────────── -->
+<section id="trouble">
+  <h2>Troubleshooting</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>You see</th><th>Cause and fix</th></tr></thead>
+    <tbody>
+      <tr><td><code>configmergetool: command not found</code></td><td>The command's folder isn't on your PATH. Run it by full path (<code>~/venv/bin/configmergetool</code>) or follow <a href="#venv">method A step 3</a>. Open a new terminal afterwards.</td></tr>
+      <tr><td><code>error: externally-managed-environment</code></td><td>Your Python blocks <code>pip --user</code> and system-wide installs. Use a home-folder venv (<a href="#venv">method A</a>).</td></tr>
+      <tr><td><code>ensurepip is not available</code> / <code>No module named venv</code></td><td>Debian/Ubuntu ship venv as a separate package, <code>python3-venv</code>. Ask your administrator to add it, or use <a href="#user">method B</a> if your Python allows it.</td></tr>
+      <tr><td><code>No module named openpyxl</code></td><td>You're running a different Python from the one you installed into. Use the venv's own <code>configmergetool</code> or <code>python</code>, or reinstall into the Python you run.</td></tr>
+      <tr><td>Old version or old output after upgrading</td><td>Run <code>configmergetool --version</code>. A source checkout (method D) needs <code>git pull</code>, and an older copy may come first on your PATH (<code>which -a configmergetool</code>, or <code>where configmergetool</code> on Windows).</td></tr>
+      <tr><td><code>[CMT-CLI-E010] base_dir does not exist</code></td><td><code>base_dir</code> in <code>audit.json</code> is relative to the current folder. <code>cd</code> into the folder that holds the node folders, or use absolute paths.</td></tr>
+      <tr><td>File reported absent on a node that has it under another path</td><td>Add a <a href="#mapping">mapping file</a>. Check <code>audit.log</code> for <code>CMT-AUD-W011</code> lines about pairs that didn't match.</td></tr>
+      <tr><td>Accented or special characters look wrong</td><td>Install chardet (<code>[encoding]</code>), so files that aren't UTF-8 are decoded with their real encoding.</td></tr>
+      <tr><td>PowerShell won't run <code>Activate.ps1</code></td><td>Run <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> (no admin needed), or skip activation and call <code>…\Scripts\configmergetool.exe</code> directly.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<footer>ConfigMergeTool 3.0.1 · Written against release <code>v3.0.1</code> (commit <code>01360ac</code>). Dependency versions were checked with a clean install, and the offline procedure was tested with <code>--no-index</code>. Full reference: <code>ConfigMergeTool-readme.txt</code>.</footer>
+</main>
+</div>
+
+<script>
+(function(){
+  // Copy buttons: copy the code block's text; fall back to selecting it
+  document.querySelectorAll('.cmd').forEach(function(box){
+    var btn = box.querySelector('.copy'), pre = box.querySelector('pre');
+    if(!btn || !pre) return;
+    btn.addEventListener('click', function(){
+      var text = pre.innerText;
+      var done = function(){ btn.textContent = 'Copied'; setTimeout(function(){ btn.textContent = 'Copy'; }, 1400); };
+      var fallback = function(){
+        var r = document.createRange(); r.selectNodeContents(pre);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        btn.textContent = 'Selected'; setTimeout(function(){ btn.textContent = 'Copy'; }, 1400);
+      };
+      try { navigator.clipboard.writeText(text).then(done, fallback); } catch(e) { fallback(); }
+    });
+  });
+
+  // OS tabs: one choice applies to every tab group; remembered per viewer
+  function setOS(os){
+    document.querySelectorAll('.tabs[data-group="os"] button').forEach(function(b){
+      b.setAttribute('aria-selected', b.dataset.os === os ? 'true' : 'false');
+    });
+    document.querySelectorAll('.tabpanel[data-os]').forEach(function(p){ p.hidden = p.dataset.os !== os; });
+    try { localStorage.setItem('cmt-guide-os', os); } catch(e) {}
+  }
+  document.querySelectorAll('.tabs[data-group="os"] button').forEach(function(b){
+    b.addEventListener('click', function(){ setOS(b.dataset.os); });
+  });
+  var saved = null;
+  try { saved = localStorage.getItem('cmt-guide-os'); } catch(e) {}
+  if (!saved && /Win/.test(navigator.platform || '')) saved = 'win';
+  if (saved) setOS(saved);
+})();
+</script>
+</body>
+</html>

@@ -27,6 +27,10 @@ Typical use case:
   customisations forward onto the new release baseline.
   After deployment, run audit mode to verify all nodes are consistent.
 
+An illustrated version of the installation and user guide, with the same
+config file reference, is in  docs/ConfigMergeTool-guide.html  (open it in
+any browser; it works offline).
+
 
 ================================================================================
  REQUIREMENTS & INSTALLATION
@@ -229,23 +233,24 @@ Verify active version:
 ================================================================================
 
   configmergetool
-      --base-dir BASE_DIR
+      (--base-dir BASE_DIR | --base-config-file BASE_CONFIG_FILE)
       --release-dirs RELEASE_DIR [RELEASE_DIR ...]
       --output-dir OUTPUT_DIR
-      [--base-config-file BASE_CONFIG_FILE]
       [--mapping-file MAPPING_FILE]
       [--copy-baseonlyconfigfile COPY_ONLY_FILE]
       [--exclude-params-in-baseonlyconfig]
-      [--dry-run]
-      [--verbose]
-      [--quiet]
-      [--version]
+      [--dry-run] [--verbose] [--report-dir DIR]
 
 Option details:
 
   --base-dir PATH
       Base (production/site) config directory.
       Required unless --base-config-file is used.
+
+  --base-config-file PATH
+      JSON file listing several bases, one merge pass each.  When given,
+      --base-dir, --mapping-file and --copy-baseonlyconfigfile are ignored
+      (each base sets its own).  See CONFIGURATION FILES — REFERENCE, 2.
 
   --release-dirs PATH [PATH ...]
       One or more release config directories.
@@ -264,20 +269,14 @@ Option details:
       A release file matched by filename to several base files is skipped
       [CMT-MRG-E002] — add a --mapping-file entry to choose the base.
 
-  --base-config-file PATH
-      JSON file listing multiple base directories (one pass per node).
-      Replaces --base-dir when running against multiple production nodes.
-      See "MULTI-BASE USAGE" section below.
-
   --mapping-file PATH
-      Text file mapping base filenames to differently-named release files.
-      Required when base and release use different names for the same config.
-      See "MAPPING FILE FORMAT" section below.
+      Pairs base files with differently named release files
+      (base_path = release_path).  See CONFIGURATION FILES — REFERENCE, 5.
 
   --copy-baseonlyconfigfile PATH
-      Text file listing base files that should be copied as-is to output
-      without any merge processing (e.g. certificates, binary blobs).
-      See "COPY-ONLY FILE FORMAT" section below.
+      Base files to copy to the output unchanged, without merging
+      (licences, keystores, certificates).
+      See CONFIGURATION FILES — REFERENCE, 6.
 
   --exclude-params-in-baseonlyconfig
       When set, parameters that exist only in the base file (no release
@@ -292,10 +291,14 @@ Option details:
       Print all INFO-level log events to the console in addition to the
       log file. Default: only summary lines are printed.
 
-  --quiet
-      Suppress MATCH lines from console; print only DIFF, WARN, ERROR, and
-      the final SUMMARY line. Useful for large runs or scheduled/CI jobs.
-      All events still go to the log file regardless of this flag.
+  --report-dir PATH
+      Parent folder for the run folder reports/run_YYYYMMDD_HHMMSS/, which
+      holds the Excel report(s), merge_diff.html and log_merge_config.log.
+      Default: reports
+
+  --log-dir PATH
+      Accepted for backward compatibility and ignored: the log is written
+      into the run folder under --report-dir.
 
   --version
       Print the installed version number and exit.
@@ -305,43 +308,62 @@ Option details:
  FULL CLI REFERENCE — AUDIT MODE
 ================================================================================
 
+  Audit:
   configmergetool
       --audit-config-file AUDIT_CONFIG_FILE
       [--filter-file FILTER_FILE]
-      [--quiet]
-      [--version]
+      [--mapping-file MAPPING_FILE]
+      [--quiet] [--report-dir DIR]
 
+  Apply the corrections exported from the report:
   configmergetool
       --apply-audit-patch PATCH_JSON_FILE
-      --audit-config-file AUDIT_CONFIG_FILE
-      --output-dir OUTPUT_DIR
+      [--output-dir OUTPUT_DIR]
+      [--audit-config-file AUDIT_CONFIG_FILE]
 
-  configmergetool
-      --feedback-summary
+  Summary of past audit runs:
+  configmergetool --feedback-summary
 
 Option details:
 
   --audit-config-file PATH
-      JSON file listing production nodes to compare.
-      Each entry specifies a base_dir and optional display name.
-      Runs audit mode — no merge is performed.
-      See "AUDIT CONFIG FILE FORMAT" section below.
+      JSON list of the nodes to compare (the first node is the base).
+      Selects audit mode — no merge is performed.
+      See CONFIGURATION FILES — REFERENCE, 1.
 
   --filter-file PATH
-      Optional filter file restricting which file types are audited.
-      If omitted, all files are audited except binary archives.
-      See "FILTER FILE FORMAT" section below.
+      Which files are audited.  If omitted, every file is audited except
+      the built-in binary types.  See CONFIGURATION FILES — REFERENCE, 3.
+
+  --mapping-file PATH
+      NODE/path=NODE/path pairs (files or folders) that compare files stored
+      at different paths on different nodes in one report row.
+      See CONFIGURATION FILES — REFERENCE, 4.
+
+  --quiet
+      Console shows only DIFF, WARN, ERROR and the SUMMARY line; MATCH lines
+      are suppressed.  audit.log still records everything.
+
+  --report-dir PATH
+      Parent folder for the run folder reports/audit_YYYYMMDD_HHMMSS/.
+      Default: reports
 
   --apply-audit-patch PATCH_JSON_FILE
-      Apply an audit patch JSON (exported from the HTML report) to source
-      files, writing corrected configs to --output-dir.
-      --audit-config-file is required to locate source files.
-      --output-dir specifies where corrected files are written.
+      Apply a patch exported from the HTML report ("Export Patch").
+      Source files are located through the "node_dirs" stored in the
+      patch, so run it from the folder the audit ran in.
+      Corrected files go to the first of: --output-dir, "output_dir" in the
+      --audit-config-file given here, "output_dir" in the patch,
+      <run_dir>/corrections.  See CONFIGURATION FILES — REFERENCE, 7.
 
   --feedback-summary
       Print a summary of all past audit runs recorded in the feedback
       accumulator (~/.configmergetool/feedback_history.json).
       Does not run an audit.
+
+  --remote-audit, --email-config
+      Reserved for planned remote (SSH) and email-triggered audits.  Both
+      stop with an error today [CMT-CLI-E014, E015, E016].
 
 
 ================================================================================
@@ -370,26 +392,10 @@ Audit config file (audit.json):
 
 Mapped paths (--mapping-file in audit mode):
   When the same file lives at a different path on another node (e.g. Staging
-  runs one chart "dra-SA" while Prod/DR run two instances "dra-SA-1" and
-  "dra-SA-2"), list the pairs in a mapping file:
-
-    STG/dra-SA/Chart.yaml=PROD/dra-SA-1/Chart.yaml     <- one file
-    STG/dra-SA=PROD/dra-SA-1                           <- whole directory
-    STG/dra-SA=PROD/dra-SA-2
-    STG/dra-SA=DR/dra-SA-1
-
-  The first path component names the node: its base_dir (or the last folder
-  of it) or its "name"; a leading "/" is ignored; # lines are comments.
-  The left file is shown in the report row of the right path, so the Staging
-  copy is compared in both dra-SA-1/... and dra-SA-2/... rows, and the
-  Staging-only dra-SA/... row disappears.  Directory lines map every file of
-  the subtree; a file line overrides a directory line for the same file.
-  The node tag and column header show "<- dra-SA/Chart.yaml" for a mapped
-  node, and its download uses that file name.
-  A pair whose file exists on only one side is skipped [CMT-AUD-W011]
-  (listed in audit.log); a pair missing on both sides (hidden, filtered or
-  binary) is skipped silently.  A line naming no known node stops the run
-  [CMT-CLI-E018].
+  "dra-SA" vs Prod/DR "dra-SA-1" and "dra-SA-2"), add
+    --mapping-file Mapping.cfg
+  with lines such as  STG/dra-SA=PROD/dra-SA-1.
+  See CONFIGURATION FILES — REFERENCE, 4.
 
 Result:
   reports/                        <- report_dir (default "reports")
@@ -419,172 +425,486 @@ audit_diffs.xlsx sheets:
 
 
 ================================================================================
- AUDIT CONFIG FILE FORMAT
+ CONFIGURATION FILES — REFERENCE
 ================================================================================
 
-JSON array; each entry is one production node.
+Every file the tool reads, which option points at it, and what it may hold.
 
-Minimal (local paths):
+  #  File                 Option                          Mode      Format
+  -  -------------------  ------------------------------  --------  -----------
+  1  Audit config         --audit-config-file             audit,    JSON array
+                                                          patch
+  2  Base config          --base-config-file              merge     JSON array
+  3  Filter file          --filter-file                   audit     text
+  4  Audit mapping file   --mapping-file                  audit     text
+  5  Merge mapping file   --mapping-file, or              merge     text
+                          "mapping_file" in a base config
+  6  Copy-only file       --copy-baseonlyconfigfile, or   merge     text
+                          "copy_only_file" in a base config
+  7  Audit patch          --apply-audit-patch             patch     JSON object
+  8  Email config         --email-config                  reserved  JSON object
+
+Rules that apply to all of them:
+  - Save them as UTF-8.
+  - Relative paths, inside the files and on the command line, are resolved
+    from the folder you run the command in.
+  - JSON files must be strict JSON: no comments, no trailing commas, and
+    double quotes around every key and string.
+  - In the text files (3-6) a line whose first character is "#" is a
+    comment, and blank lines are ignored.  Leading and trailing spaces on a
+    line are ignored.
+  - A config error stops the run before anything is compared or written,
+    prints "[ERROR] [CMT-CLI-Ennn] ...", and exits with code 2.
+
+--------------------------------------------------------------------------------
+ 1. AUDIT CONFIG FILE   (--audit-config-file)
+--------------------------------------------------------------------------------
+
+Lists the nodes to compare.  Also read by --apply-audit-patch for its
+"output_dir" entry.
+
+Format: a JSON array.  Each element is either a NODE ENTRY (it has
+"base_dir") or the OUTPUT ENTRY (it has "output_dir" and no "base_dir").
+
+The order matters: the first node is the base node.  Other nodes are
+compared against it (for KV sections and text lines, the base is the first
+node that has the file).
+
+NODE ENTRY fields:
+
+  Field           Type      Required  Default           Meaning
+  --------------  --------  --------  ----------------  --------------------
+  base_dir        string    yes       —                 Folder that holds
+                                                        this node's copy of
+                                                        the configuration.
+                                                        It must exist.
+  name            string    no        last folder of    Node name shown in
+                                      base_dir          the report, used as
+                                                        the folder name for
+                                                        corrected files, and
+                                                        usable as a prefix in
+                                                        the mapping file.
+                                                        Must be unique.
+  no_skip_files   array of  no        []                File NAMES (not
+                  strings                               paths) that are never
+                                                        treated as backup
+                                                        copies.  Lists from
+                                                        all entries are
+                                                        combined and apply to
+                                                        every node.
+  remote          object    no        —                 Reserved for the
+                                                        planned SSH audit
+                                                        (see below).
+
+  Keys that are ignored in audit mode: "mapping_file" and "copy_only_file"
+  (merge only; use --mapping-file for audit mapping).
+  Keys that are refused: "password" (use "password_env" in "remote").
+
+OUTPUT ENTRY:
+
+  { "output_dir": "corrections/" }
+
+  Where --apply-audit-patch writes corrected files when --output-dir is not
+  given.  It is also stored in the report, so the page can show the target
+  path of each download and the exported patch carries it.  Optional; if
+  there are several, the last one is used.
+
+REMOTE block (reserved — the SSH audit is not implemented yet;
+--remote-audit stops with CMT-CLI-E016).  The block is validated already:
+
+  Field           Type      Required  Default   Meaning
+  --------------  --------  --------  --------  ------------------------------
+  host            string    yes       —         Host name or IP address.
+  port            integer   no        22        SSH port.
+  username        string    no        ""        Login user.
+  key_file        string    no        ""        Path to an SSH private key.
+  password_env    string    no        ""        NAME of an environment
+                                                variable holding the password.
+  remote_path     string    no        ""        Remote folder, when different
+                                                from base_dir.
+  timeout_secs    integer   no        30        Connection timeout in seconds.
+
+Example — minimal:
   [
-    { "base_dir": "prod/APP-01", "name": "APP-01" },
-    { "base_dir": "prod/APP-02", "name": "APP-02" }
+    { "base_dir": "STG",  "name": "Staging" },
+    { "base_dir": "PROD", "name": "Prod-Site" },
+    { "base_dir": "DR",   "name": "DR-Site" }
   ]
 
-Full example (all optional fields):
+Example — every supported field:
   [
     {
-      "base_dir":      "prod/APP-01",
+      "base_dir":      "sites/APP-01/config",
       "name":          "APP-01",
-      "no_skip_files": ["fsmapp.properties_couchbase"]
+      "no_skip_files": ["server.xml_20240705_active", "GTPProxy.cfg_old_routes"]
     },
+    { "base_dir": "sites/APP-02/config", "name": "APP-02" },
+    { "output_dir": "corrections/" }
+  ]
+
+Example — remote node (reserved, validated but not run):
+  [
     {
-      "base_dir":      "prod/APP-02",
-      "name":          "APP-02"
+      "base_dir": "/opt/app/config",
+      "name":     "APP-01",
+      "remote": {
+        "host":         "10.0.0.1",
+        "port":         22,
+        "username":     "appuser",
+        "key_file":     "~/.ssh/prod_key",
+        "password_env": "APP01_SSH_PASS",
+        "timeout_secs": 30
+      }
     }
   ]
 
-Fields:
-  base_dir       (required)  Path to this node's config directory.
-  name           (optional)  Display name in the HTML report.
-                             Defaults to the folder's basename.
-                             Must be unique across entries.
-  no_skip_files  (optional)  List of filenames to exempt from backup
-                             auto-detection even if they look like backups.
-                             Example: ["fsmapp.properties_couchbase"]
-
-Security note:
-  Never put passwords in this file.  For remote nodes, use "password_env"
-  (an env variable name) rather than a literal "password" field.
-  The tool will reject entries with a literal "password" key.
-
-
-================================================================================
- FILTER FILE FORMAT
-================================================================================
-
-Use --filter-file to restrict which files are audited.
-If not provided, all files are included (except binary archives).
-
-Format — plain text, one rule per line.  # lines are comments.  Blank lines
-are ignored.  All matching is case-insensitive.
-
-A complete sample filter file is provided in:  sample-filter.txt
+Errors (exit 2):
+  CMT-CLI-E001  file cannot be read, or is not valid JSON
+  CMT-CLI-E002  the top level is not an array
+  CMT-CLI-E003  an element is not an object
+  CMT-CLI-E004  an element has neither "base_dir" nor "output_dir"
+  CMT-CLI-E005  an element holds a literal "password"
+  CMT-CLI-E006  two nodes have the same "name"
+  CMT-CLI-E007  "remote" is not an object with "host"
+  CMT-CLI-E008  "remote" holds a literal "password"
+  CMT-CLI-E009  "port" or "timeout_secs" is not an integer
+  CMT-CLI-E010  "base_dir" does not exist or is not a folder
 
 --------------------------------------------------------------------------------
- INCLUDE RULES
+ 2. BASE CONFIG FILE   (--base-config-file)
 --------------------------------------------------------------------------------
 
-  a) Suffix only — include ALL files with this extension
-     json
-     xml
-     cfg
-     properties
+Merges several bases (e.g. several production nodes) in one run: one
+independent merge pass per base, all against the same --release-dirs.
+When it is given, --base-dir, --mapping-file and --copy-baseonlyconfigfile
+are ignored.
 
-     Special value "noext" — include files that have NO extension at all
-     (e.g. Makefile, Dockerfile, named executables):
-     noext
+Format: a JSON array of objects, read by the same loader as the audit
+config, so the same validation and errors (E001-E010) apply.
 
-  b) Suffix::filename(s) — include only named files with this suffix
-     conf::sysctl.conf,sctp.conf,spread.conf
-     txt::config.txt,system.txt
+  Field           Type      Required  Default           Meaning
+  --------------  --------  --------  ----------------  --------------------
+  base_dir        string    yes       —                 This base's config
+                                                        folder.
+  name            string    no        last folder of    Output subfolder and
+                                      base_dir          report name.  Must be
+                                                        unique.
+  mapping_file    string    no        none              Merge mapping file for
+                                                        this base (section 5).
+                                                        Must exist.
+  copy_only_file  string    no        none              Copy-only file for
+                                                        this base (section 6).
+                                                        Must exist.
 
-  c) Suffix::directory — include only files in directories matching pattern
-     html::runtime,test
-     (all items after :: must have no "." to be treated as directory names)
+  Ignored in merge mode: "no_skip_files", "remote", and an
+  {"output_dir": ...} entry (use --output-dir).
 
-  d) Directory-path include — include everything under a subtree
-     (contains "/" — no leading "!")
-     config/routing
-     app/conf
+Output layout:
+  With 2 or more entries each base gets its own subfolder:
+    output/<name>/...                                 merged files
+    reports/run_YYYYMMDD_HHMMSS/merge_report_<name>.xlsx
+  With 1 entry the files go straight into output/, as with --base-dir.
+  One merge_diff.html and one log_merge_config.log cover all bases.
 
-  e) Glob filename include — include filenames matching a glob pattern
-     (contains *, ?, or [ — no leading "!").  A glob that contains "/" is
-     matched against the relative path, e.g.  config/*.xml
-     *.jar.*
-     GTPProxy*
-     jar.[0-9].*
+Example — base-configs.json:
+  [
+    {
+      "base_dir":       "base/node1",
+      "name":           "prod-eu",
+      "mapping_file":   "mappings/node1-mapping.txt",
+      "copy_only_file": "mappings/node1-copy-only.txt"
+    },
+    { "base_dir": "base/node2", "name": "prod-us" }
+  ]
 
---------------------------------------------------------------------------------
- EXCLUDE RULES  (evaluated after force-includes, before include rules)
---------------------------------------------------------------------------------
-
-  f) Explicit name exclude — skip a file with this exact name, and
-     everything inside a directory with this name
-     !nohup.out
-     !.DS_Store
-     !backup           (skips backup/, config/backup/, ...)
-
-  g) Glob exclude — skip filenames matching a glob pattern
-     !*.tmp
-     !*.swp
-     !*~
-
-  h) Directory-path exclude — skip everything under a subtree
-     (contains "/" after "!")
-     !logs/archive
-
-  i) Built-in binary exclusions — ALWAYS active, cannot be overridden
-     .tar  .gz  .bz2  .xz  .tgz  .rpm  .deb
-     .zip  .7z  .rar
-     .jar  .war  .ear
-     .jks  .keystore  .p12  .pfx
-     .pem  .crt  .cer  .der
-     .so   .dll  .exe  .dylib
-     .class  .pyc
-     .bin  .img  .iso
+Command:
+  configmergetool --base-config-file base-configs.json \
+    --release-dirs release --output-dir output
 
 --------------------------------------------------------------------------------
- FORCE-INCLUDE  (evaluated first — overrides directory excludes)
+ 3. FILTER FILE   (--filter-file)
 --------------------------------------------------------------------------------
 
-  j) Force-include a path within an excluded directory
-     (leading "+").  A force-include is not an include rule: a filter with
-     only excludes and force-includes still audits every other file.
-     +config/security/certs/active
-     +logs/archive/current-session
+Chooses which files are audited.  Without it every file is audited except
+the built-in binary types (see i).  A complete commented example ships with
+the tool: sample-filter.txt.
 
-     Example: exclude all of "logs/archive" but keep one subtree:
+Format: one rule per line.  Matching is case-insensitive.  Paths use "/"
+and are relative to each node's base_dir.
+
+INCLUDE RULES — once a filter has at least one include rule, a file that no
+include rule matches is skipped.
+
+  a) Extension — every file with this extension (leading dot optional)
+       properties
+       yaml
+       .xml
+     "noext" means files with no extension at all (Makefile, start_app):
+       noext
+
+  b) Extension::file names — only these names, with this extension
+       conf::sysctl.conf,sctp.conf,spread.conf
+       txt::config.txt,system.txt
+
+  c) Extension::folder names — files with this extension that sit in a
+     folder with one of these names, at any depth.  The items are treated
+     as folder names when NONE of them contains a ".":
+       html::runtime,test
+
+  d) Folder path — everything below this path (the line contains "/"):
+       config/routing
+       smartstp/configs
+
+  e) Glob — file names matching a pattern (the line contains * ? or [).
+     A glob that contains "/" is matched against the whole relative path:
+       GTPProxy*
+       *.jar.*
+       config/*.xml
+
+EXCLUDE RULES — start with "!".  They win over include rules.
+
+  f) Name — a file with this exact name, and everything inside a folder
+     with this name:
+       !nohup.out
+       !backup            (skips backup/, config/backup/, ...)
+
+  g) Glob — file names matching a pattern:
+       !*.swp
+       !*.tmp
+
+  h) Folder path — everything below this path (contains "/"):
        !logs/archive
-       +logs/archive/current-session
 
---------------------------------------------------------------------------------
- EVALUATION ORDER
---------------------------------------------------------------------------------
+FORCE-INCLUDE — starts with "+".  Wins over every exclude rule, for the
+given path and everything below it.  It is not an include rule: a filter
+with only "!" and "+" lines still audits every other file.
 
-  1. Force-include (+path)     — if matched, INCLUDE immediately
-  2. Explicit excludes (!)     — if matched, EXCLUDE immediately
-  3. Include rules             — if matched, INCLUDE
-  4. Binary archive exclusions — if matched, EXCLUDE (built-in, always)
-  5. Default
-       - No filter file:        pass all files
-       - Filter file with includes:  skip unmatched files
+  j) +logs/archive/current-session
 
-  Skipped files are recorded in:  <run_dir>/feedback/filtered_files.json
+BUILT-IN BINARY TYPES
 
---------------------------------------------------------------------------------
- EXAMPLES
---------------------------------------------------------------------------------
+  i) These are skipped even without a filter file:
+       .tar .gz .bz2 .xz .tgz .rpm .deb .zip .7z .rar .jar .war .ear
+       .jks .keystore .p12 .pfx .pem .crt .cer .der .so .dll .exe .dylib
+       .class .pyc .bin .img .iso
+     To audit one of them, add its extension as an include rule (e.g. a
+     line "jar").  Binary files are compared by SHA-256 checksum and size.
 
-Minimal — include common config types only:
+EVALUATION ORDER (first match decides):
+  1. Force-include (+)              -> audited
+  2. Excludes (!)                   -> skipped
+  3. Include rules                  -> audited
+  4. Built-in binary type           -> skipped
+  5. No include rules in the file   -> audited
+     Include rules present          -> skipped
+
+Every skipped file is listed with its reason in
+<run_dir>/feedback/filtered_files.json and the "Filtered Files" tab.
+
+Example — typical Helm / application site:
+  # text config types
+  yaml
+  yml
+  tpl
   properties
   cfg
+  conf
   xml
   json
-  conf::sysctl.conf,sctp.conf
+  sstp
+  txt::config.txt,system.txt
+  # licences and certificates, compared by checksum
+  lic
+  crt
+  # never audit
   !nohup.out
-
-Roamware GTP Proxy site with subtree rules:
-  properties
-  cfg
-  xml
-  json
-  conf::sysctl.conf,sctp.conf,spread.conf
-  config/routing
+  !*.swp
   !logs/archive
   +logs/archive/current-session
-  !*.pid
-  !*.lock
-  GTPProxy*
+
+--------------------------------------------------------------------------------
+ 4. AUDIT MAPPING FILE   (--mapping-file with --audit-config-file)
+--------------------------------------------------------------------------------
+
+Compares files that live at DIFFERENT paths on different nodes in one
+report row, e.g. Staging runs one chart "dra-SA" while Prod and DR run two
+instances "dra-SA-1" and "dra-SA-2".  Without it those files are reported
+as absent.
+
+Format: one pair per line.
+
+  LEFT=RIGHT
+
+  - Both sides start with a node prefix followed by "/" and the path inside
+    that node.  The prefix can be the node's full base_dir, the last folder
+    of its base_dir, or its "name" (the longest match wins).  A leading "/"
+    is ignored and "\" is read as "/".
+  - A side that ends at a FILE maps that file.  A side that names a FOLDER
+    maps every file below it, keeping the rest of the path.
+  - The LEFT file is shown in the report row of the RIGHT path.  One LEFT
+    mapped to several RIGHTs appears in each of those rows, and its own row
+    disappears (unless another node has a file at that path).
+  - A file line wins over a folder line for the same row.
+  - A node's own file at the RIGHT path is never replaced by a mapped one.
+
+Example — Mapping.cfg:
+  # Staging's single chart compared with each Prod/DR instance
+  STG/dra-SA=PROD/dra-SA-1
+  STG/dra-SA=PROD/dra-SA-2
+  STG/dra-SA=DR/dra-SA-1
+  STG/dra-SA=DR/dra-SA-2
+  # one file only (overrides the folder line for this file)
+  STG/smartstp/values.yaml=PROD/smartstp0/values.yaml
+  # node names work as prefixes too
+  Staging/smartstp/values.yaml=DR-Site/smartstp1/values.yaml
+
+In the report a mapped node shows "↪ original/path" next to its name, and
+its download button saves under the node's own file name.
+
+Messages:
+  CMT-AUD-W011  a pair was skipped because the file exists on only one side
+                (listed in audit.log).  A pair missing on both sides —
+                hidden, filtered or backup — is skipped silently.
+  CMT-CLI-E018  a line has no "=", or a side does not start with a known
+                node prefix, or the file cannot be read (exit 2).
+
+--------------------------------------------------------------------------------
+ 5. MERGE MAPPING FILE   (--mapping-file in merge mode, or "mapping_file")
+--------------------------------------------------------------------------------
+
+Pairs a base file with a release file of a DIFFERENT name.  Files with the
+same relative path, or a unique file name, are paired automatically; list
+only the exceptions here.  A file name found more than once in the base is
+never guessed [CMT-MRG-E002] — map it here.
+
+Format: one pair per line.
+
+  base_path = release_path
+
+  - Spaces around "=" are allowed.  A line without "=" is ignored.
+  - base_path may be: an absolute path, the base folder path followed by
+    the file (base/config/app.cfg), the base folder's last name followed by
+    the file (node1/config/app.cfg), or the path inside the base folder
+    (config/app.cfg).
+  - release_path may be: the release folder path or its last name followed
+    by the file, or the path inside the release folder.  A leading "./" is
+    dropped.
+  - A base path that leads outside the base folder is skipped with a
+    warning (PATH_TRAVERSAL).
+
+  Many-to-one: several base files mapped to one release file are merged
+  into it in the order of the lines; the FIRST base wins for any key the
+  bases share, later bases only add what is missing [CMT-MRG-I001].
+  One-to-many: one base file mapped to several release files is merged into
+  each of them independently [CMT-MRG-I002].
+
+Example — mapping.txt:
+  # production calls it fsmapp.cfg, the release renamed it
+  base/config/fsmapp.cfg = release/config/app.properties
+  base/config/jetty-base.xml = release/config/jetty.xml
+  # two base files -> one release file (db-primary wins on shared keys)
+  base/config/db-primary.properties = release/config/database.properties
+  base/config/db-replica.properties = release/config/database.properties
+  # one base file -> two release files
+  base/config/common.properties = release/config/app1.properties
+  base/config/common.properties = release/config/app2.properties
+
+The Excel FileMappings sheet lists every mapping that was applied.
+
+--------------------------------------------------------------------------------
+ 6. COPY-ONLY FILE   (--copy-baseonlyconfigfile, or "copy_only_file")
+--------------------------------------------------------------------------------
+
+Base files that are copied to the output unchanged, with no merge: licences,
+keystores, certificates, or any file whose production copy must be kept
+exactly.
+
+Format: one base file per line, in any of these forms:
+  base/config/ssl/server.keystore     base folder path + file
+  node1/config/ssl/server.keystore    base folder's last name + file
+  config/ssl/server.keystore          path inside the base folder
+  /abs/path/base/config/licence.dat   absolute path
+A path that leads outside the base folder is skipped with a warning.
+
+Example — copy-only.txt:
+  # certificates: always keep the production copies
+  base/config/ssl/server.keystore
+  base/config/ssl/truststore.jks
+  # licence
+  base/config/licence.dat
+
+--------------------------------------------------------------------------------
+ 7. AUDIT PATCH FILE   (--apply-audit-patch)
+--------------------------------------------------------------------------------
+
+Written by the report's "Export Patch" button as
+audit_patch_<date>T<hhmm>.json, e.g. audit_patch_2026-09-25T1015.json.  You normally don't edit it; the fields
+are listed so you can review it before applying.
+
+  Field        Type     Meaning
+  -----------  -------  ------------------------------------------------------
+  audit_run    string   Time stamp of the audit run the patch came from.
+  exported_at  string   When the patch was exported (ISO 8601).
+  node_dirs    object   node name -> base_dir.  Source files are read from
+                        here, so apply the patch from the same folder the
+                        audit ran in.
+  output_dir   string   "output_dir" from the audit config ("" if none).
+  run_dir      string   The audit's report folder.
+  changes      array    One element per corrected value (below).
+  skipped      array    Rows marked "Skip" in the report: {file, compound}.
+                        For the record only; nothing is applied from it.
+
+  Each element of "changes":
+  file         path of the file on that node (its mapped path, if mapped)
+  file_type    "kv" or "json" — only these types can be corrected
+  node         node name; becomes the folder name under the output folder
+  compound     row identity: "[Section]|key" for KV, dotted path for JSON
+  key          parameter name
+  section      KV section ("" for none)
+  original     value before the change (null when the key was added)
+  corrected    new value
+  action       "modified" (change a value) or "added" (add a missing key)
+
+Where the corrected files go (first one that is set):
+  1. --output-dir on the command line
+  2. "output_dir" in the --audit-config-file given with the patch
+  3. "output_dir" inside the patch
+  4. <run_dir>/corrections
+
+  configmergetool --apply-audit-patch audit_patch_2026-09-25T1015.json \
+    --output-dir corrections/
+
+Result: corrections/<node>/<path> for every changed file, plus
+corrections.log.  The node folders themselves are never modified.
+Exit 1 when any file was skipped or failed.
+
+--------------------------------------------------------------------------------
+ 8. EMAIL CONFIG FILE   (--email-config)        RESERVED — not implemented
+--------------------------------------------------------------------------------
+
+Planned for an email-triggered audit.  Using the option today stops with
+CMT-CLI-E014 (exit 2).  Planned format, for reference only:
+
+  {
+    "imap":   { "host": "mail.company.com", "port": 993,
+                "username": "audit@company.com",
+                "password_env": "AUDIT_EMAIL_PASS" },
+    "smtp":   { "host": "mail.company.com", "port": 587 },
+    "filter": { "subject_contains": "[AUDIT REQUEST]",
+                "from_whitelist": ["ops@company.com"] },
+    "audit_config_template": "audit-template.json"
+  }
+
+--------------------------------------------------------------------------------
+ FILES THE TOOL KEEPS FOR ITSELF (not config — don't edit)
+--------------------------------------------------------------------------------
+
+  ~/.configmergetool/feedback_history.json
+      One summary per audit run; read by --feedback-summary.  Delete it to
+      clear the history.
+  <run_dir>/feedback/*.json
+      Skipped backups, filtered files, expected differences and log-name
+      warnings of one audit run.
 
 
 ================================================================================
@@ -621,7 +941,7 @@ Example:
 
 Whitelist (opt out of auto-detection):
   In the audit config JSON, add "no_skip_files" to any node entry:
-    { "base_dir": "prod/APP-01", "no_skip_files": ["fsmapp.properties_couchbase"] }
+    { "base_dir": "prod/APP-01", "no_skip_files": ["server.xml_20240705_active"] }
 
   The named file will NOT be skipped even if it matches a backup pattern.
 
@@ -669,117 +989,6 @@ Result:
       merge_report_base.xlsx   <- 6-sheet Excel report
       merge_diff.html          <- interactive HTML diff report
       log_merge_config.log     <- full debug log
-
-
-================================================================================
- MAPPING FILE FORMAT
-================================================================================
-
-Use --mapping-file when the base and release directories use different names
-for the same configuration file.
-
-Format:
-  base_path = release_path
-
-  One mapping per line.  Lines starting with # are ignored.
-
-PATH FORMAT (paths are relative to the working directory):
-
-  Preferred:
-    base/config/fsmapp.cfg = release/config/app.properties
-
-  Also accepted (backward compatible):
-    config/fsmapp.cfg = config/app.properties   <- bare path within each dir
-
-Example — mapping-file.txt:
-  # Production uses "fsmapp.cfg", release renamed it "app.properties"
-  base/config/fsmapp.cfg = release/config/app.properties
-
-  # XML files with different names
-  base/config/jetty-base.xml = release/config/jetty.xml
-
-  # Many-to-One: two base files merge into one release file
-  base/config/db-primary.properties = release/config/database.properties
-  base/config/db-replica.properties = release/config/database.properties
-
-  # One-to-Many: one base file merges into two release files
-  base/config/common.properties = release/config/app1.properties
-  base/config/common.properties = release/config/app2.properties
-
-Many-to-One mapping (KV, XML and JSON):
-  Multiple base files can map to a single release file.  Base files are
-  applied in the order their lines appear in the mapping file: the FIRST
-  base listed wins for any parameter/element/key several bases define;
-  later bases only add what the earlier bases lack.  [CMT-MRG-I001]
-
-One-to-Many mapping:
-  One base file can map to several release files; each release file is
-  merged from that base independently.  [CMT-MRG-I002]
-
-The Excel FileMappings sheet lists all applied mappings.
-
-
-================================================================================
- COPY-ONLY FILE FORMAT
-================================================================================
-
-Use --copy-baseonlyconfigfile to list base files that should be copied
-directly to output without any merge processing.
-
-Use this for:
-  - Binary or non-text config files
-  - Keystores, certificates, licence files
-  - Files where the entire base version must be used verbatim
-
-Format:
-  One file path per line.
-  Lines starting with # are ignored.
-
-PATH FORMAT:
-  Preferred:  base/config/ssl/server.keystore   (full path from working dir)
-  Also accepted: config/ssl/server.keystore      (bare path within base dir)
-
-Example — copy-only.txt:
-  # Certificates - always use production versions
-  base/config/ssl/server.keystore
-  base/config/ssl/truststore.jks
-
-  # Licence file
-  base/config/licence.dat
-
-
-================================================================================
- MULTI-BASE MERGE USAGE (multiple production nodes)
-================================================================================
-
-When you have several production nodes with different base configs, use
---base-config-file to run one independent merge pass per node.
-
-Each node gets:
-  - Its own output subdirectory:  output/<node-name>/
-  - Its own Excel report:         reports/run_YYYYMMDD_HHMMSS/merge_report_<node-name>.xlsx
-  - All nodes share one HTML:     reports/run_YYYYMMDD_HHMMSS/merge_diff.html
-  - One shared log:               reports/run_YYYYMMDD_HHMMSS/log_merge_config.log
-
-JSON format — base-configs.json:
-  [
-    {
-      "base_dir":       "base/node1",
-      "name":           "prod-eu",
-      "mapping_file":   "mappings/node1-mapping.txt",
-      "copy_only_file": "mappings/node1-copy-only.txt"
-    },
-    {
-      "base_dir": "base/node2",
-      "name":     "prod-us"
-    }
-  ]
-
-Command:
-  configmergetool \
-    --base-config-file base-configs.json \
-    --release-dirs release \
-    --output-dir output
 
 
 ================================================================================
@@ -1249,13 +1458,17 @@ After resolving mismatches in the HTML report, export a patch file and apply it:
 
 Step 1 — Export the patch from the HTML report:
   Click "Export Patch" in the panel toolbar.
-  Save the downloaded  audit_patch.json.
+  Save the downloaded file (audit_patch_<date>T<hhmm>.json); below it is
+  called audit_patch.json.  Its fields: CONFIGURATION FILES — REFERENCE, 7.
 
-Step 2 — Apply the patch:
+Step 2 — Apply the patch, from the folder the audit ran in:
   configmergetool \
     --apply-audit-patch audit_patch.json \
-    --audit-config-file audit.json \
     --output-dir corrections/
+
+  Without --output-dir the corrected files go to "output_dir" from the
+  audit config (pass --audit-config-file audit.json) or from the patch,
+  else to <run_dir>/corrections.
 
   The tool writes corrected config files to  corrections/<node>/<file>.
   A  corrections.log  lists every change applied.
@@ -1507,7 +1720,7 @@ audit.json:
     {
       "base_dir": "prod/GTPProxy-APP-01",
       "name":     "APP-01",
-      "no_skip_files": ["fsmapp.properties_couchbase"]
+      "no_skip_files": ["server.xml_20240705_active"]
     },
     {
       "base_dir": "prod/GTPProxy-APP-02",
