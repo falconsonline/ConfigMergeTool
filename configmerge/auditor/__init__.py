@@ -9,8 +9,8 @@ Usage:
     from configmerge.models import BaseDirConfig
 
     nodes = [
-        BaseDirConfig(base_dir="singtel/APP-01", name="App01"),
-        BaseDirConfig(base_dir="singtel/APP-02", name="App02"),
+        BaseDirConfig(base_dir="sites/APP-01", name="App01"),
+        BaseDirConfig(base_dir="sites/APP-02", name="App02"),
     ]
     result = AuditEngine(nodes, report_dir="reports").run()
 """

@@ -21,9 +21,8 @@ venv/
 /output*/
 /corrections/
 
-# Local customer site data — never commit (see CLAUDE.md)
-/Telstra-RSC*/
-/singtel*/
+# Local customer site data — never commit (see CLAUDE.md). The customer folder
+# names are listed in .git/info/exclude of each checkout, not here.
 /base*/
 /release*/
 /testing/

@@ -46,18 +46,18 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 | F-020b | P1 | EMPTY_BASE_OVERRIDE (critical, exit 1) raised when release value is ALSO empty — real: fsmapp/testexternalservice `generic.caches=` empty on both sides → every real run exits 1 spuriously | FIXED (uncommitted) — real runs exit 1→0 |
 | F-020c | P2 | Comments duplicated (493 lines) / lost (63 lines) across 96 real files, e.g. fsmapp `#trans.filter.1.results` twice, `#For parameter description…` dropped | FIXED (uncommitted) — group comment duplicates + dropped-duplicate comments |
 | F-020d | P2 | Section repeated in one file (e.g. release icampaignservice/fsmapp.properties [EventTrigger Redistribution Poller] L282 & L308) → folded into one; 2nd header lost, its keys moved under the first | FIXED (uncommitted) — decision 1a; real icampaignservice fsmapp: 26→1 lines differing from release |
-| F-020e | P1 (latent) | `.sh` registered as KV: shell script lines (fi/done/if …) dropped — 214 lines in Telstra Tomcat scripts; no .sh in current merge data | FIXED (uncommitted) — decision 2a (.sh → GenericProcessor); audit now compares .sh as text (real: 9 legacy Tomcat scripts) |
+| F-020e | P1 (latent) | `.sh` registered as KV: shell script lines (fi/done/if …) dropped — 214 lines in Site A Tomcat scripts; no .sh in current merge data | FIXED (uncommitted) — decision 2a (.sh → GenericProcessor); audit now compares .sh as text (real: 9 legacy Tomcat scripts) |
 | F-021 | P1 | Filter: a `+path` force-include switches the filter into include-mode — a filter with only excludes + one force-include silently skips every other file (readme's own example) | FIXED (uncommitted) |
-| F-022 | P2 | Filter: `!backup` / `!old` / `!tmp` (readme rule h "directory exclude") only match a FILE named so; directories are still audited | VERIFIED; real Telstra filter.txt uses them — 88 files under backup/, 56 under old/ audited | FIXED (uncommitted) — decision yes; real: 0 files change (Telstra filter already include-mode) |
+| F-022 | P2 | Filter: `!backup` / `!old` / `!tmp` (readme rule h "directory exclude") only match a FILE named so; directories are still audited | VERIFIED; real Site A filter.txt uses them — 88 files under backup/, 56 under old/ audited | FIXED (uncommitted) — decision yes; real: 0 files change (Site A filter already include-mode) |
 | F-023 | P3 | Filter: glob include containing '/' (e.g. `config/*.xml`) never matches (glob tested against filename only) | FIXED (uncommitted) |
 | F-024 | P1 | Backup: `<file>_bkp200821`, `_bak17062026`, `_bkpprobetrouleshoot` (no separator after bkp/bak) not detected — ~70 real backups with original present audited as live config (.properties/.cfg/.xml/.conf/.sstp) | FIXED (uncommitted) — real: 122 more backups skipped incl. F-025, all originals present |
 | F-025 | P2 | Backup: marker before the extension (`fsmapp_240226.properties`, `dbwriter_bkp040322.cfg`, `style_old_11jan07.css`) not detected though `fsmapp.properties` exists | FIXED (uncommitted) — decision yes |
 | F-026 | P3 | Backup: readme lists `_v[0-9]*` and `_YYYYMMDDHHmmss` but code detects neither | RESOLVED — decision no: _v not a backup; 14-digit timestamp added; readme corrected |
 | F-027 | P2 | Audit: key duplicated within one section on a node counts as a mismatch even when every node is byte-identical or the file exists on one node only — real: 3 identical + 5 single-node KV files flagged (cliapp-irdbreport.properties, iMASCodes_en_US.properties, ss7txnwriter*.cfg); inflates mismatches / exit 1 | FIXED (uncommitted) — last value used, W007 warning; real: 0 identical/single-node mismatches |
 | F-028 | P3 | Audit: text/xml comparison ignores trailing spaces + line endings but not indentation — real: subscription/cea/package.xml tabs vs 4 spaces = mismatch (23 other whitespace-only XML = match) | FIXED (uncommitted) — whitespace-insensitive, I001; real package.xml matches |
-| F-029 | P2 (config) | Telstra filter.txt has no `sstp` include — SmartSTP routing-rule.sstp / rule-template.sstp never audited (7 files run a, 4 run b) | FIXED (uncommitted) — sstp in sample-filter.txt + Telstra-RSC1/filter.txt (user copies to OneDrive) |
+| F-029 | P2 (config) | Site A filter.txt has no `sstp` include — SmartSTP routing-rule.sstp / rule-template.sstp never audited (7 files run a, 4 run b) | FIXED (uncommitted) — sstp in sample-filter.txt + Site A (RSC1)/filter.txt (user copies to OneDrive) |
 | F-030 | P1 | SSTP parser `_RE_BLOCK_HDR` had `^` used with `.match(text, pos)` → 0 blocks for every real file (and repo sample) → every .sstp audit a silent MATCH; real routing-rule.sstp drift (SRC 0x…e vs 0x…d) hidden | FIXED (uncommitted) — regex + text fallback W010; real: 4 (a) / 2 (b) differing blocks now reported |
-| F-020g | P3 | Telstra (audit-only) files: comment blocks of interleaved indexed groups duplicated/reordered (31 files) | OPEN — not in current merge data |
+| F-020g | P3 | Site A (audit-only) files: comment blocks of interleaved indexed groups duplicated/reordered (31 files) | OPEN — not in current merge data |
 | F-020f | P3 | Synthetic blank separator between sections (+ preamble dedupe) adds/removes blank lines — 49 files whitespace-only | FIXED (uncommitted) — no synthetic separator, commented-header preamble kept, EOF = release |
 | F-017 | P2 | KV commented key with space before delimiter (`#a = B`) not recognised → base comment leaks to end of output (vs `#a=B` merged) | VERIFIED; literal trim rule sim: 2322 commented lines/109 files newly keys; merge output changes 4 files/node (blank lines in doc-comment headers) — needs Q9 scope |
 | F-017 | P2 | (see above) | FIXED (uncommitted) — tests/test_merge_review_annotations.py (9 tests) |
@@ -74,8 +74,8 @@ F-009 mapping one↔many both valid, many→one first-listed base wins for KV/XM
 
 ## TESTS: 108 passed; earlier 81 passed; earlier 71 passed (incl. 6 processor fixes, 6 whitespace); previously 59 passed (13 audit KV + 11 merge engine + 9 mappings + 6 groups/xml + 12 review annotations + 5 patch + 3 error codes), 0.46s
 ## PERFORMANCE BASELINES (2026-09-18, Py 3.14.6, macOS 26.6.2, 12 CPU/24 GB, single process, no concurrency)
-Workload (a) Telstra-RSC1 audit-rsc-all: 3 nodes, 823 audited files (after filter.txt), node dirs 0.55–1.0 GB (mostly jars/binaries, hashed streaming)
-Workload (b) Telstra-RSC1 audit-rsc: 2 nodes, 745 audited files
+Workload (a) Site A (RSC1) audit-rsc-all: 3 nodes, 823 audited files (after filter.txt), node dirs 0.55–1.0 GB (mostly jars/binaries, hashed streaming)
+Workload (b) Site A (RSC1) audit-rsc: 2 nodes, 745 audited files
 Baseline peak RSS (3 runs, /usr/bin/time -l): (a) 700/749/748 MB, 4.80/4.17/4.19 s; (b) 710/709/730 MB, 2.66/2.77/2.68 s
 Counterfactual empty ~/.configmergetool/feedback_history.json (HOME isolated, no code change): (a) 392/399/394 MB, 3.35–3.64 s; (b) 330/330/329 MB, 1.81–1.85 s
 Phase profile (a, isolated HOME): scan 51 MB → compare loop 105 MB (tracemalloc 66 MB live) → xlsx 118 → part1 _build_html 227 → part2 371 → index 397 MB. tracemalloc peak 245 MB vs RSS 432 MB (≈190 MB allocator retention)
@@ -101,6 +101,6 @@ LAST: commit f9eb4f7 (review annotations); processor fixes implemented + side-by
 LAST: commit a39f9d2; F-020 investigated (identity-merge harness scratch sep.*/ident.py, classify.py)
 LAST: commit 7ce9138 (F-020) + audit .sh as text
 LAST: S2 filter/backup review done by orchestrator (no delegation)
-LAST: PR #2 opened; Telstra-RSC1 audits (a) 3 nodes 820 files 4.4s/740MB, (b) 2 nodes 743 files 2.5s/758MB; oracle check: 0 missed drifts
+LAST: PR #2 opened; Site A (RSC1) audits (a) 3 nodes 820 files 4.4s/740MB, (b) 2 nodes 743 files 2.5s/758MB; oracle check: 0 missed drifts
 LAST: Memory Phase 1 baseline + root cause (M-1..M-4)
-NEXT ACTION (memory): user: remove 8 session entries from archived history manually. Earlier: commit + push to PR #2 (plan approved); user copies sstp line into OneDrive Telstra-RSC/filter.txt
+NEXT ACTION (memory): user: remove 8 session entries from archived history manually. Earlier: commit + push to PR #2 (plan approved); user copies sstp line into OneDrive Site A/filter.txt

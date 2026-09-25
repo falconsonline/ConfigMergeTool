@@ -1167,8 +1167,9 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
 ----------------------------------------------
   Auto-generated files — NOT hand-edited configs.
   In merge mode: release copy is always authoritative and copied as-is.
-  In audit mode: semantic diff is performed; differences are categorised as
-    VALUE DIFF (red), ORDER DIFF (orange), STRUCT EQUIV (yellow), MATCH (green).
+  In audit mode: blocks are compared on their original text across all
+    nodes (whitespace ignored, comments count); labelled BLOCK_ABSENT,
+    VALUE_DIFF, ORDER_DIFF or TEXT_DIFF.
   See "SSTP AUDIT DIFF" section below.
 
 All other extensions  (Generic)
@@ -1822,7 +1823,7 @@ v2.1.0 (2026-09-18) — Audit accuracy, merge fidelity and memory
   + Audit: section names shown in their original case ([CouchBase])
   + Audit: tool version stamped in audit.log and in every report page header
   + Audit: much lower memory use — feedback history appended in place and
-    report pages written in pieces (Telstra-RSC1: ~750 MB -> ~300 MB)
+    report pages written in pieces (Site A (RSC1): ~750 MB -> ~300 MB)
   + Merge: release-only files copied; ambiguous filename matches skipped
   + Merge: KV comments, repeated sections and review annotations preserved
   + Stable error identifiers CMT-<AREA>-<E|W|I><nnn> on every message

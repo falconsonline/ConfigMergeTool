@@ -7,7 +7,7 @@ Each entry: date · decision · why. Glossary terms are defined in [CONTEXT.md](
 
 ## 2026-09-15 — Audit KV: section-by-section comparison against the base node
 
-**Trigger:** Telstra RSC audit (legacyrsc / newlab / newprod), `binaries/callservice/config/fsmapp.properties`
+**Trigger:** Site A RSC audit (legacyrsc / newlab / newprod), `binaries/callservice/config/fsmapp.properties`
 showed the same parameter in two places — missing on one config in an upper row and missing on the other
 config in a lower row. v2.0.1 ordered rows by the first node's file and treated `#[X]` as a section, which
 hid active keys (false "missing") and pushed sections the first node lacks to the bottom.
@@ -26,14 +26,14 @@ hid active keys (false "missing") and pushed sections the first node lacks to th
 7. **Revised 2026-09-18:** the same key twice in one section on a node (**duplicate in section**) shows both
    values with line numbers; the **last (second) value is the effective value** and is compared. The duplicate is
    a warning (CMT-AUD-W007, names the value used), **not** a mismatch — identical files with duplicates now match
-   (was: counted as a mismatch, see Telstra `iMASCodes_en_US.properties`, `cliapp-irdbreport.properties`).
+   (was: counted as a mismatch, see Site A `iMASCodes_en_US.properties`, `cliapp-irdbreport.properties`).
    A repeated section header (e.g. `[Profile Engine]` twice) merges into one section, so its keys become duplicates.
 8. **Empty sections** are listed; a node lacking the header is flagged "section absent". Keys before the first
    header form the "(no section)" block with its own check.
 
 9. **Section header rule** stays the merge parser's: `[Name]` optionally followed by an inline `# comment`.
    Known gap: report download (`reconstructKV`) and `patch.py` only accept a bare `[Name]` line — 0 such
-   headers in the Telstra RSC data (156 KV files), left as-is.
+   headers in the Site A RSC data (156 KV files), left as-is.
 10. **"Show differences only"** keeps a section header visible when any row under it is visible OR the section
     is absent on a node that has the file (base included). Matched headers still hide; empty sections stay
     visible when the filter is off.
@@ -84,7 +84,7 @@ match = otherwise (incl. commented); extra = key not in base.
     is removed (every mapped base must qualify), the release file is copied byte-for-byte — no merge rewrite,
     no report rows (`CMT-MRG-I003`, log only). Note: this also treats `a b` vs `ab` as equal (accepted literal rule).
 13. **KV fidelity (2026-09-18)**: a file merged with itself must come out unchanged (harness: identity merge of
-    all real KV files — 145/253 before these fixes → 177/253 after; the rest are Telstra audit files with interleaved
+    all real KV files — 145/253 before these fixes → 177/253 after; the rest are Site A audit files with interleaved
     indexed groups (F-020g) plus by-design DUPLICATE_KEY collapse / K-20 trailing spaces). A section repeated in one
     file keeps both blocks in place (decision 1a). `.sh` files are deployed from release, never KV-merged (2a);
     audit mode compares `.sh` as text (agreed 2026-09-18).
@@ -95,7 +95,7 @@ match = otherwise (incl. commented); extra = key not in base.
 15. **Audit text/XML & SSTP (2026-09-18)**: text/XML compared with all whitespace removed (indentation-only
     differences match, CMT-AUD-I001). SSTP parser never parsed any block before F-030 (`^` in the header regex used
     with `.match(text, pos)`), so every .sstp compare was a silent match; fixed, plus a text fallback when a node
-    yields no blocks (CMT-AUD-W010). Filters must include `sstp` to audit routing rules (added to sample/Telstra filter).
+    yields no blocks (CMT-AUD-W010). Filters must include `sstp` to audit routing rules (added to sample/Site A filter).
 8. **Critical entries are traceable**: every critical report entry is also logged with a `CMT-*` code; an
    unparseable JSON/XML input is critical (`INVALID_JSON` / `INVALID_XML`, exit 1), never silently dropped.
 
@@ -125,7 +125,7 @@ match = otherwise (incl. commented); extra = key not in base.
    filtered, binary on purpose); a node's own file at the target path is never replaced.
 3. **Text/XML line diff (all text types), read-only.** Whole-file whitespace-free checksum still decides
    match; on mismatch each changed block vs the first present node is one mismatch row. YAML key-path
-   parsing rejected: 177/311 STC YAML files are Helm templates. Editing text blocks deferred.
+   parsing rejected: 177/311 Site B YAML files are Helm templates. Editing text blocks deferred.
 4. **"Show differences only" filters text/XML content too (2026-09-25).** Changed blocks only, 3 context
    lines, aligned per block across nodes, "no line here" marker at the block's anchor on nodes without
    lines. Files present on one node only: banner only (user chose to keep this, all file types).
@@ -134,7 +134,7 @@ match = otherwise (incl. commented); extra = key not in base.
    (comments count) or the block is missing on a node with the file; no automatic "expected"
    (STRUCT_EQUIV and the SET-merge normalisation removed). Category label informational only. Cells show
    original lines (read-only), plus side-by-side view. Text outside blocks → "(outside blocks)" row.
-   Trigger: STC rule2.sstp — statement moved into ELSE and DR digits changed were reported as expected.
+   Trigger: Site B rule2.sstp — statement moved into ELSE and DR digits changed were reported as expected.
 
 ---
 
@@ -143,5 +143,5 @@ match = otherwise (incl. commented); extra = key not in base.
 - **Data first, no assumptions (2026-09-15).** Before proposing a plan, share a snapshot with actual data,
   the issue details, how the fix is planned, and the possible end result computed on real data. On any doubt,
   stop and consult the user.
-- **Customer data stays out of git.** Real site inputs (e.g. `Telstra-RSC`, `Telstra-RSC1`) are never committed
+- **Customer data stays out of git.** Real site inputs (the Site A, Site B, … customer folders) are never committed
   or copied into tests; tests use synthetic fixtures.

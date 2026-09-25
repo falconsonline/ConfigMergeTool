@@ -96,10 +96,10 @@ class FileMatcher:
                 if os.path.isabs(norm):
                     rel = os.path.relpath(norm, self.base_dir)
                 elif norm.startswith(base_dir_norm + os.sep):
-                    # full base_dir prefix: singtel/Singtel-APP-01/config/file.xml
+                    # full base_dir prefix: sites/Site-C-APP-01/config/file.xml
                     rel = os.path.relpath(norm, base_dir_norm)
                 elif norm.startswith(base_name + os.sep):
-                    # base dir name prefix: Singtel-APP-01/config/file.xml
+                    # base dir name prefix: Site-C-APP-01/config/file.xml
                     rel = norm.split(os.sep, 1)[1]
                 else:
                     rel = norm

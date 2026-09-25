@@ -67,8 +67,8 @@ Cross-file invariants that are easy to break:
   changing comparison semantics; append new confirmed decisions there.
 - Feature changes must also update `ConfigMergeTool-features.md` (developer reference + changelog) and
   `ConfigMergeTool-readme.txt` (user guide).
-- Real site data (e.g. `Telstra-RSC*`, `singtel*`) sits untracked in the main checkout; never commit it or copy
-  it into tests — tests use synthetic fixtures under `tmp_path`.
+- Real site data (customer folders at the root of the main checkout, ignored through `.git/info/exclude`) sits
+  untracked; never commit it or copy it into tests — tests use synthetic fixtures under `tmp_path`.
 
 ## Working rules (from the user)
 
