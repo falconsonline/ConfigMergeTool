@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "configmergetool"
-version = "3.0.0"
+version = "3.0.1"
 description = "Config merge and multi-node audit tool for any production environments"
 readme = "README.md"
 requires-python = ">=3.9"

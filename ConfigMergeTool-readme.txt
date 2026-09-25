@@ -1,5 +1,5 @@
 ================================================================================
- ConfigMergeTool v3.0.0 — User Guide
+ ConfigMergeTool v3.0.1 — User Guide
  Author: Shiju Abraham
 ================================================================================
 
@@ -47,13 +47,13 @@ Step 1 — Create a virtual environment (recommended):
 
 Step 2 — Install from wheel:
 
-  pip install configmergetool-3.0.0-py3-none-any.whl
+  pip install configmergetool-3.0.1-py3-none-any.whl
 
   # With optional auto-encoding detection (recommended for non-UTF-8 sites):
-  pip install "configmergetool-3.0.0-py3-none-any.whl[encoding]"
+  pip install "configmergetool-3.0.1-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-3.0.0-py3-none-any.whl[all]"
+  pip install "configmergetool-3.0.1-py3-none-any.whl[all]"
 
 Step 3 — Verify:
 
@@ -73,8 +73,8 @@ Nothing goes to /usr, /opt, /etc or the system Python's site-packages.
   INSTALL_DIR=~/venv                              # any folder you can write to
   [ -x "$INSTALL_DIR/bin/python" ] || python3 -m venv "$INSTALL_DIR"   # reuse if it exists
   "$INSTALL_DIR/bin/pip" install --no-cache-dir \
-      "configmergetool-3.0.0-py3-none-any.whl[encoding]"
-  "$INSTALL_DIR/bin/configmergetool" --version     # configmergetool 3.0.0
+      "configmergetool-3.0.1-py3-none-any.whl[encoding]"
+  "$INSTALL_DIR/bin/configmergetool" --version     # configmergetool 3.0.1
 
 Resulting layout (Linux/macOS; Windows uses Scripts\ and Lib\ instead):
 
@@ -150,13 +150,13 @@ Step 3 — Activate the virtual environment:
 
 Step 4 — Install from wheel (copy the .whl file to a local folder first):
 
-  pip install configmergetool-3.0.0-py3-none-any.whl
+  pip install configmergetool-3.0.1-py3-none-any.whl
 
   # With optional encoding detection:
-  pip install "configmergetool-3.0.0-py3-none-any.whl[encoding]"
+  pip install "configmergetool-3.0.1-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-3.0.0-py3-none-any.whl[all]"
+  pip install "configmergetool-3.0.1-py3-none-any.whl[all]"
 
 Step 5 — Verify:
 
@@ -174,20 +174,20 @@ spaces must be quoted:
  UPGRADING FROM A PREVIOUS VERSION
 --------------------------------------------------------------------------------
 
-To upgrade to a new .whl (e.g. from 2.1.0 to 3.0.0), activate your virtual
+To upgrade to a new .whl (e.g. from 3.0.0 to 3.0.1), activate your virtual
 environment and run pip with --upgrade:
 
   # Linux / macOS
   source ~/venv/bin/activate
-  pip install --upgrade configmergetool-3.0.0-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.1-py3-none-any.whl
 
   # Windows (Command Prompt)
   %USERPROFILE%\venv\Scripts\activate.bat
-  pip install --upgrade configmergetool-3.0.0-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.1-py3-none-any.whl
 
   # Windows (PowerShell)
   %USERPROFILE%\venv\Scripts\Activate.ps1
-  pip install --upgrade configmergetool-3.0.0-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.1-py3-none-any.whl
 
 Confirm the new version is active:
   configmergetool --version
@@ -1578,6 +1578,17 @@ DON'T:
 ================================================================================
  VERSION HISTORY
 ================================================================================
+
+v3.0.1 (2026-09-25) — Audit display accuracy
+  + Audit: "Show differences only" also trims the side-by-side file view to
+    the changed lines (3 lines of context, "no line here" markers)
+  + Audit: only lines that really differ are highlighted on each node
+  + Audit SSTP: blocks compared on their original text across all nodes
+    (whitespace ignored, comments count); moved statements and value changes
+    on any node are mismatches, never "expected"; blocks missing on a node
+    and text outside blocks are mismatches
+  + Audit SSTP: cells show the original block lines (read-only) and the file
+    gets the side-by-side view
 
 v3.0.0 (2026-09-23) — Audit mapping and text differences
   + Audit: --mapping-file applies in audit mode — a file at a different path

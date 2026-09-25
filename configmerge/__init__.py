@@ -20,7 +20,7 @@ Multi-base:
 from .models import BaseDirConfig, MergeConfig, MergeResult, ReportEntry, EntryType, RemoteConfig
 from .engine import MergeEngine
 
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 
 __all__ = [
     "MergeEngine", "MergeConfig", "BaseDirConfig", "RemoteConfig",

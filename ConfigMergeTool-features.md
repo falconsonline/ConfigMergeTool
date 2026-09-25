@@ -1,6 +1,6 @@
 # ConfigMergeTool — Features Reference
 
-> Developer reference. Describes every feature implemented in the current codebase (v3.0.0).
+> Developer reference. Describes every feature implemented in the current codebase (v3.0.1).
 > Update this file whenever features are added, changed, or removed.
 
 ---
@@ -48,7 +48,7 @@ ConfigMergeTool/
 ├── requirements.txt            — Core runtime deps (openpyxl)
 ├── requirements-dev.txt        — Dev/test deps (pytest, build, twine, chardet)
 └── configmerge/
-    ├── __init__.py             — Public API + __version__ = "3.0.0"
+    ├── __init__.py             — Public API + __version__ = "3.0.1"
     ├── __main__.py             — Enables: python -m configmerge
     ├── cli.py                  — main() / _main() / parse_args() — pip entry point
     ├── models.py               — BaseDirConfig, RemoteConfig, MergeConfig, MergeResult,
@@ -674,7 +674,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | Feature | Detail |
 |---|---|
 | Package name | `configmergetool` |
-| Version | `3.0.0` |
+| Version | `3.0.1` |
 | Entry point | `configmergetool = "configmerge.cli:main"` |
 | Module invocation | `python -m configmerge` |
 | Legacy invocation | `python ConfigMergeTool.py` (backward compatible) |
@@ -683,8 +683,8 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | Optional `[ssh]` | `paramiko>=3.0` — Phase 11 SSH remote node access |
 | Optional `[email]` | `imapclient>=2.3` — Phase 12 email-triggered audit |
 | Optional `[all]` | All optional extras |
-| Build | `python -m build` → `dist/configmergetool-3.0.0-py3-none-any.whl` |
-| Install | `pip install configmergetool-3.0.0-py3-none-any.whl` |
+| Build | `python -m build` → `dist/configmergetool-3.0.1-py3-none-any.whl` |
+| Install | `pip install configmergetool-3.0.1-py3-none-any.whl` |
 | Type hints | `py.typed` marker present (PEP 561) |
 | Python | 3.9+ |
 
@@ -733,6 +733,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-25 | **v3.0.1** — "Show differences only" trims the side-by-side view, per-node highlighting of changed lines only, strict SSTP comparison on original text |
 | 2026-09-25 | Audit text/XML/SSTP side-by-side: only lines that really differ are highlighted per node (block `changed`) — a block spans every node, so lines another node changed were highlighted too. STC cross-check vs `diff -w -B`: 69/78 node comparisons identical, the rest are equivalent alignments next to repeated lines or blank-line-only moves |
 | 2026-09-25 | Audit SSTP (SS-02..SS-08): blocks compared strictly on original text (whitespace ignored, comments count) across ALL nodes — before, only the first two nodes were categorised and any unrecognised change fell back to STRUCT_EQUIV ("expected"), and a DIGITS value change was labelled ORDER_DIFF. Cells showed a normalised one-line body; now original lines, read-only, with side-by-side view. Blocks missing on a node and text outside blocks are mismatches. STC rule2.sstp: statement moved into ELSE + different DR DIGITS values now 2 mismatches per row (were 2 expected); STC 297 → 301 mismatches, 4 → 0 expected. Telstra routing-rule.sstp 4 → 7 (+ 2 blocks only on some nodes, + copyright comment outside blocks) |
 | 2026-09-25 | Audit report: "Show differences only" now also filters the text/XML side-by-side view — only changed blocks with 3 context lines, aligned across nodes, unchanged stretches collapsed to "⋯ N unchanged lines", and a "no line here — between L<a> and L<a+1>" marker on nodes without lines in a block (block `anchors`). Real Telstra run: sip/package.xml 17280 → 109 lines, plugins.xml 3313 → 196. KV/JSON/SSTP already hid matched rows; binary has no content view; files present on one node only keep showing just the absent banner |
