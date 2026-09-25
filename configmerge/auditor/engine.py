@@ -89,6 +89,8 @@ class AuditParam:
     is_logical_diff: bool = False      # True if matched by logical_diff_patterns
     lines: Dict[str, List[int]] = field(default_factory=dict)       # KV: node -> source line numbers
     dup_values: Dict[str, List[str]] = field(default_factory=dict)  # KV: node -> all active values when duplicated in section
+    anchors: Dict[str, int] = field(default_factory=dict)  # text block: node -> line the block sits after, for nodes with no lines in it
+    changed: Dict[str, List[int]] = field(default_factory=dict)  # text block: node -> lines that really differ (highlighted)
 
 
 @dataclass
@@ -123,6 +125,8 @@ class AuditFile:
     sections: List[dict] = field(default_factory=list)
     # --mapping-file: node -> actual rel path, only for nodes whose file is not at rel_path
     node_paths: Dict[str, str] = field(default_factory=dict)
+    # SSTP: changed line blocks for the side-by-side view ({key, lines, anchors, changed}, as text blocks)
+    line_blocks: List[dict] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -224,12 +228,17 @@ def _section_check_kind(values: Dict[str, Optional[str]], commented: Dict[str, b
 _MAX_TEXT_BLOCKS = 500
 
 
-def _text_blocks(texts: Dict[str, str], order: List[str]) -> List[Tuple[str, Dict[str, Optional[str]], Dict[str, List[int]]]]:
+def _text_blocks(texts: Dict[str, str], order: List[str]
+                 ) -> List[Tuple[str, Dict[str, Optional[str]], Dict[str, List[int]], Dict[str, int],
+                                 Dict[str, List[int]]]]:
     """Changed blocks of each node against the first node in ``order``.
 
     Lines are compared with all whitespace removed and blank lines left out (the audit
-    whitespace rule); values keep the original lines. Returns (key, values, lines) per
-    block, where values[node] is None when that node has no lines in the block.
+    whitespace rule); values keep the original lines. Returns (key, values, lines, anchors,
+    changed) per block, where values[node] is None when that node has no lines in the block,
+    anchors[node] is then the line the block sits after on that node (0 = before line 1), and
+    changed[node] lists the block lines that really differ: on the first node, lines some
+    other node changed; on any other node, its own lines that differ from the first node.
     """
     items = {n: [(i, "".join(ln.split()), ln)
                  for i, ln in enumerate(texts[n].splitlines(), 1) if ln.strip()]
@@ -270,6 +279,14 @@ def _text_blocks(texts: Dict[str, str], order: List[str]) -> List[Tuple[str, Dic
             return 0, 0
         return lo, hi
 
+    # Item indexes that take part in a change (see ``changed`` in the docstring)
+    diff_idx: Dict[str, set] = {n: set() for n in order}
+    for n in order[1:]:
+        for op, i1, i2, j1, j2 in ops[n]:
+            if op != "equal":
+                diff_idx[base].update(range(i1, i2))
+                diff_idx[n].update(range(j1, j2))
+
     out = []
     base_items = items[base]
     for a, b in blocks:
@@ -282,12 +299,17 @@ def _text_blocks(texts: Dict[str, str], order: List[str]) -> List[Tuple[str, Dic
             key = "before L1"
         values: Dict[str, Optional[str]] = {}
         lines : Dict[str, List[int]]     = {}
+        anchors: Dict[str, int]          = {}
+        changed: Dict[str, List[int]]    = {}
         for n in order:
             lo, hi = node_range(n, a, b)
             chunk = items[n][lo:hi]
             values[n] = "\n".join(raw for _, _, raw in chunk) if chunk else None
             lines[n]  = [i for i, _, _ in chunk]
-        out.append((key, values, lines))
+            changed[n] = [items[n][k][0] for k in range(lo, hi) if k in diff_idx[n]]
+            if not chunk:
+                anchors[n] = items[n][lo - 1][0] if lo > 0 else 0
+        out.append((key, values, lines, anchors, changed))
     return out
 
 
@@ -976,26 +998,29 @@ class AuditEngine:
     def _compare_sstp(self, rel_path: str, present_in: List[str],
                       abs_paths: Dict[str, str],
                       all_nodes: List[str]) -> "AuditFile":
-        """Semantic diff for .sstp routing rule files.
+        """Block-by-block diff for .sstp routing rule files (rules: MEMORY.md, 2026-09-25).
 
-        Each top-level block becomes one AuditParam.  The compound key is
-        "BLOCK|NAME(params)".  Diff categories: VALUE_DIFF, ORDER_DIFF,
-        STRUCT_EQUIV (treated as logical diff), MATCH.
+        Each top-level block becomes one AuditParam ("BLOCK|NAME(params)|CATEGORY") holding
+        each node's original block lines. A block is a mismatch when its text, with only
+        whitespace removed, differs on any node or is missing from a node that has the file;
+        comments count and nothing is downgraded to an expected difference. The category
+        (BLOCK_ABSENT, VALUE_DIFF, ORDER_DIFF, TEXT_DIFF) is only a label. Text outside every block gets its own row when it differs.
         """
         docs: Dict[str, Any] = {}
+        texts: Dict[str, str] = {}
         warnings: List[str] = []
 
         for node in present_in:
             path = abs_paths[node]
             try:
-                text    = open_text(path)
-                docs[node] = SstpParser.parse(text)
+                texts[node] = open_text(path)
+                docs[node]  = SstpParser.parse(texts[node])
             except Exception as exc:
                 warnings.append(f"{node}: [CMT-AUD-W003] SSTP parse error — {exc}")
                 docs[node] = None
 
         # Safety net (F-030): a node whose file yields no SSTP blocks cannot be compared
-        # semantically — compare as text so a real difference is never reported as a match.
+        # block by block — compare as text so a real difference is never reported as a match.
         unparsed = [n for n in present_in if docs.get(n) is None or not docs[n].blocks]
         if unparsed:
             af = self._compare_text(rel_path, "text", present_in, abs_paths, all_nodes)
@@ -1003,89 +1028,88 @@ class AuditEngine:
                                       for n in unparsed] + af.warnings
             return af
 
-        # Build union of all block compounds
+        blk_maps = {n: {b.compound: b for b in docs[n].blocks} for n in present_in}
         seen_compounds: Dict[str, None] = {}
         for node in present_in:
-            doc = docs.get(node)
-            if doc is None:
-                continue
-            for blk in doc.blocks:
-                if blk.compound not in seen_compounds:
-                    seen_compounds[blk.compound] = None
+            for blk in docs[node].blocks:
+                seen_compounds.setdefault(blk.compound, None)
 
+        severity = {"BLOCK_ABSENT": 4, "VALUE_DIFF": 3, "ORDER_DIFF": 2, "TEXT_DIFF": 1, "MATCH": 0}
         params: List[AuditParam] = []
         for compound in seen_compounds:
-            # Collect per-node normalised body (used as "value" for comparison)
-            values: Dict[str, Optional[str]] = {}
-            commented: Dict[str, bool] = {}
-            for node in all_nodes:
-                if node not in present_in:
-                    values[node] = None
-                    commented[node] = False
-                    continue
-                doc = docs.get(node)
-                if doc is None:
-                    values[node] = None
-                    commented[node] = False
-                    continue
-                blk_map = {b.compound: b for b in doc.blocks}
-                b = blk_map.get(compound)
-                values[node]   = b.body_norm if b else None
-                commented[node] = False
-
-            # Determine mismatch / diff category (absence is tracked separately)
-            present_vals = [values[n] for n in present_in if values.get(n) is not None]
-            has_mismatch = len(set(present_vals)) > 1
-
-            # Categorise (use first two present nodes)
-            diff_category = "MATCH"
-            if has_mismatch and len(present_in) >= 2:
-                doc_a = docs.get(present_in[0])
-                doc_b = docs.get(present_in[1])
-                if doc_a and doc_b:
-                    map_a = {b.compound: b for b in doc_a.blocks}
-                    map_b = {b.compound: b for b in doc_b.blocks}
-                    ba    = map_a.get(compound)
-                    bb    = map_b.get(compound)
-                    if ba and bb:
-                        diff_category = categorise_block_diff(ba, bb)
-                    elif ba or bb:
-                        diff_category = "VALUE_DIFF"
-
-            # STRUCT_EQUIV → logical diff (expected, informational)
-            is_logical = (diff_category == "STRUCT_EQUIV")
-            if is_logical:
-                has_mismatch = False
-
-            # Encode diff category into compound for display
-            display_compound = f"{compound}|{diff_category}"
-            name = compound.replace("BLOCK|", "")
-
+            blks = {n: blk_maps[n].get(compound) for n in present_in}
+            ref  = next(b for b in blks.values() if b is not None)
+            cats = [categorise_block_diff(ref, b) if b is not None else "BLOCK_ABSENT" for b in blks.values()]
+            diff_category = max(cats, key=severity.__getitem__)
+            has_mismatch = diff_category != "MATCH"
             params.append(AuditParam(
-                compound       = display_compound,
-                section        = "SSTP",
-                key            = name,
-                values         = values,
-                commented      = commented,
-                has_mismatch   = has_mismatch,
-                is_logical_diff = is_logical,
+                compound     = f"{compound}|{diff_category}",
+                section      = "SSTP",
+                key          = compound.replace("BLOCK|", ""),
+                values       = {n: (blks[n].text if blks.get(n) else None) for n in all_nodes},
+                commented    = {n: False for n in all_nodes},
+                has_mismatch = has_mismatch,
+                lines        = {n: (list(range(blks[n].start_line, blks[n].end_line + 1)) if blks[n] else [])
+                                for n in present_in},
             ))
 
-        mismatch_count     = sum(1 for p in params if p.has_mismatch)
-        logical_diff_count = sum(1 for p in params if p.is_logical_diff)
-        absent_count       = len(all_nodes) - len(present_in)
+        # Lines outside every block (leading comments, text between blocks)
+        outside: Dict[str, List[int]] = {}
+        for node in present_in:
+            inside = {i for b in docs[node].blocks for i in range(b.start_line, b.end_line + 1)}
+            outside[node] = [i for i, ln in enumerate(texts[node].splitlines(), 1)
+                             if i not in inside and ln.strip()]
+        out_text = {n: "\n".join(texts[n].splitlines()[i - 1] for i in outside[n]) for n in present_in}
+        if len({"".join(t.split()) for t in out_text.values()}) > 1:
+            params.insert(0, AuditParam(
+                compound     = "BLOCK|(outside blocks)|TEXT_DIFF",
+                section      = "SSTP",
+                key          = "(outside blocks)",
+                values       = {n: out_text.get(n) for n in all_nodes},
+                commented    = {n: False for n in all_nodes},
+                has_mismatch = True,
+                lines        = outside,
+            ))
+
+        mismatch_count = sum(1 for p in params if p.has_mismatch)
+        absent_count   = len(all_nodes) - len(present_in)
+
+        raw_content: Dict[str, str] = {}
+        for node, text in texts.items():
+            if len(text.encode("utf-8", errors="replace")) > _MAX_RAW_BYTES:
+                raw_content[node] = text[:_MAX_RAW_BYTES] + "\n[...truncated...]"
+                warnings.append(f"{node}: [CMT-AUD-W006] display truncated at {_MAX_RAW_BYTES // 1024} KB")
+            else:
+                raw_content[node] = text
+        line_blocks: List[dict] = []
+        if mismatch_count and len(present_in) > 1:
+            blocks = _text_blocks(texts, present_in)
+            if len(blocks) > _MAX_TEXT_BLOCKS:
+                warnings.append(f"{len(blocks)} changed blocks — only the first {_MAX_TEXT_BLOCKS} "
+                                f"are listed [CMT-AUD-W012]")
+                blocks = blocks[:_MAX_TEXT_BLOCKS]
+            line_blocks = [{"key": key, "lines": lines, "anchors": anchors, "changed": changed}
+                           for key, _values, lines, anchors, changed in blocks]
+
+        file_sizes   = self._get_file_sizes(abs_paths)
+        skip_content = self._should_skip_content(file_sizes, mismatch_count, absent_count)
+        if skip_content:
+            raw_content, line_blocks = {}, []
 
         return AuditFile(
             rel_path           = rel_path,
             file_type          = "sstp",
             present_in         = present_in,
-            params             = params,
+            params             = [] if skip_content else params,
             binary             = {},
-            raw_content        = {},
+            raw_content        = raw_content,
             mismatch_count     = mismatch_count,
             warnings           = warnings,
-            logical_diff_count = logical_diff_count,
             absent_count       = absent_count,
+            content_skipped    = skip_content,
+            param_count        = len(params),
+            file_sizes         = file_sizes,
+            line_blocks        = line_blocks,
         )
 
     def _compare_kv(self, rel_path: str, present_in: List[str],
@@ -1385,7 +1409,7 @@ class AuditEngine:
                 warnings.append(f"{len(blocks)} changed blocks — only the first {_MAX_TEXT_BLOCKS} "
                                 f"are listed [CMT-AUD-W012]")
                 blocks = blocks[:_MAX_TEXT_BLOCKS]
-            for bi, (key, values, lines) in enumerate(blocks):
+            for bi, (key, values, lines, anchors, changed) in enumerate(blocks):
                 params.append(AuditParam(
                     compound     = f"__blk__{bi}",
                     section      = "",
@@ -1394,6 +1418,8 @@ class AuditEngine:
                     commented    = {n: False for n in values},
                     has_mismatch = True,
                     lines        = lines,
+                    anchors      = anchors,
+                    changed      = changed,
                 ))
             logical_diff_count = self._classify_logical_diffs(params[1:])
             block_mismatches   = sum(1 for p in params[1:] if p.has_mismatch)

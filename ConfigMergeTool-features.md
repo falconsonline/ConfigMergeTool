@@ -591,14 +591,14 @@ Handles: `.sstp` (Roamware Smart-STP routing rule scripts)
 | ID | Feature | Behaviour |
 |---|---|---|
 | SS-01 | Block parsing | Top-level named blocks (`GCT (0x33) [...]`) parsed by depth-tracking `[`/`]` scanner |
-| SS-02 | Comment stripping | `#` comments stripped before parsing |
-| SS-03 | Body normalisation | `SET CDPA (A) AND SET CDPA (B)` collapsed to `SET CDPA (A,B)`; whitespace collapsed |
-| SS-04 | Parameter extraction | `SRC`, `SPC`, `DIGITS`, `ROUTE`, `SPREAD` extracted per block for detailed diff display |
-| SS-05 | VALUE_DIFF | Parameter values differ (SRC, SPC, different route targets) → red in HTML |
-| SS-06 | ORDER_DIFF | Same route targets in different order, or DIGITS order differs → orange in HTML |
-| SS-07 | STRUCT_EQUIV | Structurally equivalent after normalisation (e.g. multi-SET merge) → treated as logical diff (yellow) |
-| SS-08 | MATCH | Blocks identical → no mismatch |
-| SS-09 | Compound key | Block keyed as `BLOCK|NAME(params)|DIFF_CATEGORY` in AuditParam |
+| SS-02 | Comments | `#` comments ignored for bracket matching only; they are part of the compared text |
+| SS-03 | Strict comparison | A block is a mismatch when its original text with all whitespace removed differs on any node, or the block is missing from a node that has the file. Nothing is downgraded to an expected diff (2026-09-25) |
+| SS-04 | Parameter extraction | `SRC`, `SPC`, `DIGITS`, `ROUTE`, `SPREAD` extracted per block for the category label |
+| SS-05 | Category label | Informational, worst over all nodes vs the first node with the block: `BLOCK_ABSENT` > `VALUE_DIFF` (route target, SRC, SPC or DIGITS value) > `ORDER_DIFF` (same routes / digits reordered) > `TEXT_DIFF` (anything else, e.g. statement moved, comment) |
+| SS-06 | Original text | Cells show each node's block lines verbatim (read-only); `lines` = the block's line range |
+| SS-07 | Outside blocks | Non-blank lines outside every block form a `(outside blocks)` row when they differ |
+| SS-08 | Side-by-side | Raw content plus `line_blocks` (line diff vs first node) drive the side-by-side view and "Show differences only" hunks, as for text/XML |
+| SS-09 | Compound key | Block keyed as `BLOCK|NAME(params)|CATEGORY` in AuditParam |
 | SS-10 | Audit integration | `AuditEngine._compare_sstp()` dispatched from `_compare_file()` for `.sstp` extension |
 
 ---
@@ -733,6 +733,9 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-25 | Audit text/XML/SSTP side-by-side: only lines that really differ are highlighted per node (block `changed`) — a block spans every node, so lines another node changed were highlighted too. STC cross-check vs `diff -w -B`: 69/78 node comparisons identical, the rest are equivalent alignments next to repeated lines or blank-line-only moves |
+| 2026-09-25 | Audit SSTP (SS-02..SS-08): blocks compared strictly on original text (whitespace ignored, comments count) across ALL nodes — before, only the first two nodes were categorised and any unrecognised change fell back to STRUCT_EQUIV ("expected"), and a DIGITS value change was labelled ORDER_DIFF. Cells showed a normalised one-line body; now original lines, read-only, with side-by-side view. Blocks missing on a node and text outside blocks are mismatches. STC rule2.sstp: statement moved into ELSE + different DR DIGITS values now 2 mismatches per row (were 2 expected); STC 297 → 301 mismatches, 4 → 0 expected. Telstra routing-rule.sstp 4 → 7 (+ 2 blocks only on some nodes, + copyright comment outside blocks) |
+| 2026-09-25 | Audit report: "Show differences only" now also filters the text/XML side-by-side view — only changed blocks with 3 context lines, aligned across nodes, unchanged stretches collapsed to "⋯ N unchanged lines", and a "no line here — between L<a> and L<a+1>" marker on nodes without lines in a block (block `anchors`). Real Telstra run: sip/package.xml 17280 → 109 lines, plugins.xml 3313 → 196. KV/JSON/SSTP already hid matched rows; binary has no content view; files present on one node only keep showing just the absent banner |
 | 2026-09-23 | **v3.0.0** — audit honours `--mapping-file` (file and directory lines, one row per mapped instance) and lists text/XML differences as changed-line blocks |
 | 2026-09-23 | Audit: `--mapping-file` honoured (A-17) — mapped files were reported absent (Helm charts `dra-SA` → `dra-SA-1`/`-2`); file and directory lines, W011 for one-sided pairs, E018 for unknown node prefix. Text/XML (yaml, tpl, …) differences listed as changed-line blocks instead of only a checksum (A-18, W012). STC Helm audit: 227 rows, 0 Staging-only leftovers, `Mapping.cfg` and per-file mapping give identical rows |
 | 2026-09-18 | Audit: key repeated in a section — last value used and compared, warning W007 names it, no longer a mismatch (F-027); text/XML whitespace-only differences match, I001 (F-028); `sstp` added to sample filter (F-029); SSTP parser fixed — no block was ever parsed, so routing-rule drift was reported as a match; text fallback W010 when a node has no blocks (F-030). Real Telstra audits: 0 false matches / 0 false mismatches vs raw bytes |

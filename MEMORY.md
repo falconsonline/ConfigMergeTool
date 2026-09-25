@@ -126,6 +126,15 @@ match = otherwise (incl. commented); extra = key not in base.
 3. **Text/XML line diff (all text types), read-only.** Whole-file whitespace-free checksum still decides
    match; on mismatch each changed block vs the first present node is one mismatch row. YAML key-path
    parsing rejected: 177/311 STC YAML files are Helm templates. Editing text blocks deferred.
+4. **"Show differences only" filters text/XML content too (2026-09-25).** Changed blocks only, 3 context
+   lines, aligned per block across nodes, "no line here" marker at the block's anchor on nodes without
+   lines. Files present on one node only: banner only (user chose to keep this, all file types).
+   Highlight only lines that really differ per node (`changed`), not the whole block span.
+5. **SSTP strict (2026-09-25).** Block = mismatch when its original text minus whitespace differs on ANY node
+   (comments count) or the block is missing on a node with the file; no automatic "expected"
+   (STRUCT_EQUIV and the SET-merge normalisation removed). Category label informational only. Cells show
+   original lines (read-only), plus side-by-side view. Text outside blocks → "(outside blocks)" row.
+   Trigger: STC rule2.sstp — statement moved into ELSE and DR digits changed were reported as expected.
 
 ---
 

@@ -44,8 +44,11 @@ class SstpBlock:
     """One top-level named block in an SSTP file."""
     name: str                       # e.g. "GCT"
     params: str                     # e.g. "(0x33)"  or ""
-    body_raw: str                   # raw text inside the outermost [ ... ]
-    body_norm: str                  # normalised body for direct comparison
+    body_raw: str                   # text inside the outermost [ ... ], comments stripped
+    text: str = ""                  # original lines of the block, verbatim (comments kept)
+    cmp: str = ""                   # ``text`` with all whitespace removed — the comparison key
+    start_line: int = 0             # 1-based line of the block header
+    end_line: int = 0               # 1-based line of the closing ']'
     params_extracted: Dict[str, object] = field(default_factory=dict)
     # Compound key for AuditParam: "BLOCK|GCT(0x33)"
     compound: str = ""
@@ -70,12 +73,6 @@ _RE_SPREAD       = re.compile(r'SPREAD\s*\(([^)]+)\)', re.IGNORECASE)
 # at offset 0, so blocks after leading comments were never parsed (F-030).
 _RE_BLOCK_HDR    = re.compile(r'\s*([A-Z_][A-Z0-9_]*)\s*(\([^)]*\))?\s*\[', re.IGNORECASE)
 
-# Normalise SET CDPA (A) AND SET CDPA (B) → SET CDPA (A,B)
-_RE_MULTI_SETCDPA = re.compile(
-    r'SET\s+(CDPA|CGPA|SCCP)\s*\(([^)]*)\)\s*AND\s+SET\s+\1\s*\(([^)]*)\)',
-    re.IGNORECASE,
-)
-
 
 # ---------------------------------------------------------------------------
 # Parser
@@ -86,9 +83,10 @@ class SstpParser:
 
     @classmethod
     def parse(cls, text: str) -> SstpDoc:
-        # Strip comments
+        # Strip comments (brackets inside comments must not count); one clean line per original line
+        orig  = text.splitlines()
         lines = []
-        for raw in text.splitlines():
+        for raw in orig:
             idx = raw.find('#')
             lines.append(raw[:idx] if idx >= 0 else raw)
         clean = "\n".join(lines)
@@ -127,43 +125,26 @@ class SstpParser:
                     depth -= 1
                 pos += 1
 
-            body_raw  = clean[body_start: pos - 1]
-            body_norm = cls._normalise_body(body_raw)
-            compound  = f"BLOCK|{block_name}{block_params}"
+            body_raw   = clean[body_start: pos - 1]
+            compound   = f"BLOCK|{block_name}{block_params}"
+            start_line = clean.count('\n', 0, m.start(1)) + 1
+            end_line   = clean.count('\n', 0, pos - 1) + 1
+            block_text = "\n".join(orig[start_line - 1:end_line])
 
             block = SstpBlock(
                 name             = block_name,
                 params           = block_params,
                 body_raw         = body_raw,
-                body_norm        = body_norm,
+                text             = block_text,
+                cmp              = "".join(block_text.split()),
+                start_line       = start_line,
+                end_line         = end_line,
                 params_extracted = cls._extract_params(body_raw),
                 compound         = compound,
             )
             doc.blocks.append(block)
 
         return doc
-
-    # ------------------------------------------------------------------
-    # Normalisation
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _normalise_body(body: str) -> str:
-        """Collapse whitespace, normalise SET X(A) AND SET X(B) → SET X(A,B)."""
-        # Collapse multi SET ... AND SET ... for structural equivalence
-        norm = body
-        changed = True
-        while changed:
-            new = _RE_MULTI_SETCDPA.sub(
-                lambda m: f"SET {m.group(1).upper()} ({m.group(2).strip()},{m.group(3).strip()})",
-                norm,
-            )
-            changed = new != norm
-            norm = new
-
-        # Collapse whitespace
-        norm = re.sub(r'\s+', ' ', norm).strip()
-        return norm
 
     # ------------------------------------------------------------------
     # Parameter extraction
@@ -209,48 +190,30 @@ class SstpParser:
 # ---------------------------------------------------------------------------
 
 def categorise_block_diff(a: SstpBlock, b: SstpBlock) -> str:
-    """Return a diff category for two versions of the same block.
+    """Informational label for two versions of the same block (never decides match).
 
     Returns one of:
-    - ``"VALUE_DIFF"``      — parameter values differ
-    - ``"ORDER_DIFF"``      — route order differs
-    - ``"STRUCT_EQUIV"``    — structurally equivalent (whitespace / ordering)
-    - ``"MATCH"``           — identical
+    - ``"MATCH"``       — identical once whitespace is removed (comments count)
+    - ``"VALUE_DIFF"``  — a route target, SRC, SPC or DIGITS value differs
+    - ``"ORDER_DIFF"``  — same routes / digits, different order
+    - ``"TEXT_DIFF"``   — any other difference (statements moved, comments, …)
     """
-    if a.body_norm == b.body_norm:
+    if a.cmp == b.cmp:
         return "MATCH"
-
-    # Strip whitespace from raw bodies for structural comparison
-    raw_a = re.sub(r'\s+', ' ', a.body_raw).strip()
-    raw_b = re.sub(r'\s+', ' ', b.body_raw).strip()
-    if raw_a == raw_b:
-        return "MATCH"
-
-    # Check if normalised bodies match (structural equivalence after merging
-    # multi-SET patterns)
-    if a.body_norm == b.body_norm:
-        return "STRUCT_EQUIV"
 
     pe_a = a.params_extracted
     pe_b = b.params_extracted
 
-    # Route order diff
-    if pe_a.get("routes") != pe_b.get("routes"):
-        # Check if it's purely order (same set, different order)
-        if (pe_a.get("routes") and pe_b.get("routes") and
-                sorted(pe_a["routes"]) == sorted(pe_b["routes"])):  # type: ignore[arg-type]
-            return "ORDER_DIFF"
-        # Otherwise it's a value diff (different route targets)
-        return "VALUE_DIFF"
+    routes_a, routes_b = pe_a.get("routes") or [], pe_b.get("routes") or []
+    if routes_a != routes_b:
+        return "ORDER_DIFF" if sorted(routes_a) == sorted(routes_b) else "VALUE_DIFF"  # type: ignore[arg-type]
 
-    # Value diff in named params
     for key in ("src", "spc"):
         if pe_a.get(key) != pe_b.get(key):
             return "VALUE_DIFF"
 
-    # Digits order diff
-    if pe_a.get("digits") != pe_b.get("digits"):
-        return "ORDER_DIFF"
+    digits_a, digits_b = pe_a.get("digits") or [], pe_b.get("digits") or []
+    if digits_a != digits_b:
+        return "ORDER_DIFF" if sorted(digits_a) == sorted(digits_b) else "VALUE_DIFF"  # type: ignore[arg-type]
 
-    # Catch-all — treat as structural equivalent if normalised bodies match
-    return "STRUCT_EQUIV"
+    return "TEXT_DIFF"

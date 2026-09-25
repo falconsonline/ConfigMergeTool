@@ -365,6 +365,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
        color:#aab;border-right:1px solid #e3e6ec;user-select:none}
 .rl-hl{background:#fff3c4}
 .rl-hl .rl-no{color:#b26a00;font-weight:600}
+.rl-none{color:#b26a00;font-style:italic;background:#fdf6e3}
+.raw-diff .hunk-hdr td{background:#eef1f7;color:#1e2a3a;font-family:monospace;font-size:11px;
+                       font-weight:600;padding:3px 14px;border-top:1px solid #dde3ed}
+.raw-diff .hunk-gap td{color:#888;font-size:11px;font-style:italic;padding:3px 14px;background:#f5f6f8}
 .blk-val{margin:0;font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all}
 .mapped-from{font-size:10px;font-weight:normal;color:#6a4f9e}
 
@@ -1217,7 +1221,9 @@ function renderFilePanel(idx) {
         ? renderTextCompare(file, idx)
         : file.type === 'error'
           ? renderErrorFile(file)
-          : renderParamTable(file, idx);
+          : file.type === 'sstp' && _hasRaw(file)
+            ? renderParamTable(file, idx) + renderRawSideBySide(file, idx)
+            : renderParamTable(file, idx);
 
   let expDiffMeta = autoExpectedCount > 0
     ? `&nbsp;&middot;&nbsp; <span style="color:#00838f">~${autoExpectedCount} instance-specific</span>` : '';
@@ -1332,12 +1338,27 @@ function renderTextCompare(file, idx) {
     md5Table += renderRow(file, idx, param, pi);
   });
   md5Table += `</tbody></table>`;
+  return md5Table + renderRawSideBySide(file, idx);
+}
 
+function _hasRaw(file) {
+  return Object.keys(file.rawContent || {}).length > 0;
+}
+
+// Changed line blocks: text/XML carry them as '__blk__' rows, SSTP as file.lineBlocks
+function _lineBlocks(file) {
+  return file.lineBlocks && file.lineBlocks.length
+    ? file.lineBlocks
+    : file.params.filter(p => String(p.compound).startsWith('__blk__'));
+}
+
+function renderRawSideBySide(file, idx) {
   // Lines inside a changed block are highlighted per node
   let marked = {};
-  file.params.forEach(p => {
-    if (!String(p.compound).startsWith('__blk__') || isSkipped(idx, p.compound)) return;
-    Object.entries(p.lines || {}).forEach(([n, lns]) => {
+  _lineBlocks(file).forEach(p => {
+    if (p.compound && isSkipped(idx, p.compound)) return;
+    // Only lines that really differ; a block also spans lines another node changed
+    Object.entries(p.changed || p.lines || {}).forEach(([n, lns]) => {
       marked[n] = marked[n] || new Set();
       lns.forEach(l => marked[n].add(l));
     });
@@ -1355,12 +1376,88 @@ function renderTextCompare(file, idx) {
     return `<th>${esc(n)}${from ? ` <span class="mapped-from">&#8618; ${esc(from)}</span>` : ''}</th>`;
   }).join('');
 
-  return md5Table +
-    `<p class="raw-hdr">File Content (side-by-side)</p>
-     <table class="raw-table">
+  return `<p class="raw-hdr">File Content (side-by-side)</p>
+     <table class="raw-table raw-full" id="raw-full-${idx}"${showDiffsOnly ? ' style="display:none"' : ''}>
        <thead><tr>${hdrs}</tr></thead>
        <tbody><tr>${cols}</tr></tbody>
+     </table>
+     <table class="raw-table raw-diff" id="raw-diff-${idx}"${showDiffsOnly ? '' : ' style="display:none"'}>
+       <thead><tr>${hdrs}</tr></thead>
+       <tbody>${renderTextHunks(file, idx, marked)}</tbody>
      </table>`;
+}
+
+// "Show differences only" view: each changed block with RAW_CTX lines of context,
+// lined up across nodes; unchanged stretches collapse into a gap row.
+const RAW_CTX = 3;
+function renderTextHunks(file, idx, marked) {
+  let nodes = file.presentIn;
+  let text  = {};
+  nodes.forEach(n => { text[n] = ((file.rawContent||{})[n] || '').split('\n'); });
+  // Per block and node: [first, last] line window incl. context, and anchors of empty ranges
+  let hunks = [];
+  _lineBlocks(file).forEach(p => {
+    let win = {}, gaps = {};
+    nodes.forEach(n => {
+      let lns = (p.lines || {})[n] || [];
+      let len = text[n].length;
+      if (lns.length) {
+        win[n]  = [Math.max(1, Math.min(...lns) - RAW_CTX), Math.min(len, Math.max(...lns) + RAW_CTX)];
+        gaps[n] = [];
+      } else {
+        let a = (p.anchors || {})[n] || 0;
+        win[n]  = [Math.max(1, a - RAW_CTX + 1), Math.min(len, a + RAW_CTX)];
+        gaps[n] = [a];
+      }
+    });
+    let prev = hunks[hunks.length - 1];
+    // Merge with the previous hunk when their windows touch on any node
+    if (prev && nodes.some(n => win[n][0] <= prev.win[n][1] + 1)) {
+      nodes.forEach(n => {
+        prev.win[n]  = [Math.min(prev.win[n][0], win[n][0]), Math.max(prev.win[n][1], win[n][1])];
+        prev.gaps[n] = prev.gaps[n].concat(gaps[n]);
+      });
+      prev.labels.push(p.key);
+    } else {
+      hunks.push({win, gaps, labels: [p.key]});
+    }
+  });
+  let colspan = nodes.length;
+  let gapRow  = (from, to) => `<tr class="hunk-gap">` + nodes.map(n => {
+    let cnt = to[n] - from[n] - 1;
+    return `<td class="raw-col">${cnt > 0 ? `&#8943; ${cnt} unchanged line${cnt === 1 ? '' : 's'}` : ''}</td>`;
+  }).join('') + `</tr>`;
+  let out = '', last = {};
+  nodes.forEach(n => { last[n] = 0; });
+  hunks.forEach(h => {
+    let start = {};
+    nodes.forEach(n => { start[n] = h.win[n][0]; });
+    if (nodes.some(n => start[n] - last[n] > 1)) out += gapRow(last, start);
+    out += `<tr class="hunk-hdr"><td colspan="${colspan}">${h.labels.map(esc).join(', ')}</td></tr><tr>`;
+    out += nodes.map(n => {
+      let hl = marked[n] || new Set(), [a, b] = h.win[n], body = '';
+      let empties = h.gaps[n];
+      if (empties.includes(a - 1)) body += _noLine(a - 1);
+      for (let i = a; i <= b; i++) {
+        let t = text[n][i - 1];
+        body += `<div class="rl${hl.has(i) ? ' rl-hl' : ''}" id="rd-${idx}-${eid(n)}-${i}">` +
+                `<span class="rl-no">${i}</span>${esc(t) || ' '}</div>`;
+        if (empties.includes(i)) body += _noLine(i);
+      }
+      return `<td class="raw-col"><div class="raw-content raw-lines">${body}</div></td>`;
+    }).join('') + `</tr>`;
+    nodes.forEach(n => { last[n] = h.win[n][1]; });
+  });
+  let end = {};
+  nodes.forEach(n => { end[n] = text[n].length + 1; });
+  if (hunks.length && nodes.some(n => end[n] - last[n] > 1)) out += gapRow(last, end);
+  if (!hunks.length) out = `<tr class="hunk-gap"><td colspan="${colspan}">No changed lines.</td></tr>`;
+  return out;
+}
+
+function _noLine(after) {
+  let where = after > 0 ? `between L${after} and L${after + 1}` : 'before L1';
+  return `<div class="rl rl-none"><span class="rl-no">&#8709;</span>no line here &mdash; ${where}</div>`;
 }
 
 function showBlockLines(fileIdx, pi) {
@@ -1368,7 +1465,7 @@ function showBlockLines(fileIdx, pi) {
   let first = null;
   Object.entries(p.lines || {}).forEach(([n, lns]) => {
     lns.forEach(l => {
-      let el = document.getElementById(`rl-${fileIdx}-${eid(n)}-${l}`);
+      let el = document.getElementById(`${showDiffsOnly ? 'rd' : 'rl'}-${fileIdx}-${eid(n)}-${l}`);
       if (!el) return;
       if (!first) first = el;
       el.classList.remove('mm-nav-pulse'); void el.offsetWidth; el.classList.add('mm-nav-pulse');
@@ -1544,7 +1641,7 @@ function renderRow(file, idx, param, pi) {
   }
 
   let skippedLbl = isSkip ? `<span class="skipped-lbl">[Skipped]</span>` : '';
-  if (String(param.compound).startsWith('__blk__'))
+  if (String(param.compound).startsWith('__blk__') || (file.type === 'sstp' && _hasRaw(file)))
     skippedLbl += `<button class="skip-btn" onclick="showBlockLines(${idx},${pi})" title="Scroll the side-by-side view to these lines">&#8595; Show</button>`;
   let logicalLbl = param.isLogicalDiff
     ? `<span class="logical-lbl">&#126; expected node-specific</span>` : '';
@@ -1579,8 +1676,8 @@ function renderCell(file, idx, param, pi, node, nodeIdx, isExpDiff) {
   if (!isPresent)
     return `<td class="file-absent-cell${colCls}" data-idx="${nodeIdx}"><span class="absent-lbl">FILE ABSENT</span></td>`;
 
-  // Text / XML rows are read-only: checksum row and changed-block rows
-  if (file.type === 'text' || file.type === 'xml') {
+  // Text / XML / SSTP rows are read-only: checksum row, changed-block rows, SSTP block rows
+  if (file.type === 'text' || file.type === 'xml' || file.type === 'sstp') {
     if (origVal === null || origVal === undefined)
       return `<td class="key-missing-cell${colCls}" data-idx="${nodeIdx}"><span class="missing-lbl">&mdash; no lines</span></td>`;
     let tcls = `val-cell${colCls}` + (isExpDiff ? ' cell-expected-diff' : param.hasMismatch ? ' cell-mismatch' : '');
@@ -1956,6 +2053,12 @@ function toggleLogicalVisible(checked) {
 
 function applyDiffsFilter() {
   if (currentFileIdx < 0) return;
+  let rawFull = document.getElementById(`raw-full-${currentFileIdx}`);
+  let rawDiff = document.getElementById(`raw-diff-${currentFileIdx}`);
+  if (rawFull && rawDiff) {
+    rawFull.style.display = showDiffsOnly ? 'none' : '';
+    rawDiff.style.display = showDiffsOnly ? '' : 'none';
+  }
   let tbl = document.getElementById(`ptbl-${currentFileIdx}`)
          || document.getElementById(`txt-${currentFileIdx}`);
   if (!tbl) return;
@@ -2529,6 +2632,8 @@ def _serialise_result(result: "AuditResult") -> dict:
                 "isLogicalDiff": p.is_logical_diff,
                 "lines":         p.lines,
                 "dupValues":     p.dup_values,
+                "anchors":       p.anchors,
+                "changed":       p.changed,
             }
             for p in af.params
         ]
@@ -2569,6 +2674,7 @@ def _serialise_result(result: "AuditResult") -> dict:
             "paramCount":      af.param_count,
             "fileSizes":       af.file_sizes,
             "nodePaths":       af.node_paths,
+            "lineBlocks":      af.line_blocks,
         })
 
     # Skipped-files and error data for the Skipped Files / Report Errors panels

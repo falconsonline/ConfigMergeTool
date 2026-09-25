@@ -976,24 +976,21 @@ All other extensions  (Generic)
   GCT (0x33) [...]
   GCT (0x17,0x27) [...]
 
-The auditor parses each block's parameters and categorises differences:
+Each block is one row showing every node's original block lines, exactly
+as in the file (read-only).  A block is a mismatch when its text differs on
+any node -- only whitespace (indentation, blank lines) is ignored; comments
+count -- or when the block is missing on a node that has the file.  Lines
+outside every block (e.g. header comments) get an "(outside blocks)" row when
+they differ.  Nothing is treated as an expected difference automatically.
 
-  VALUE DIFF   — parameter value differs between nodes
-                 (e.g. SRC=0x53 vs SRC=0x51)
-                 Shown in RED; requires review.
+The row key carries a label (informational, worst over all nodes):
+  BLOCK_ABSENT -- block missing on a node
+  VALUE_DIFF   -- route target, SRC, SPC or DIGITS value differs
+  ORDER_DIFF   -- same routes / digits in a different order
+  TEXT_DIFF    -- any other change (statement moved, comment edited, ...)
 
-  ORDER DIFF   — route or digit list order differs
-                 (e.g. ROUTE APP 0x27 OR ROUTE APP 0x17 vs reversed)
-                 Shown in ORANGE; may be functionally significant.
-
-  STRUCT EQUIV — structurally equivalent but written differently
-                 (e.g. SET CDPA (A) AND SET CDPA (B)  vs  SET CDPA (A,B))
-                 Shown in YELLOW; treated as a logical diff; not flagged.
-
-  MATCH        — identical block bodies (after whitespace normalisation)
-                 Shown in GREEN.
-
-Whitespace and comment differences are always ignored.
+Below the table the file content is shown side-by-side with changed lines
+highlighted; "Show differences only" trims it to the changed hunks.
 
 
 ================================================================================
@@ -1142,7 +1139,13 @@ Right panel — parameter table:
   first node that has the file; every changed block becomes a yellow row
   under "File checksum" (e.g. "L88-L91") showing each node's lines, counted
   as one mismatch and reachable with Prev/Next.  "Show" scrolls the
-  side-by-side view, where changed lines are highlighted with line numbers.
+  side-by-side view, where changed lines are highlighted with line numbers
+  (on each node only the lines that differ from the first node; on the first
+  node the lines some other node changed).
+  With "Show differences only" ticked the side-by-side view lists just the
+  changed blocks, each with 3 unchanged lines above and below, lined up
+  across nodes; skipped stretches show as "... N unchanged lines" and a node
+  without lines in a block shows "no line here -- between L<a> and L<a+1>".
   These rows are read-only (download the node's file to edit it).  After 500
   blocks the rest are not listed [CMT-AUD-W012].
   SSTP routing-rule files are compared block by block; if a node's file has

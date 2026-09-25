@@ -88,3 +88,40 @@ def test_identical_files_keep_the_single_checksum_row(tmp_path):
     af = _compare(tmp_path, {"stg": "a: 1\n", "prod": "a: 1\n"})
     assert [p.compound for p in af.params] == ["__md5__"]
     assert af.mismatch_count == 0
+
+
+def test_nodes_without_lines_in_a_block_get_an_anchor(tmp_path):
+    # "Show differences only" places a "no line here" marker at the anchor (2026-09-25)
+    af = _compare(tmp_path, {
+        "stg":  "a: 1\nb: 2\nc: 3\nd: 4\n",
+        "prod": "new: 0\na: 1\n\nc: 3\nd: 4\n",
+    })
+    blocks = _blocks(af)
+    assert blocks[0].anchors == {"stg": 0}          # before stg L1
+    assert blocks[1].anchors == {"prod": 2}         # after prod L2, blank line skipped
+    assert blocks[1].lines == {"stg": [2], "prod": []}
+
+
+def test_anchors_are_serialised_for_the_report(tmp_path):
+    from configmerge.auditor.html_report import _serialise_result
+    from configmerge.auditor.engine import AuditResult
+    af = _compare(tmp_path, {"stg": "a: 1\nb: 2\n", "prod": "a: 1\n"})
+    result = AuditResult(nodes=["stg", "prod"], node_dirs={}, files=[af], total_mismatches=1,
+                         total_logical_diffs=0, run_timestamp="20260925_000000",
+                         run_dir=str(tmp_path))
+    data = _serialise_result(result)
+    blk = [p for p in data["files"][0]["params"] if p["compound"].startswith("__blk__")]
+    assert blk[0]["anchors"] == {"prod": 1}
+
+
+def test_only_lines_that_really_differ_are_highlighted(tmp_path):
+    # dr changes b, prod changes c: the block spans both lines on every node,
+    # but each node highlights only its own differences (2026-09-25)
+    af = _compare(tmp_path, {
+        "stg":  "a: 1\nb: 2\nc: 3\nd: 4\n",
+        "prod": "a: 1\nb: 2\nc: 30\nd: 4\n",
+        "dr":   "a: 1\nb: 20\nc: 3\nd: 4\n",
+    })
+    blk = _blocks(af)[0]
+    assert blk.lines == {"stg": [2, 3], "prod": [2, 3], "dr": [2, 3]}
+    assert blk.changed == {"stg": [2, 3], "prod": [3], "dr": [2]}
