@@ -39,6 +39,10 @@ any browser; it works offline).
 Requirements
 ------------
   Python 3.9+
+  Libraries installed automatically with the wheel:
+    openpyxl  (+ et_xmlfile)  -- Excel reports
+    PyYAML                    -- audit compares YAML files by structure
+  Optional: chardet ([encoding]) -- detects non-UTF-8 file encodings
 
 --------------------------------------------------------------------------------
  LINUX / macOS INSTALLATION
@@ -90,6 +94,7 @@ Resulting layout (Linux/macOS; Windows uses Scripts\ and Lib\ instead):
     lib/python3.X/site-packages/
       configmerge/             <- ConfigMergeTool code
       openpyxl/  et_xmlfile/   <- required libraries
+      yaml/                    <- required library (PyYAML)
       chardet/                 <- optional library ([encoding])
       *.dist-info/             <- package metadata (used by pip)
     pyvenv.cfg                 <- records which Python created the folder
@@ -206,7 +211,7 @@ To list all installed packages in the environment:
  INSTALLATION OPTION B — RUN FROM SOURCE (no install needed)
 --------------------------------------------------------------------------------
 
-  pip install openpyxl        # only hard dependency
+  pip install openpyxl PyYAML # the two hard dependencies
   pip install chardet         # optional but recommended for encoding detection
   python3 ConfigMergeTool.py [args]   # Linux/macOS
   python  ConfigMergeTool.py [args]   # Windows
@@ -1360,6 +1365,23 @@ Right panel — parameter table:
   blocks the rest are not listed [CMT-AUD-W012].
   SSTP routing-rule files are compared block by block; if a node's file has
   no recognisable blocks it is compared as text instead [CMT-AUD-W010].
+  YAML files (.yaml / .yml, e.g. Helm values.yaml) are compared by structure,
+  one row per parameter, so the order of keys and list entries never matters:
+    - Maps are matched by key, at every depth:  appcfg.main_cfg
+    - A list entry is matched by its first field, and its other fields sit
+      below that name:  appcfg.props[opt=kpi.stats.rotate.interval].val
+    - Plain value lists are compared as sets:  appcfg.gmscspclist[=100]
+    - The same entry in two sections is two rows (each compared in its own
+      section), so an entry that only one node has in a section is flagged
+      even when every node has it somewhere else.
+    - Instance blocks (first field inst / instance / instance_id ...) are
+      paired by position, not by id:  instprop[#2].inst.  A differing id is
+      shown as "~ instance-specific value", not as an error.
+    - Comments that only some nodes have are listed in one "(comments)" row.
+  Rows are grouped under their top-level key; the side-by-side view shows the
+  file with each row's lines highlighted.  YAML rows are read-only.
+  A YAML file with template code ({{ }}, Helm templates) or that YAML cannot
+  parse on any node is compared line by line as above [CMT-AUD-I002].
   KV files (.properties / .cfg / .ini / .conf) are compared section by
   section against the base node -- the first node in the audit config that has
   the file.  Each [section] header row shows a section check:
@@ -1654,6 +1676,8 @@ Search logs for the code; codes are never renumbered or reused.
   CMT-AUD-W011   Audit mapping pair skipped (file not found, filtered, or already present on that node)
   CMT-AUD-W012   Text diff stopped at the block limit; remaining differences not listed
   CMT-AUD-I001   Text/XML nodes differ only in whitespace; treated as a match
+  CMT-AUD-I002   YAML file is not plain YAML (template code or parse error) on a
+                 node; compared line by line
   CMT-PAT-E001   Patch file cannot be read or is not valid JSON
   CMT-PAT-E002   Patch JSON is missing a required field
   CMT-PAT-E003   Patch change entry is malformed

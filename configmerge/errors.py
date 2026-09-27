@@ -87,6 +87,7 @@ CODES: Dict[str, str] = {
     "CMT-AUD-W011": "Audit mapping pair skipped (file not found, filtered, or already present on that node)",
     "CMT-AUD-W012": "Text diff stopped at the block limit; remaining differences not listed",
     "CMT-AUD-I001": "Text/XML nodes differ only in whitespace; treated as a match",
+    "CMT-AUD-I002": "YAML file is not plain YAML (template code or parse error) on a node; compared line by line",
     # ── Apply audit patch ───────────────────────────────────────────────
     "CMT-PAT-E001": "Patch file cannot be read or is not valid JSON",
     "CMT-PAT-E002": "Patch JSON is missing a required field",

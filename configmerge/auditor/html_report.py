@@ -1094,7 +1094,7 @@ function _doSelectFile(idx) {
 // Detects params whose values differ only in a node-specific suffix/index.
 // Pattern: all values share a common prefix/template, with a sequential number
 // or node-specific label at a specific position.
-const _LOG_KEY_RE = /log[._\-]?(?:file|prefix|dir|path|name)|(?:kpi|stats|snmp)[._\-].*prefix|logfile|logprefix|instance[._\-]?(?:name|number|id|num)|trap[._\-]file|interaction[._\-]prefix|input[._\-]file[._\-]prefix/i;
+const _LOG_KEY_RE = /log[._\-]?(?:file|prefix|dir|path|name)|(?:kpi|stats|snmp)[._\-].*prefix|logfile|logprefix|instance[._\-]?(?:name|number|id|num)|(?:^|\.)inst(?:ance)?(?:[._\-]?(?:id|num|number))?$|trap[._\-]file|interaction[._\-]prefix|input[._\-]file[._\-]prefix/i;
 
 function _isExpectedDiff(param) {
   if (!param.hasMismatch) return false;
@@ -1221,7 +1221,7 @@ function renderFilePanel(idx) {
         ? renderTextCompare(file, idx)
         : file.type === 'error'
           ? renderErrorFile(file)
-          : file.type === 'sstp' && _hasRaw(file)
+          : (file.type === 'sstp' || file.type === 'yaml') && _hasRaw(file)
             ? renderParamTable(file, idx) + renderRawSideBySide(file, idx)
             : renderParamTable(file, idx);
 
@@ -1411,8 +1411,11 @@ function renderTextHunks(file, idx, marked) {
       }
     });
     let prev = hunks[hunks.length - 1];
-    // Merge with the previous hunk when their windows touch on any node
-    if (prev && nodes.some(n => win[n][0] <= prev.win[n][1] + 1)) {
+    // Merge with the previous hunk when their windows touch on any node (text blocks are in
+    // line order on every node). YAML rows can sit in a different order per node, so they
+    // merge only when their windows touch on every node.
+    let touches = n => win[n][0] <= prev.win[n][1] + 1 && prev.win[n][0] <= win[n][1] + 1;
+    if (prev && (file.type === 'yaml' ? nodes.every(touches) : nodes.some(n => win[n][0] <= prev.win[n][1] + 1))) {
       nodes.forEach(n => {
         prev.win[n]  = [Math.min(prev.win[n][0], win[n][0]), Math.max(prev.win[n][1], win[n][1])];
         prev.gaps[n] = prev.gaps[n].concat(gaps[n]);
@@ -1641,7 +1644,7 @@ function renderRow(file, idx, param, pi) {
   }
 
   let skippedLbl = isSkip ? `<span class="skipped-lbl">[Skipped]</span>` : '';
-  if (String(param.compound).startsWith('__blk__') || (file.type === 'sstp' && _hasRaw(file)))
+  if (String(param.compound).startsWith('__blk__') || ((file.type === 'sstp' || file.type === 'yaml') && _hasRaw(file)))
     skippedLbl += `<button class="skip-btn" onclick="showBlockLines(${idx},${pi})" title="Scroll the side-by-side view to these lines">&#8595; Show</button>`;
   let logicalLbl = param.isLogicalDiff
     ? `<span class="logical-lbl">&#126; expected node-specific</span>` : '';
@@ -1676,8 +1679,9 @@ function renderCell(file, idx, param, pi, node, nodeIdx, isExpDiff) {
   if (!isPresent)
     return `<td class="file-absent-cell${colCls}" data-idx="${nodeIdx}"><span class="absent-lbl">FILE ABSENT</span></td>`;
 
-  // Text / XML / SSTP rows are read-only: checksum row, changed-block rows, SSTP block rows
-  if (file.type === 'text' || file.type === 'xml' || file.type === 'sstp') {
+  // Text / XML / SSTP / YAML rows are read-only: checksum row, changed-block rows, SSTP blocks,
+  // YAML parameters
+  if (file.type === 'text' || file.type === 'xml' || file.type === 'sstp' || file.type === 'yaml') {
     if (origVal === null || origVal === undefined)
       return `<td class="key-missing-cell${colCls}" data-idx="${nodeIdx}"><span class="missing-lbl">&mdash; no lines</span></td>`;
     let tcls = `val-cell${colCls}` + (isExpDiff ? ' cell-expected-diff' : param.hasMismatch ? ' cell-mismatch' : '');

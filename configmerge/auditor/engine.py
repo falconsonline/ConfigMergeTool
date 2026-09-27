@@ -28,11 +28,13 @@ Reuses:
 from __future__ import annotations
 
 import difflib
+import functools
 import hashlib
 import json
 import os
 import re
 import traceback
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -67,6 +69,7 @@ from .file_filter import FileFilter
 from .html_report import _tool_version, write_audit_html
 from .mapping import load_audit_mapping, resolve_mapping
 from .sstp_parser import SstpParser, categorise_block_diff
+from .yaml_compare import NotPlainYaml, parse_yaml, yaml_comments
 
 
 # Maximum raw-content bytes embedded in HTML per file (512 KB).
@@ -339,6 +342,7 @@ class AuditEngine:
     # .sh is compared as text: shell scripts are not key/value files (agreed 2026-09-18)
     KV_EXTS   = {'.properties', '.cfg', '.ini', '.conf'}
     JSON_EXTS = {'.json'}
+    YAML_EXTS = {'.yaml', '.yml'}
     SSTP_EXTS = {'.sstp'}
 
     def __init__(self, nodes: List[BaseDirConfig], report_dir: str = "reports",
@@ -889,6 +893,8 @@ class AuditEngine:
             return self._compare_kv(rel_path, present_in, abs_paths, all_nodes)
         elif ext in self.JSON_EXTS:
             return self._compare_json(rel_path, present_in, abs_paths, all_nodes)
+        elif ext in self.YAML_EXTS:
+            return self._compare_yaml(rel_path, present_in, abs_paths, all_nodes)
         else:
             file_type = "xml" if ext == ".xml" else "text"
             return self._compare_text(rel_path, file_type, present_in, abs_paths, all_nodes)
@@ -1105,6 +1111,132 @@ class AuditEngine:
             raw_content        = raw_content,
             mismatch_count     = mismatch_count,
             warnings           = warnings,
+            absent_count       = absent_count,
+            content_skipped    = skip_content,
+            param_count        = len(params),
+            file_sizes         = file_sizes,
+            line_blocks        = line_blocks,
+        )
+
+    def _compare_yaml(self, rel_path: str, present_in: List[str],
+                      abs_paths: Dict[str, str],
+                      all_nodes: List[str]) -> AuditFile:
+        """Structural diff for plain YAML (rules: MEMORY.md, 2026-09-27).
+
+        Maps are matched by key and list entries by name at every depth, so order never
+        matters; one row per parameter path. Comment changes form one "(comments)" row.
+        Template code or invalid YAML on any node -> ordered line diff [CMT-AUD-I002].
+        """
+        texts: Dict[str, str] = {}
+        parsed: Dict[str, Tuple[Dict[str, Tuple[str, List[int]]], Dict[str, List[int]]]] = {}
+        notes: List[str] = []
+        for node in present_in:
+            try:
+                texts[node] = open_text(abs_paths[node])
+                parsed[node] = parse_yaml(texts[node])
+            except OSError:
+                return self._compare_text(rel_path, "text", present_in, abs_paths, all_nodes)
+            except NotPlainYaml as exc:
+                notes.append(f"{node}: not plain YAML ({exc}) — compared line by line [CMT-AUD-I002]")
+        squeezed = {"".join(t.split()) for t in texts.values()}
+        if notes or len(present_in) < 2 or len(squeezed) == 1:
+            af = self._compare_text(rel_path, "text", present_in, abs_paths, all_nodes)
+            af.warnings = notes + af.warnings
+            return af
+
+        # Rows: union of paths, base node's order first
+        paths: Dict[str, None] = {}
+        for node in present_in:
+            paths.update(dict.fromkeys(parsed[node][0]))
+        params: List[AuditParam] = []
+        for path in paths:
+            vals = {n: (parsed[n][0][path][0] if path in parsed[n][0] else None) for n in present_in}
+            lines = {n: (parsed[n][0][path][1] if path in parsed[n][0] else []) for n in present_in}
+            params.append(AuditParam(
+                compound     = path,
+                section      = re.split(r"[.\[]", path, maxsplit=1)[0],
+                key          = path,
+                values       = {n: vals.get(n) for n in all_nodes},
+                commented    = {n: False for n in all_nodes},
+                has_mismatch = len(set(vals.values())) > 1,
+                lines        = lines,
+            ))
+
+        # Comments present on some nodes only (compared as a multiset, whitespace ignored)
+        comments = {n: yaml_comments(texts[n]) for n in present_in}
+        counts = {n: Counter("".join(c.split()) for _, c in comments[n]) for n in present_in}
+        common = functools.reduce(lambda a, b: a & b, counts.values())
+        extra: Dict[str, List[Tuple[int, str]]] = {}
+        for n in present_in:
+            left = counts[n] - common
+            extra[n] = []
+            for line_no, c in comments[n]:
+                k = "".join(c.split())
+                if left[k] > 0:
+                    left[k] -= 1
+                    extra[n].append((line_no, c))
+        if any(extra.values()):
+            params.append(AuditParam(
+                compound     = "(comments)",
+                section      = "(comments)",
+                key          = "(comments)",
+                values       = {n: ("\n".join(c for _, c in extra[n]) or None) if n in extra else None
+                                for n in all_nodes},
+                commented    = {n: False for n in all_nodes},
+                has_mismatch = True,
+                lines        = {n: [l for l, _ in extra[n]] for n in present_in},
+            ))
+
+        logical_diff_count = self._classify_logical_diffs(params)
+        mismatch_count     = sum(1 for p in params if p.has_mismatch)
+        absent_count       = len(all_nodes) - len(present_in)
+        warnings: List[str] = []
+
+        # Side-by-side view: one line block per differing row, in the base node's line order
+        def anchor(node: str, path: str) -> int:
+            spans = parsed[node][1]
+            while path:
+                cut = max(path.rfind("."), path.rfind("["))
+                path = path[:cut] if cut > 0 else ""
+                if path in spans:
+                    return spans[path][-1]
+            return 0
+
+        line_blocks: List[dict] = []
+        for p in params:
+            if not (p.has_mismatch or p.is_logical_diff):
+                continue
+            line_blocks.append({
+                "key":     p.key,
+                "lines":   p.lines,
+                "changed": p.lines,
+                "anchors": {n: anchor(n, p.compound) for n in present_in
+                            if not p.lines[n] and p.compound != "(comments)"},
+            })
+        line_blocks.sort(key=lambda b: next((b["lines"][n][0] for n in present_in if b["lines"][n]), 0))
+        if len(line_blocks) > _MAX_TEXT_BLOCKS:
+            warnings.append(f"{len(line_blocks)} changed blocks — only the first {_MAX_TEXT_BLOCKS} "
+                            f"are shown side by side [CMT-AUD-W012]")
+            line_blocks = line_blocks[:_MAX_TEXT_BLOCKS]
+
+        raw_content = {n: (t[:_MAX_RAW_BYTES] + "\n[...truncated...]"
+                           if len(t.encode("utf-8", errors="replace")) > _MAX_RAW_BYTES else t)
+                       for n, t in texts.items()}
+        file_sizes   = self._get_file_sizes(abs_paths)
+        skip_content = self._should_skip_content(file_sizes, mismatch_count, absent_count)
+        if skip_content:
+            raw_content, line_blocks = {}, []
+
+        return AuditFile(
+            rel_path           = rel_path,
+            file_type          = "yaml",
+            present_in         = present_in,
+            params             = [] if skip_content else params,
+            binary             = {},
+            raw_content        = raw_content,
+            mismatch_count     = mismatch_count,
+            warnings           = warnings,
+            logical_diff_count = logical_diff_count,
             absent_count       = absent_count,
             content_skipped    = skip_content,
             param_count        = len(params),

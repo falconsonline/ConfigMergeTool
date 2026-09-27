@@ -1,3 +1,4 @@
 # Core runtime dependencies
 # Install with: pip install -r requirements.txt
 openpyxl>=3.1,<4.0
+PyYAML>=6.0,<7.0

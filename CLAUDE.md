@@ -44,7 +44,8 @@ copied to output; `--output-dir` overlapping an input dir is refused. `processor
 
 **Audit** (drift across nodes, no release dir): `auditor/engine.py::AuditEngine.run` scans each node
 (backup-file detection, `FileFilter` rules), takes the union of relative paths and routes each file in
-`_compare_file`: binary (extension or null byte on any node) → `.sstp` → KV → JSON → text/xml checksum. Output is
+`_compare_file`: binary (extension or null byte on any node) → `.sstp` → KV → JSON → YAML (structural,
+`auditor/yaml_compare.py`; template code or parse error falls back) → text/xml checksum. Output is
 `AuditFile` with `AuditParam` rows. `auditor/html_report.py` serialises the result into an embedded
 `AUDIT_DATA` JSON and renders a self-contained page with vanilla JS; large runs are split into report parts
 behind an index page. In the page, edits are held as pending changes keyed by row `compound`; the user either

@@ -135,6 +135,12 @@ match = otherwise (incl. commented); extra = key not in base.
    (STRUCT_EQUIV and the SET-merge normalisation removed). Category label informational only. Cells show
    original lines (read-only), plus side-by-side view. Text outside blocks → "(outside blocks)" row.
    Trigger: Site B rule2.sstp — statement moved into ELSE and DR digits changed were reported as expected.
+6. **YAML by structure (2026-09-27).** Plain YAML parsed with PyYAML (required dependency); one row per
+   parameter path, order never matters. Maps by key; list entries by first field (`[opt=x]`), recursively;
+   scalar lists as sets; the same entry in two sections is two rows. Instance blocks (first field
+   `inst`/`instance`/`instance_id`…) pair by position, id row shown as instance-specific. Comments not on
+   every node → one `(comments)` row. Template code / parse error → ordered line diff [CMT-AUD-I002].
+   Trigger: ntr9 values.yaml — `kpi.stats.rotate.interval` in a different position flagged as "no lines".
 
 ---
 

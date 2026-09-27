@@ -142,7 +142,7 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-si
   <p class="lede">Installs into your own home folder in about two minutes. You don't need administrator rights, and nothing is written to system directories. It then audits configuration drift across nodes and merges site settings into new releases.</p>
   <div class="facts">
     <span class="fact">Python <b>3.9+</b></span>
-    <span class="fact">1 required library: <b>openpyxl</b></span>
+    <span class="fact">2 required libraries: <b>openpyxl</b>, <b>PyYAML</b></span>
     <span class="fact">no admin / sudo</span>
     <span class="fact">no network at run time</span>
     <span class="fact">macOS · Linux · Windows</span>
@@ -162,7 +162,7 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-si
 <!-- ───────────────────────────── REQUIREMENTS ───────────────────────────── -->
 <section id="requirements">
   <h2><span class="n">Install</span>Requirements and dependent libraries</h2>
-  <p>This is everything ConfigMergeTool 3.0.1 needs, and nothing more. Checked by installing the wheel into a clean environment: it pulled in exactly <code>openpyxl 3.1.5</code> and <code>et_xmlfile 2.0.0</code>.</p>
+  <p>This is everything ConfigMergeTool 3.0.1 needs, and nothing more. Checked by installing the wheel into a clean environment: it pulled in exactly <code>openpyxl 3.1.5</code>, <code>et_xmlfile 2.0.0</code> and <code>PyYAML 6.0.3</code>.</p>
 
   <div class="tablewrap"><table>
     <thead><tr><th>Component</th><th>Version</th><th>Status</th><th>What it is for</th><th>How it gets installed</th></tr></thead>
@@ -171,6 +171,7 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-si
       <tr><td><strong>pip</strong> and <strong>venv</strong></td><td>ship with Python</td><td><span class="pill req">Required</span></td><td>Install the wheel, and create an environment in your home folder.</td><td>Part of Python. Some Linux distributions ship <code>venv</code> separately (package <code>python3-venv</code>).</td></tr>
       <tr><td><strong>configmergetool</strong></td><td><code>3.0.1</code></td><td><span class="pill req">Required</span></td><td>The tool itself.</td><td><code>configmergetool-3.0.1-py3-none-any.whl</code></td></tr>
       <tr><td><strong>openpyxl</strong></td><td><code>&gt;=3.1, &lt;4.0</code></td><td><span class="pill req">Required</span></td><td>Writes the Excel reports: <code>audit_diffs.xlsx</code> and <code>merge_report_*.xlsx</code>.</td><td>Installed automatically with the wheel.</td></tr>
+      <tr><td><strong>PyYAML</strong></td><td><code>&gt;=6.0</code></td><td><span class="pill req">Required</span></td><td>Reads YAML files so audit can compare them by structure.</td><td>Installed automatically with the wheel.</td></tr>
       <tr><td><strong>et_xmlfile</strong></td><td>any (2.0.0 tested)</td><td><span class="pill req">Required</span></td><td>openpyxl's own dependency.</td><td>Installed automatically with openpyxl.</td></tr>
       <tr><td><strong>chardet</strong></td><td><code>&gt;=5.0</code></td><td><span class="pill opt">Optional · [encoding]</span></td><td>Detects the encoding of files that aren't UTF-8. Without it, the tool falls back to latin-1, which never crashes but may show accented characters wrongly.</td><td><code>pip install "…whl[encoding]"</code></td></tr>
       <tr><td><strong>paramiko</strong></td><td><code>&gt;=3.0</code></td><td><span class="pill no">Not needed yet</span></td><td>Reserved for the planned remote (SSH) audit, <code>--remote-audit</code>.</td><td>Only pulled in by <code>[ssh]</code> or <code>[all]</code>. Skip it.</td></tr>
@@ -242,6 +243,7 @@ bin/chardetect                 <span class="c">← installed by chardet ([encodi
 lib/python3.X/site-packages/
   configmerge/                 <span class="c">← ConfigMergeTool's code</span>
   openpyxl/   et_xmlfile/      <span class="c">← required libraries</span>
+  yaml/                        <span class="c">← required library (PyYAML)</span>
   chardet/                     <span class="c">← optional library ([encoding])</span>
   *.dist-info/                 <span class="c">← package records pip uses to upgrade/uninstall</span>
 pyvenv.cfg                     <span class="c">← names the Python this folder was created from</span></pre></div>
@@ -337,13 +339,13 @@ py -m site --user-site      <span class="c"># the command is in the sibling Scri
 <!-- ───────────────────────────── C: OFFLINE ───────────────────────────── -->
 <section id="offline">
   <h2>C · Install on a server without internet access</h2>
-  <p>Production nodes often can't reach the internet. Download the four files once on a connected machine, copy the folder to the server, and install from it. This procedure was tested with <code>--no-index</code>, so pip never contacts a package index.</p>
+  <p>Production nodes often can't reach the internet. Download the wheel and its libraries once on a connected machine, copy the folder to the server, and install from it. This procedure was tested with <code>--no-index</code>, so pip never contacts a package index.</p>
   <ol class="steps">
     <li><strong>On a connected machine</strong>, collect the wheel and its libraries into one folder:
       <div class="cmd"><div class="cap">connected machine<button class="copy">Copy</button></div><pre>mkdir wheelhouse
 cp configmergetool-3.0.1-py3-none-any.whl wheelhouse/
 python3 -m pip download -d wheelhouse "wheelhouse/configmergetool-3.0.1-py3-none-any.whl[encoding]"</pre></div>
-      The folder then holds <code>configmergetool-3.0.1-py3-none-any.whl</code>, <code>openpyxl-3.1.5-py2.py3-none-any.whl</code>, <code>et_xmlfile-2.0.0-py3-none-any.whl</code>, and a <code>chardet-…whl</code>.</li>
+      The folder then holds <code>configmergetool-3.0.1-py3-none-any.whl</code>, <code>openpyxl-3.1.5-py2.py3-none-any.whl</code>, <code>et_xmlfile-2.0.0-py3-none-any.whl</code>, a <code>PyYAML-…whl</code>, and a <code>chardet-…whl</code>.</li>
     <li><strong>Copy</strong> the whole <code>wheelhouse</code> folder to the server, for example with <code>scp -r wheelhouse user@server:~/</code>.</li>
     <li><strong>On the server</strong>, install into your home folder without touching the network:
       <div class="cmd"><div class="cap">server<button class="copy">Copy</button></div><pre>[ -x ~/venv/bin/python ] || python3 -m venv ~/venv
@@ -352,8 +354,8 @@ python3 -m pip download -d wheelhouse "wheelhouse/configmergetool-3.0.1-py3-none
       Then link the command onto your PATH as in <a href="#venv">method A</a> step 3.</li>
   </ol>
   <div class="note warn">
-    <strong>chardet is built per platform</strong>
-    <p>openpyxl, et_xmlfile and ConfigMergeTool are pure-Python wheels (<code>py3-none-any</code>), so they install on any OS. The chardet wheel you download matches the downloading machine: a Mac downloads a <code>macosx_arm64</code> build, for example. For a Linux or Windows server, either run the download on a machine with the same OS and Python version, or tell pip the target, for example <code>--platform manylinux2014_x86_64 --python-version 3.11 --only-binary=:all:</code>.</p>
+    <strong>PyYAML and chardet are built per platform</strong>
+    <p>openpyxl, et_xmlfile and ConfigMergeTool are pure-Python wheels (<code>py3-none-any</code>), so they install on any OS. The PyYAML and chardet wheels you download match the downloading machine: a Mac downloads a <code>macosx_arm64</code> build, for example. For a Linux or Windows server, either run the download on a machine with the same OS and Python version, or tell pip the target, for example <code>--platform manylinux2014_x86_64 --python-version 3.11 --only-binary=:all:</code>.</p>
     <p>If chardet doesn't fit, leave out <code>[encoding]</code>. The tool still works, reading files that aren't UTF-8 as latin-1.</p>
   </div>
 </section>
@@ -363,7 +365,7 @@ python3 -m pip download -d wheelhouse "wheelhouse/configmergetool-3.0.1-py3-none
   <h2>D · Run from the source folder</h2>
   <p>Useful for testing a copy of the repository. openpyxl still has to be available, so install it into a home-folder venv and run the script with that venv's Python:</p>
   <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>[ -x ~/venv/bin/python ] || python3 -m venv ~/venv
-~/venv/bin/pip install -r requirements.txt chardet
+~/venv/bin/pip install -r requirements.txt chardet   <span class="c"># openpyxl, PyYAML</span>
 ~/venv/bin/python ConfigMergeTool.py --version</pre></div>
   <p><code>ConfigMergeTool.py</code>, <code>python -m configmerge</code> and <code>configmergetool</code> behave identically. A source copy is only as current as its checkout: run <code>git pull</code> to pick up new releases.</p>
 </section>
@@ -378,7 +380,8 @@ configmergetool --help | head    <span class="c"># usage: configmergetool [-h] .
 <span class="c"># chardet          7.x    (only with [encoding])
 # configmergetool  3.0.1
 # et_xmlfile       2.0.0
-# openpyxl         3.1.5</span></pre></div>
+# openpyxl         3.1.5
+# PyYAML           6.0.3</span></pre></div>
 </section>
 
 <!-- ───────────────────────────── UPGRADE ───────────────────────────── -->
@@ -440,7 +443,8 @@ configmergetool --audit-config-file audit.json \
       <tr><td><code>.properties .cfg .ini .conf</code></td><td>Key by key, section by section, against the first node that has the file. Commented-out keys count as present (commented).</td></tr>
       <tr><td><code>.json</code></td><td>Value by value, by dotted path (<code>server.port</code>).</td></tr>
       <tr><td><code>.sstp</code></td><td>Routing-rule blocks, compared on their original text across all nodes. Only whitespace is ignored; comments count. A block missing on a node and changes outside any block are mismatches. The row label (VALUE, ORDER, TEXT_DIFF, BLOCK_ABSENT) is informational only.</td></tr>
-      <tr><td>yaml, tpl, xml, txt, md, sh and other text</td><td>Whitespace is ignored. When content differs, each <strong>changed block of lines</strong> becomes one mismatch row (new in 3.0).</td></tr>
+      <tr><td><code>.yaml .yml</code> (e.g. Helm <code>values.yaml</code>)</td><td>By structure, one row per parameter, so order never matters. Maps are matched by key; list entries by their first field (<code>appcfg.props[opt=kpi.stats.rotate.interval].val</code>); plain value lists as sets. The same entry in two sections is two rows. Instance blocks (<code>- inst: 2</code>) pair by position, and a differing id shows as instance-specific. Comments on only some nodes get one <em>(comments)</em> row. Files with template code (<code>{{ }}</code>) or invalid YAML use the line comparison below.</td></tr>
+      <tr><td>tpl, xml, txt, md, sh and other text</td><td>Whitespace is ignored. When content differs, each <strong>changed block of lines</strong> becomes one mismatch row (new in 3.0).</td></tr>
       <tr><td>Binaries (jar, tgz, crt, …)</td><td>SHA-256 checksum and size. Excluded unless your filter file lists their extension.</td></tr>
     </tbody>
   </table></div>
