@@ -1208,14 +1208,16 @@ class AuditEngine:
         absent_count       = len(all_nodes) - len(present_in)
         warnings: List[str] = []
 
-        # Side-by-side view: one line block per differing row, in the base node's line order
+        # Side-by-side view: one line block per differing row, in the base node's line order.
+        # A node without the row gets a marker after the nearest preceding row it does have.
+        order = list(paths)
+        position = {path: i for i, path in enumerate(order)}
+
         def anchor(node: str, path: str) -> int:
-            spans = parsed[node][1]
-            while path:
-                cut = max(path.rfind("."), path.rfind("["))
-                path = path[:cut] if cut > 0 else ""
-                if path in spans:
-                    return spans[path][-1]
+            node_params = parsed[node][0]
+            for prev in reversed(order[:position[path]]):
+                if prev in node_params:
+                    return node_params[prev][1][-1]
             return 0
 
         line_blocks: List[dict] = []

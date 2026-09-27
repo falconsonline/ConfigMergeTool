@@ -1386,6 +1386,10 @@ Right panel — parameter table:
     - Comments that only some nodes have are listed in one "(comments)" row.
   Rows are grouped under their top-level key; the side-by-side view shows the
   file with each row's lines highlighted.  YAML rows are read-only.
+  With "Show differences only" each node's column shows its own changed lines
+  (3 lines of context, every line at most once, in that node's order) under a
+  label naming the rows; a row a node lacks shows "<row> -- not on this node"
+  after the nearest row that node has.  The table lines the rows up.
   A YAML file with template code ({{ }}, Helm templates) or that YAML cannot
   parse on any node is compared line by line as above [CMT-AUD-I002].
   KV files (.properties / .cfg / .ini / .conf) are compared section by

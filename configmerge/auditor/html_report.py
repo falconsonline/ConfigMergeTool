@@ -366,6 +366,9 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 .rl-hl{background:#fff3c4}
 .rl-hl .rl-no{color:#b26a00;font-weight:600}
 .rl-none{color:#b26a00;font-style:italic;background:#fdf6e3}
+.rl-gap{color:#888;font-size:11px;font-style:italic;padding:3px 10px;background:#f5f6f8}
+.rl-cap{font-family:monospace;font-size:10.5px;font-weight:600;color:#1e2a3a;background:#eef1f7;
+        padding:2px 10px;border-top:1px solid #dde3ed;white-space:normal;word-break:break-all}
 .raw-diff .hunk-hdr td{background:#eef1f7;color:#1e2a3a;font-family:monospace;font-size:11px;
                        font-weight:600;padding:3px 14px;border-top:1px solid #dde3ed}
 .raw-diff .hunk-gap td{color:#888;font-size:11px;font-style:italic;padding:3px 14px;background:#f5f6f8}
@@ -1391,6 +1394,7 @@ function renderRawSideBySide(file, idx) {
 // lined up across nodes; unchanged stretches collapse into a gap row.
 const RAW_CTX = 3;
 function renderTextHunks(file, idx, marked) {
+  if (file.type === 'yaml') return renderYamlRuns(file, idx, marked);
   let nodes = file.presentIn;
   let text  = {};
   nodes.forEach(n => { text[n] = ((file.rawContent||{})[n] || '').split('\n'); });
@@ -1411,11 +1415,8 @@ function renderTextHunks(file, idx, marked) {
       }
     });
     let prev = hunks[hunks.length - 1];
-    // Merge with the previous hunk when their windows touch on any node (text blocks are in
-    // line order on every node). YAML rows can sit in a different order per node, so they
-    // merge only when their windows touch on every node.
-    let touches = n => win[n][0] <= prev.win[n][1] + 1 && prev.win[n][0] <= win[n][1] + 1;
-    if (prev && (file.type === 'yaml' ? nodes.every(touches) : nodes.some(n => win[n][0] <= prev.win[n][1] + 1))) {
+    // Merge with the previous hunk when their windows touch on any node
+    if (prev && nodes.some(n => win[n][0] <= prev.win[n][1] + 1)) {
       nodes.forEach(n => {
         prev.win[n]  = [Math.min(prev.win[n][0], win[n][0]), Math.max(prev.win[n][1], win[n][1])];
         prev.gaps[n] = prev.gaps[n].concat(gaps[n]);
@@ -1456,6 +1457,57 @@ function renderTextHunks(file, idx, marked) {
   if (hunks.length && nodes.some(n => end[n] - last[n] > 1)) out += gapRow(last, end);
   if (!hunks.length) out = `<tr class="hunk-gap"><td colspan="${colspan}">No changed lines.</td></tr>`;
   return out;
+}
+
+// YAML rows sit in a different order on each node, so blocks cannot be lined up across nodes
+// without repeating lines. Each node's column instead shows its own changed lines with RAW_CTX
+// lines of context, merged in its own line order (every line at most once); the parameter
+// table above lines the rows up.
+function renderYamlRuns(file, idx, marked) {
+  let cells = file.presentIn.map(n => {
+    let text = ((file.rawContent || {})[n] || '').split('\n'), len = text.length;
+    let wins = [], missing = {};
+    _lineBlocks(file).forEach(b => {
+      let lns = ((b.changed || b.lines || {})[n]) || [];
+      if (lns.length) {
+        wins.push({a: Math.max(1, Math.min(...lns) - RAW_CTX), b: Math.min(len, Math.max(...lns) + RAW_CTX), key: b.key});
+      } else if (b.anchors && n in b.anchors) {
+        let at = b.anchors[n];
+        (missing[at] = missing[at] || []).push(b.key);
+        wins.push({a: Math.max(1, at - RAW_CTX + 1), b: Math.max(1, Math.min(len, at + RAW_CTX)), key: b.key});
+      }
+    });
+    wins.sort((x, y) => x.a - y.a);
+    let runs = [];
+    wins.forEach(w => {
+      let r = runs[runs.length - 1];
+      if (r && w.a <= r.b + 1) {
+        r.b = Math.max(r.b, w.b);
+        if (!r.keys.includes(w.key)) r.keys.push(w.key);
+      } else {
+        runs.push({a: w.a, b: w.b, keys: [w.key]});
+      }
+    });
+    let hl = marked[n] || new Set(), body = '', last = 0;
+    let gap = cnt => cnt > 0 ? `<div class="rl-gap">&#8943; ${cnt} unchanged line${cnt === 1 ? '' : 's'}</div>` : '';
+    let absent = at => (missing[at] || []).map(k =>
+      `<div class="rl rl-none"><span class="rl-no">&#8709;</span>${esc(k)} &mdash; not on this node</div>`).join('');
+    runs.forEach(r => {
+      body += gap(r.a - last - 1);
+      body += `<div class="rl-cap">${r.keys.slice(0, 3).map(esc).join(', ')}` +
+              `${r.keys.length > 3 ? ` +${r.keys.length - 3} more` : ''}</div>`;
+      if (r.a === 1) body += absent(0);
+      for (let i = r.a; i <= r.b; i++) {
+        body += `<div class="rl${hl.has(i) ? ' rl-hl' : ''}" id="rd-${idx}-${eid(n)}-${i}">` +
+                `<span class="rl-no">${i}</span>${esc(text[i - 1]) || ' '}</div>` + absent(i);
+      }
+      last = r.b;
+    });
+    body += gap(len - last);
+    if (!runs.length) body = `<div class="rl-gap">No changed lines on this node.</div>`;
+    return `<td class="raw-col"><div class="raw-content raw-lines">${body}</div></td>`;
+  }).join('');
+  return `<tr>${cells}</tr>`;
 }
 
 function _noLine(after) {

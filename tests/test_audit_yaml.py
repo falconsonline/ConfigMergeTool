@@ -145,3 +145,11 @@ def test_template_and_invalid_yaml_fall_back_to_line_diff(tmp_path):
     assert any("CMT-AUD-I002" in w for w in tpl.warnings)
     bad = _compare(tmp_path / "b", {"a": "a: [1, 2\n", "b": "a: [1, 3\n"})
     assert bad.file_type == "text" and any("CMT-AUD-I002" in w for w in bad.warnings)
+
+
+def test_missing_top_level_key_is_anchored_after_its_predecessor(tmp_path):
+    # the side-by-side view must not place it "before L1" (2026-09-27)
+    af = _compare(tmp_path, {"a": "name: x\nlogs: /opt\ntimezone: UTC\nport: 1\n",
+                             "b": "name: x\nlogs: /opt\nport: 2\n"})
+    blk = next(b for b in af.line_blocks if b["key"] == "timezone")
+    assert blk["anchors"] == {"b": 2}
