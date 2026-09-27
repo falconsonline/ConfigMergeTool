@@ -930,6 +930,12 @@ Auto-detected suffixes / patterns (case-insensitive):
     fsmapp_240226.properties       ->  original fsmapp.properties
     dbwriter_bkp040322.cfg         ->  original dbwriter.cfg
   Version suffixes such as _v2 are NOT backups (gtpproxy_v2.mib is audited).
+  Helm values files: values.yaml is the final version.  Any other file whose
+  name contains "values" (values_DR.yaml, unedit_values.yaml, values_DRA1.yml,
+  values.yamlbck, ...) is skipped as a backup when a values.yaml sits in the
+  same folder (reason "values_backup").  values.schema.json is part of the
+  chart and is audited.  To audit one of them anyway, list it in
+  "no_skip_files".
 
 Heuristic:
   A file is only skipped as a backup when BOTH conditions are true:

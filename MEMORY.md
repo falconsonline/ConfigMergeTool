@@ -141,6 +141,10 @@ match = otherwise (incl. commented); extra = key not in base.
    `inst`/`instance`/`instance_id`…) pair by position, id row shown as instance-specific. Comments not on
    every node → one `(comments)` row. Template code / parse error → ordered line diff [CMT-AUD-I002].
    Trigger: ntr9 values.yaml — `kpi.stats.rotate.interval` in a different position flagged as "no lines".
+7. **values.yaml is final (2026-09-27).** Any other file whose name contains "values" (case-insensitive) is a
+   backup (`values_backup`) when a `values.yaml` is in the same folder; `values.schema.json` is audited;
+   `no_skip_files` exempts. Sibling requirement chosen as the default (user dismissed that question; all real
+   values* files have a sibling values.yaml).
 
 ---
 

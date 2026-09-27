@@ -71,3 +71,29 @@ def engine(tmp_path):
 def test_backup_detection(engine, name, original, is_backup):
     siblings = {name} | ({original} if original else set())
     assert engine._is_backup_file(name, siblings) is is_backup
+
+
+# Helm charts (agreed 2026-09-27): values.yaml is the final version; every other file whose name
+# contains "values" (values_DR.yaml, unedit_values.yaml, values.yamlbck …) is a backup when a
+# values.yaml sits next to it. values.schema.json is part of the chart and is audited.
+@pytest.mark.parametrize("name, has_values_yaml, reason", [
+    ("values_DR.yaml", True, "values_backup"),
+    ("unedit_values.yaml", True, "values_backup"),
+    ("ntr_dev_values.yaml", True, "values_backup"),
+    ("values_DRA1.yml", True, "values_backup"),
+    ("values.yamlProd", True, "values_backup"),
+    ("Values-old.YAML", True, "values_backup"),
+    ("values.yaml_bkp_160425", True, "backup_suffix"),
+    ("values.yaml", True, None),
+    ("values.schema.json", True, None),
+    ("values_DR.yaml", False, None),
+])
+def test_values_files_next_to_values_yaml_are_backups(engine, name, has_values_yaml, reason):
+    siblings = {name} | ({"values.yaml"} if has_values_yaml else set())
+    assert engine._backup_reason(name, siblings) == reason
+    assert engine._is_backup_file(name, siblings) is (reason is not None)
+
+
+def test_no_skip_files_keeps_a_values_file(tmp_path):
+    engine = AuditEngine(nodes=[], report_dir=str(tmp_path / "reports"), no_skip_files=["values_DR.yaml"])
+    assert engine._backup_reason("values_DR.yaml", {"values.yaml", "values_DR.yaml"}) is None

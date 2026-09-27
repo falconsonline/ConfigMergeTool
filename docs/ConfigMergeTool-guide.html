@@ -449,6 +449,7 @@ configmergetool --audit-config-file audit.json \
     </tbody>
   </table></div>
   <p>Backup copies such as <code>values.yaml_bkp200821</code> are skipped automatically, but only when the original file sits next to them. They're listed in <code>feedback/skipped_backups.json</code>.</p>
+  <p>In a Helm chart, <code>values.yaml</code> is the final version. Any other file whose name contains "values" (<code>values_DR.yaml</code>, <code>unedit_values.yaml</code>, <code>values_DRA1.yml</code>, <code>values.yamlbck</code>, …) is skipped as a backup when a <code>values.yaml</code> sits in the same folder. <code>values.schema.json</code> is part of the chart and is still audited. List a file in <code>no_skip_files</code> to audit it anyway.</p>
 </section>
 
 <!-- ───────────────────────────── MAPPING ───────────────────────────── -->

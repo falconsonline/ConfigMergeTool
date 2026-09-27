@@ -49,6 +49,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 #   server.xml_20240705        →  stem: server.xml
 #   server.xml.bak             →  stem: server.xml
 #   server.xml_backup          →  stem: server.xml
+# Helm chart files named "values…" that are not backups of values.yaml
+_VALUES_KEEP = {"values.yaml", "values.schema.json"}
+
 _BACKUP_SUFFIX_RE = re.compile(
     r"""
     (?:
@@ -501,7 +504,8 @@ class AuditEngine:
                 diffs_so_far += 1
 
             for w in af.warnings:
-                self._log("WARN ", f"{rel_path}: {w}")
+                # Informational notes (CMT-AUD-Innn) go to audit.log only, not the console
+                self._log("INFO " if "[CMT-AUD-I" in w else "WARN ", f"{rel_path}: {w}")
 
             if af.mismatch_count and af.logical_diff_count:
                 line = f"  DIFF({af.mismatch_count:3d}) LDIFF({af.logical_diff_count:3d})  {rel_path}"
@@ -683,11 +687,12 @@ class AuditEngine:
             dir_rel = '/'.join(rel.split('/')[:-1])
             siblings = dir_files.get(dir_rel, set())
 
-            if self._is_backup_file(fname, siblings):
+            reason = self._backup_reason(fname, siblings)
+            if reason:
                 self._skipped_backups.append({
                     "rel_path":  rel,
                     "abs_path":  abs_path,
-                    "reason":    "backup_suffix",
+                    "reason":    reason,
                     "base_dir":  base_dir,
                 })
                 continue
@@ -846,23 +851,34 @@ class AuditEngine:
     # ------------------------------------------------------------------
 
     def _is_backup_file(self, fname: str, siblings: Set[str]) -> bool:
-        """Return True when *fname* looks like a backup of another file in *siblings*.
+        """Return True when *fname* looks like a backup of another file in *siblings*."""
+        return self._backup_reason(fname, siblings) is not None
 
-        Skipping is suppressed when the filename is in ``self._no_skip_files``.
+    def _backup_reason(self, fname: str, siblings: Set[str]) -> Optional[str]:
+        """Why *fname* is skipped as a backup ("backup_suffix" / "values_backup"), or None.
+
+        Skipping is suppressed when the filename is in ``self._no_skip_files``, and a file is
+        only ever a backup when its original actually exists next to it.
         """
         if fname in self._no_skip_files:
-            return False
+            return None
         # Marker after the full name: fsmapp.properties_bkp200821 → fsmapp.properties
         m = _BACKUP_SUFFIX_RE.search(fname)
         if m and fname[: m.start()] and fname[: m.start()] in siblings:
-            return True
+            return "backup_suffix"
         # Marker before the extension (F-025): fsmapp_240226.properties → fsmapp.properties
         root, ext = os.path.splitext(fname)
         m = _BACKUP_SUFFIX_RE.search(root) if ext else None
         if m and root[: m.start()] and root[: m.start()] + ext in siblings:
-            return True
-        # Only ever a backup when the original actually exists next to it
-        return False
+            return "backup_suffix"
+        # Helm charts (2026-09-27): values.yaml is the final version; any other file whose name
+        # contains "values" next to it is a copy (values_DR.yaml, unedit_values.yaml, …).
+        # values.schema.json belongs to the chart and is audited.
+        lower = fname.lower()
+        if ("values" in lower and lower not in _VALUES_KEEP
+                and any(s.lower() == "values.yaml" for s in siblings)):
+            return "values_backup"
+        return None
 
     # ------------------------------------------------------------------
     # Per-file comparison dispatch
