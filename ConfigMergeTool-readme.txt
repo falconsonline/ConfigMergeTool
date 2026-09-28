@@ -1,5 +1,5 @@
 ================================================================================
- ConfigMergeTool v3.0.1 — User Guide
+ ConfigMergeTool v3.0.2 — User Guide
  Author: Shiju Abraham
 ================================================================================
 
@@ -55,13 +55,13 @@ Step 1 — Create a virtual environment (recommended):
 
 Step 2 — Install from wheel:
 
-  pip install configmergetool-3.0.1-py3-none-any.whl
+  pip install configmergetool-3.0.2-py3-none-any.whl
 
   # With optional auto-encoding detection (recommended for non-UTF-8 sites):
-  pip install "configmergetool-3.0.1-py3-none-any.whl[encoding]"
+  pip install "configmergetool-3.0.2-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-3.0.1-py3-none-any.whl[all]"
+  pip install "configmergetool-3.0.2-py3-none-any.whl[all]"
 
 Step 3 — Verify:
 
@@ -81,8 +81,8 @@ Nothing goes to /usr, /opt, /etc or the system Python's site-packages.
   INSTALL_DIR=~/venv                              # any folder you can write to
   [ -x "$INSTALL_DIR/bin/python" ] || python3 -m venv "$INSTALL_DIR"   # reuse if it exists
   "$INSTALL_DIR/bin/pip" install --no-cache-dir \
-      "configmergetool-3.0.1-py3-none-any.whl[encoding]"
-  "$INSTALL_DIR/bin/configmergetool" --version     # configmergetool 3.0.1
+      "configmergetool-3.0.2-py3-none-any.whl[encoding]"
+  "$INSTALL_DIR/bin/configmergetool" --version     # configmergetool 3.0.2
 
 Resulting layout (Linux/macOS; Windows uses Scripts\ and Lib\ instead):
 
@@ -159,13 +159,13 @@ Step 3 — Activate the virtual environment:
 
 Step 4 — Install from wheel (copy the .whl file to a local folder first):
 
-  pip install configmergetool-3.0.1-py3-none-any.whl
+  pip install configmergetool-3.0.2-py3-none-any.whl
 
   # With optional encoding detection:
-  pip install "configmergetool-3.0.1-py3-none-any.whl[encoding]"
+  pip install "configmergetool-3.0.2-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-3.0.1-py3-none-any.whl[all]"
+  pip install "configmergetool-3.0.2-py3-none-any.whl[all]"
 
 Step 5 — Verify:
 
@@ -183,20 +183,20 @@ spaces must be quoted:
  UPGRADING FROM A PREVIOUS VERSION
 --------------------------------------------------------------------------------
 
-To upgrade to a new .whl (e.g. from 3.0.0 to 3.0.1), activate your virtual
+To upgrade to a new .whl (e.g. from 3.0.1 to 3.0.2), activate your virtual
 environment and run pip with --upgrade:
 
   # Linux / macOS
   source ~/venv/bin/activate
-  pip install --upgrade configmergetool-3.0.1-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.2-py3-none-any.whl
 
   # Windows (Command Prompt)
   %USERPROFILE%\venv\Scripts\activate.bat
-  pip install --upgrade configmergetool-3.0.1-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.2-py3-none-any.whl
 
   # Windows (PowerShell)
   %USERPROFILE%\venv\Scripts\Activate.ps1
-  pip install --upgrade configmergetool-3.0.1-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.2-py3-none-any.whl
 
 Confirm the new version is active:
   configmergetool --version
@@ -206,6 +206,36 @@ To check what is currently installed:
 
 To list all installed packages in the environment:
   pip list
+
+--------------------------------------------------------------------------------
+ OFFLINE INSTALL ON RHEL 8 / RHEL 9 (no internet on the server)
+--------------------------------------------------------------------------------
+
+Use the bundle  configmergetool-3.0.2-rhel8-9-offline.tar.gz  (attached to
+the GitHub release).  It holds the tool and every library it needs, built
+for RHEL 8 and 9 on x86_64 and aarch64 with Python 3.9, 3.11 or 3.12:
+  configmergetool 3.0.2, openpyxl 3.1.5, et_xmlfile 2.0.0, PyYAML 6.0.3,
+  chardet (7.6.0 for Python 3.11/3.12, 5.2.0 for Python 3.9)
+No root rights are needed; nothing is written outside the install folder.
+
+  Python: RHEL 8's default python3 is 3.6 (too old).  The administrator
+  installs one once:  sudo dnf install python39   (or python3.11/python3.12).
+  RHEL 9's default python3 is 3.9 and works as is.
+
+  tar xzf configmergetool-3.0.2-rhel8-9-offline.tar.gz
+  cd configmergetool-3.0.2-rhel8-9-offline
+  ./install.sh                         # into ~/configmergetool
+  ./install.sh /opt/apps/cmt           # or any folder you can write to
+  ~/configmergetool/bin/configmergetool --version     # configmergetool 3.0.2
+
+  install.sh picks the newest Python 3.9+ it finds (set PYTHON=... to
+  choose), creates a virtual environment and installs from the bundled
+  wheels with pip --no-index.  On RHEL 8 with Python 3.11/3.12, if it
+  reports that the environment could not be created, the system libraries
+  are older than the Python package: sudo dnf update expat.
+
+  Tested with the network cut off on Rocky Linux 8.9 and 9.3 (x86_64 and
+  aarch64) with Python 3.9, 3.11 and 3.12, including an audit and a merge.
 
 --------------------------------------------------------------------------------
  INSTALLATION OPTION B — RUN FROM SOURCE (no install needed)
@@ -1858,6 +1888,20 @@ DON'T:
 ================================================================================
  VERSION HISTORY
 ================================================================================
+
+v3.0.2 (2026-09-28) — YAML by structure, values backups, YAML merge
+  + Audit: YAML files (Helm values.yaml) compared by structure, one row per
+    parameter; entries in a different order are no longer flagged; instance
+    blocks paired by position; comment changes in one "(comments)" row
+  + Audit: values.yaml is the final version -- other values* files next to
+    it are skipped as backups (values.schema.json is audited)
+  + Audit: YAML side-by-side view shows every line once, per node
+  + Merge: YAML merged with site values winning (was: release copied and
+    site values lost); layout and comments of the release file kept
+  + Merge: backup copies are no longer merged or deployed
+  + _bck / _bk recognised as backup markers
+  + PyYAML is now a required dependency; offline bundle for RHEL 8/9
+  + New codes: CMT-AUD-I002, CMT-MRG-W018, CMT-MRG-W019, CMT-MRG-I004
 
 v3.0.1 (2026-09-25) — Audit display accuracy
   + Audit: "Show differences only" also trims the side-by-side file view to
