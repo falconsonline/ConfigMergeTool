@@ -145,6 +145,12 @@ match = otherwise (incl. commented); extra = key not in base.
    backup (`values_backup`) when a `values.yaml` is in the same folder; `values.schema.json` is audited;
    `no_skip_files` exempts. Sibling requirement chosen as the default (user dismissed that question; all real
    values* files have a sibling values.yaml).
+8. **Merge YAML, base wins (2026-09-28).** YAML merged like KV/JSON via the audit's path model; release text
+   edited in place (layout/comments kept). A site value that cannot be placed (inline/empty release section,
+   type differs) is not forced → YAML_NOT_MERGED (W018). Templates/invalid YAML → release copy, W019 when the
+   site differs. Backup copies are skipped in merge too (BACKUP_FILE_SKIPPED, I004); `bck`/`bk` are backup
+   markers. Trigger: merge copied release values.yaml verbatim (72 site values lost, 67 site-only dropped
+   on PROD→DR) and deployed 19 backup copies.
 
 ---
 

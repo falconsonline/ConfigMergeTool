@@ -526,6 +526,8 @@ configmergetool --base-dir base --release-dirs release --output-dir output</pre>
     <li><strong>Base values win.</strong> A key in both folders takes the base value. A base-only key is added (unless <code>--exclude-params-in-baseonlyconfig</code> is set), and a release-only key is kept.</li>
     <li>Release-only files are copied to the output. Files named differently in base and release are paired with <code>--mapping-file</code> using <code>base/path = release/path</code> lines.</li>
     <li>Use <code>--copy-baseonlyconfigfile</code> for files to copy verbatim from base, such as keystores and licences.</li>
+    <li><strong>YAML files</strong> (Helm <code>values.yaml</code>) are merged the same way: a differing value is rewritten with the site value where it stands in the release file, site-only keys and list entries are added in the same section, and the release file's layout and comments are kept. Entry order doesn't matter. A site value that can't be placed (for example into an inline list like <code>pullSecrets: [a]</code>) is left for review (<code>CMT-MRG-W018</code>). Templates with <code>{{ }}</code> keep the release copy.</li>
+    <li><strong>Backup copies</strong> (<code>values_DR.yaml</code>, <code>*.p12_bck1sep</code>, …) are neither merged nor copied to the output; the report lists them.</li>
     <li>Use <code>--base-config-file bases.json</code> to merge several nodes in one run (one pass per base).</li>
     <li><code>--dry-run</code> analyses and reports without writing output.</li>
   </ul>

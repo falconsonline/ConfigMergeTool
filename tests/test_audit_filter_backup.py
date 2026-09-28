@@ -97,3 +97,13 @@ def test_values_files_next_to_values_yaml_are_backups(engine, name, has_values_y
 def test_no_skip_files_keeps_a_values_file(tmp_path):
     engine = AuditEngine(nodes=[], report_dir=str(tmp_path / "reports"), no_skip_files=["values_DR.yaml"])
     assert engine._backup_reason("values_DR.yaml", {"values.yaml", "values_DR.yaml"}) is None
+
+
+@pytest.mark.parametrize("name, original", [
+    ("ota-srv-cert.p12_bck1sep", "ota-srv-cert.p12"),
+    ("server.crt_bck2sep", "server.crt"),
+    ("values.yaml.7-july.bk", "values.yaml"),
+])
+def test_bck_and_bk_markers_are_backups(engine, name, original):
+    # merge validation 2026-09-28: *_bck1sep copies were deployed to the output
+    assert engine._backup_reason(name, {name, original}) is not None

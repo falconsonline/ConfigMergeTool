@@ -183,6 +183,8 @@ def _add_sheet(
             EntryType.REVIEW_COMMENTED_IN_BASE,
             EntryType.REVIEW_COMMENTED_SECTION_IN_BASE,
             EntryType.REVIEW_EMPTY_IN_BASE,
+            EntryType.YAML_NOT_MERGED,
+            EntryType.YAML_RELEASE_COPIED,
         ):
             font_color, fill_color = _C.RED, _C.RED_BG
         elif row_type == EntryType.BASE_ONLY_PARAMETER_ADDED:

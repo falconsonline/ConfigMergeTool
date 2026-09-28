@@ -126,6 +126,7 @@ class MergeConfig:
     dry_run: bool = False
     verbose: bool = False
     three_way_diff: bool = True    # always-on: 3-way Base|Release|Output diff in HTML
+    no_skip_files: List[str] = field(default_factory=list)   # never treated as backup copies
 
     def __post_init__(self) -> None:
         errors: List[str] = []
@@ -292,6 +293,9 @@ class EntryType:
     REVIEW_COMMENTED_IN_BASE            = "REVIEW_COMMENTED_IN_BASE"
     REVIEW_COMMENTED_SECTION_IN_BASE    = "REVIEW_COMMENTED_SECTION_IN_BASE"
     REVIEW_EMPTY_IN_BASE                = "REVIEW_EMPTY_IN_BASE"
+    YAML_NOT_MERGED                     = "YAML_NOT_MERGED"        # a base value/entry could not be applied
+    YAML_RELEASE_COPIED                 = "YAML_RELEASE_COPIED"    # template/invalid YAML: release kept
+    BACKUP_FILE_SKIPPED                 = "BACKUP_FILE_SKIPPED"    # backup copy not merged or deployed
 
     # All types that should trigger a non-zero exit code in CI
     CRITICAL_TYPES: Set[str] = {

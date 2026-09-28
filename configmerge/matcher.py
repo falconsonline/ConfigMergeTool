@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from .models import FileMatch, MergeConfig
 from .logger import log_structured
-from .utils import safe_realpath
+from .utils import backup_reason, safe_realpath
 
 
 class FileMatcher:
@@ -261,7 +261,9 @@ class FileMatcher:
                                 f"file skipped — add a --mapping-file entry to resolve",
                             )
 
-                    if not base_paths and not ambiguous:
+                    # Backup copies are skipped (and reported) by the engine, not copied
+                    if (not base_paths and not ambiguous
+                            and not backup_reason(f, files, self.config.no_skip_files)):
                         log_structured(self.logger, "WARNING", "FILE", "NO_MATCH",
                                        rel_path, f, "no matching file in base — copied from release")
 

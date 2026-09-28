@@ -1043,6 +1043,9 @@ _TYPE_CSS = {
     EntryType.COMMA_VALUE_UNION:                   "group",
     EntryType.NAMESPACE_ADAPTED:                   "ns",
     EntryType.API_VERSION_UPGRADED:                "api-upgrade",
+    EntryType.YAML_NOT_MERGED:                     "dup",
+    EntryType.YAML_RELEASE_COPIED:                 "dup",
+    EntryType.BACKUP_FILE_SKIPPED:                 "ns",
 }
 
 

@@ -55,3 +55,4 @@ from . import json_proc   # noqa: E402, F401
 from . import logrotate   # noqa: E402, F401
 from . import generic     # noqa: E402, F401
 from . import sstp        # noqa: E402, F401  — Phase 8: .sstp copy-only processor (MOD-5)
+from . import yaml_proc   # noqa: E402, F401  — .yaml/.yml merged by structure (2026-09-28)

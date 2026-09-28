@@ -68,9 +68,12 @@ CODES: Dict[str, str] = {
     "CMT-MRG-W015": "KV section commented out in base but active in release; review annotation added",
     "CMT-MRG-W016": "JSON empty object/array in base but populated in release; review required ({} takes release keys, [] keeps base)",
     "CMT-MRG-W017": "KV production Java class name replaced by release class; review annotation added",
+    "CMT-MRG-W018": "YAML base value or entry could not be applied to the release layout; release kept, review required",
+    "CMT-MRG-W019": "YAML file has template code or is invalid and the site copy differs; release copied as-is",
     "CMT-MRG-I001": "Mapping: several base files mapped to one release file (first listed wins)",
     "CMT-MRG-I002": "Mapping: one base file mapped to several release files",
     "CMT-MRG-I003": "Base and release differ only in whitespace; release file copied as-is",
+    "CMT-MRG-I004": "Backup copy skipped (backup marker, or values* file next to values.yaml); not merged or deployed",
     # ── Audit mode ──────────────────────────────────────────────────────
     "CMT-AUD-E001": "Node directory not found; audit aborted",
     "CMT-AUD-E002": "File could not be compared (render error)",
@@ -133,6 +136,9 @@ STRUCTURED_CODES: Dict[Tuple[str, str], str] = {
     ("KV",        "REVIEW_CLASS_NAME_FROM_RELEASE"): "CMT-MRG-W017",
     ("XML",       "EMPTY_BASE_OVERRIDE"):        "CMT-MRG-E013",
     ("JSON",      "EMPTY_BASE_OVERRIDE"):        "CMT-MRG-E014",
+    ("YAML",      "NOT_MERGED"):                 "CMT-MRG-W018",
+    ("YAML",      "RELEASE_COPIED"):             "CMT-MRG-W019",
+    ("FILE",      "BACKUP_SKIPPED"):             "CMT-MRG-I004",
 }
 
 

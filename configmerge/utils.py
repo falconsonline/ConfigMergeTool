@@ -10,7 +10,7 @@ import os
 import re
 import shutil
 import logging
-from typing import Optional
+from typing import Iterable, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -196,3 +196,50 @@ def file_sha256(path: str) -> str:
 def get_tag(elem) -> str:
     """Strip XML namespace from element tag."""
     return elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+
+
+# ---------------------------------------------------------------------------
+# Backup-copy detection (audit and merge)
+# ---------------------------------------------------------------------------
+
+# Helm chart files named "values…" that are not backups of values.yaml
+_VALUES_KEEP = {"values.yaml", "values.schema.json"}
+
+_BACKUP_SUFFIX_RE = re.compile(
+    r"""
+    (?:
+        [_.](?:bkp|bck|bk|backup|orig|org|bak|old|save).*   # _bkp  _bkp_27072024  _bkp200821  _bak17062026  .old
+      | _\d{14}(?:[_.\-].+)?      # _20240727153000  (YYYYMMDDHHmmss)
+      | _\d{8}(?:[_.\-].+)?       # _20240705  _20240705_v2  _27072024
+      | _\d{6}(?:[_.\-].+)?       # _240705  (DDMMYY)
+    )$
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def backup_reason(fname: str, siblings: Iterable[str], no_skip: Iterable[str] = ()) -> Optional[str]:
+    """Why *fname* is a backup copy ("backup_suffix" / "values_backup"), or None.
+
+    A file is only ever a backup when its original exists next to it (*siblings* = the file
+    names in the same folder); names in *no_skip* are never backups.
+    """
+    if fname in no_skip:
+        return None
+    siblings = set(siblings)
+    # Marker after the full name: fsmapp.properties_bkp200821 → fsmapp.properties
+    m = _BACKUP_SUFFIX_RE.search(fname)
+    if m and fname[: m.start()] and fname[: m.start()] in siblings:
+        return "backup_suffix"
+    # Marker before the extension (F-025): fsmapp_240226.properties → fsmapp.properties
+    root, ext = os.path.splitext(fname)
+    m = _BACKUP_SUFFIX_RE.search(root) if ext else None
+    if m and root[: m.start()] and root[: m.start()] + ext in siblings:
+        return "backup_suffix"
+    # Helm charts (2026-09-27): values.yaml is the final version; any other file whose name
+    # contains "values" next to it is a copy (values_DR.yaml, unedit_values.yaml, …).
+    # values.schema.json belongs to the chart and is not a backup.
+    lower = fname.lower()
+    if "values" in lower and lower not in _VALUES_KEEP and any(s.lower() == "values.yaml" for s in siblings):
+        return "values_backup"
+    return None

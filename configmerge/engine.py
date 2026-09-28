@@ -29,7 +29,7 @@ from typing import List, Optional
 from .models import BaseDirConfig, MergeConfig, MergeResult, EntryType, FileProcessResult, ReportEntry
 from .errors import ConfigMergeError, tag
 from .logger import setup_logging, important, log_structured
-from .utils import copy_file, ensure_dir
+from .utils import backup_reason, copy_file, ensure_dir
 from .matcher import FileMatcher
 from .processors import PROCESSOR_REGISTRY, BaseProcessor
 from .processors.generic import GenericProcessor
@@ -148,9 +148,27 @@ class MergeEngine:
             exclude_base_only = config.exclude_base_only,
             dry_run        = config.dry_run,
             verbose        = config.verbose,
+            no_skip_files  = config.no_skip_files,
         )
 
         result = MergeResult(base_name=bdc.name, base_dir=bdc.base_dir)
+
+        def skip_backup(abs_path: str, rel_path: str, side: str) -> bool:
+            """Backup copies (backup markers, values* next to values.yaml) are neither merged nor
+            deployed (2026-09-28); report them once."""
+            folder = os.path.dirname(abs_path)
+            try:
+                siblings = os.listdir(folder)
+            except OSError:
+                return False
+            reason = backup_reason(os.path.basename(abs_path), siblings, config.no_skip_files)
+            if not reason:
+                return False
+            result.report.append(ReportEntry(type=EntryType.BACKUP_FILE_SKIPPED, file=rel_path,
+                                             element=side, old=reason, new="not merged or deployed"))
+            log_structured(logger, "INFO", "FILE", "BACKUP_SKIPPED", rel_path, side,
+                           f"{side} backup copy ({reason}) — not merged or deployed")
+            return True
 
         # ── File matching ────────────────────────────────────────────────
         matcher = FileMatcher(base_config, logger)
@@ -182,6 +200,11 @@ class MergeEngine:
 
         # ── Process matched files ────────────────────────────────────────
         for file_match in matcher.matches:
+            if skip_backup(os.path.join(file_match.release_dir, file_match.rel_path),
+                           file_match.rel_path, "release"):
+                for bp in file_match.base_paths:
+                    result.base_only_files.discard(bp)
+                continue
             if file_match.ambiguous:
                 result.report.append(ReportEntry(
                     type=EntryType.AMBIGUOUS_MATCH_SKIPPED,
@@ -284,6 +307,11 @@ class MergeEngine:
                         result.base_contents[rel_file] = f.read()
                 except Exception:
                     pass
+
+        # Base-only backup copies are not reported as unmatched base files
+        for bp in sorted(result.base_only_files):
+            if skip_backup(os.path.join(matcher.base_dir, bp), bp, "base"):
+                result.base_only_files.discard(bp)
 
         # ── Per-base Excel report ────────────────────────────────────────
         xlsx_path = write_excel(result, base_config, base_report_dir, bdc.name)

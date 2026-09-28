@@ -308,7 +308,7 @@ def _main(argv=None) -> int:
     # Build base_configs
     try:
         if args.base_config_file:
-            base_configs, _, _ = _load_base_configs(args.base_config_file)
+            base_configs, no_skip_files, _ = _load_base_configs(args.base_config_file)
             config = MergeConfig(
                 release_dirs      = args.release_dirs,
                 output_dir        = args.output_dir,
@@ -316,6 +316,7 @@ def _main(argv=None) -> int:
                 exclude_base_only = args.exclude_params_in_baseonlyconfig,
                 dry_run           = args.dry_run,
                 verbose           = args.verbose,
+                no_skip_files     = no_skip_files,
             )
         else:
             if not args.base_dir:

@@ -916,12 +916,16 @@ CMT-CLI-E014 (exit 2).  Planned format, for reference only:
  BACKUP FILE AUTO-DETECTION
 ================================================================================
 
-The auditor automatically detects and skips backup files based on their
-filename patterns and whether an active counterpart exists in the same
-directory.
+The auditor and merge automatically detect and skip backup files based on
+their filename patterns and whether an active counterpart exists in the same
+directory.  In merge mode a backup copy (base or release) is neither merged
+nor copied to the output; it is listed as BACKUP_FILE_SKIPPED in the report
+[CMT-MRG-I004].  For --base-config-file runs, "no_skip_files" in the base
+config works the same way.
 
 Auto-detected suffixes / patterns (case-insensitive):
-  _bkp / .bkp / _bak / .bak / _backup / _orig / _org / _old / .old / _save
+  _bkp / .bkp / _bck / _bk / .bk / _bak / .bak / _backup / _orig / _org /
+  _old / .old / _save
     followed by anything or nothing:  _bkp  _bkp_27072024  _bkp200821
                                       _bak17062026  _bkpprobetrouleshoot
   _DDMMYY  _DDMMYYYY  _YYYYMMDD  _YYYYMMDDHHmmss  (optionally followed by _...)
@@ -1182,6 +1186,28 @@ Reports and log ARE written to: reports/run_YYYYMMDD_HHMMSS/
     nodes (whitespace ignored, comments count); labelled BLOCK_ABSENT,
     VALUE_DIFF, ORDER_DIFF or TEXT_DIFF.
   See "SSTP AUDIT DIFF" section below.
+
+.yaml / .yml  (e.g. Helm values.yaml)
+-------------------------------------
+  Merged by structure, base values win -- the same rules as KV and JSON:
+    - A value that differs is rewritten with the site value where it stands
+      in the release file (BASE_TO_RELEASE_REPLACED).
+    - A site-only map key or list entry is copied from the site file into the
+      same section of the release file, with the release's indentation
+      (BASE_ONLY_PARAMETER_ADDED; not added with
+      --exclude-params-in-baseonlyconfig).
+    - Release-only parameters are kept (RELEASE_ONLY_PARAMETER_ADDED).
+  Parameters are matched as in audit mode (maps by key, list entries by their
+  first field, instance blocks by position), so the order of entries never
+  matters.  The release file's layout and comments are kept.
+  A site value that cannot be written into the release layout (the release
+  section is written inline, e.g. "pullSecrets: [a]", or empty, or the value
+  is a section in one file and a single value in the other) is NOT forced:
+  the release value stays and YAML_NOT_MERGED asks for review
+  [CMT-MRG-W018].
+  Files with template code ({{ }}, Helm templates) or invalid YAML keep the
+  release copy; when the site copy differs this is reported as
+  YAML_RELEASE_COPIED [CMT-MRG-W019].
 
 All other extensions  (Generic)
 --------------------------------
@@ -1668,9 +1694,15 @@ Search logs for the code; codes are never renumbered or reused.
   CMT-MRG-W015   KV section commented out in base but active in release; review annotation added
   CMT-MRG-W016   JSON empty object/array in base but populated in release; review required ({} takes release keys, [] keeps base)
   CMT-MRG-W017   KV production Java class name replaced by release class; review annotation added
+  CMT-MRG-W018   YAML base value or entry could not be applied to the release
+                 layout; release kept, review required
+  CMT-MRG-W019   YAML file has template code or is invalid and the site copy
+                 differs; release copied as-is
   CMT-MRG-I001   Mapping: several base files mapped to one release file (first listed wins)
   CMT-MRG-I002   Mapping: one base file mapped to several release files
   CMT-MRG-I003   Base and release differ only in whitespace; release file copied as-is
+  CMT-MRG-I004   Backup copy skipped (backup marker, or values* file next to
+                 values.yaml); not merged or deployed
   CMT-AUD-E001   Node directory not found; audit aborted
   CMT-AUD-E002   File could not be compared (render error)
   CMT-AUD-W001   Invalid logical_diff_pattern regex ignored

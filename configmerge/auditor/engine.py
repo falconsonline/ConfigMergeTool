@@ -39,35 +39,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-# ---------------------------------------------------------------------------
-# Backup-file detection patterns (Phase 3.2)
-# ---------------------------------------------------------------------------
-# Matches common backup suffixes appended to config filenames in production.
-# Examples detected:
-#   GTPProxy.cfg_bkp_27072024  →  stem: GTPProxy.cfg
-#   fsmapp.properties_bkp      →  stem: fsmapp.properties
-#   server.xml_20240705        →  stem: server.xml
-#   server.xml.bak             →  stem: server.xml
-#   server.xml_backup          →  stem: server.xml
-# Helm chart files named "values…" that are not backups of values.yaml
-_VALUES_KEEP = {"values.yaml", "values.schema.json"}
-
-_BACKUP_SUFFIX_RE = re.compile(
-    r"""
-    (?:
-        [_.](?:bkp|backup|orig|org|bak|old|save).*   # _bkp  _bkp_27072024  _bkp200821  _bak17062026  .old
-      | _\d{14}(?:[_.\-].+)?      # _20240727153000  (YYYYMMDDHHmmss)
-      | _\d{8}(?:[_.\-].+)?       # _20240705  _20240705_v2  _27072024
-      | _\d{6}(?:[_.\-].+)?       # _240705  (DDMMYY)
-    )$
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
-
 from ..errors import tag
 from ..models import BaseDirConfig
 from ..processors.kv import _has_valid_kv_key, _is_kv_line, _split_kv
-from ..utils import open_text, file_sha256
+from ..utils import backup_reason, open_text, file_sha256
 from .file_filter import FileFilter
 from .html_report import _tool_version, write_audit_html
 from .mapping import load_audit_mapping, resolve_mapping
@@ -855,30 +830,8 @@ class AuditEngine:
         return self._backup_reason(fname, siblings) is not None
 
     def _backup_reason(self, fname: str, siblings: Set[str]) -> Optional[str]:
-        """Why *fname* is skipped as a backup ("backup_suffix" / "values_backup"), or None.
-
-        Skipping is suppressed when the filename is in ``self._no_skip_files``, and a file is
-        only ever a backup when its original actually exists next to it.
-        """
-        if fname in self._no_skip_files:
-            return None
-        # Marker after the full name: fsmapp.properties_bkp200821 → fsmapp.properties
-        m = _BACKUP_SUFFIX_RE.search(fname)
-        if m and fname[: m.start()] and fname[: m.start()] in siblings:
-            return "backup_suffix"
-        # Marker before the extension (F-025): fsmapp_240226.properties → fsmapp.properties
-        root, ext = os.path.splitext(fname)
-        m = _BACKUP_SUFFIX_RE.search(root) if ext else None
-        if m and root[: m.start()] and root[: m.start()] + ext in siblings:
-            return "backup_suffix"
-        # Helm charts (2026-09-27): values.yaml is the final version; any other file whose name
-        # contains "values" next to it is a copy (values_DR.yaml, unedit_values.yaml, …).
-        # values.schema.json belongs to the chart and is audited.
-        lower = fname.lower()
-        if ("values" in lower and lower not in _VALUES_KEEP
-                and any(s.lower() == "values.yaml" for s in siblings)):
-            return "values_backup"
-        return None
+        """Why *fname* is skipped as a backup ("backup_suffix" / "values_backup"), or None."""
+        return backup_reason(fname, siblings, self._no_skip_files)
 
     # ------------------------------------------------------------------
     # Per-file comparison dispatch
