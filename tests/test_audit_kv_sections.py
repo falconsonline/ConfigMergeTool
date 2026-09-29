@@ -313,3 +313,14 @@ def test_section_names_keep_their_case_in_data_and_display(tmp_path):
     from configmerge.auditor.html_report import _CSS
     rule = re.search(r"\.section-divider td\{[^}]*\}", _CSS).group(0)
     assert "uppercase" not in rule
+
+
+def test_missing_key_notes_the_section_it_is_in_on_that_node(tmp_path):
+    # Keys stay section-dependent (confirmed 2026-09-29); the report only says where the key is
+    af = _compare(tmp_path, {"n1": "a=1\nsnmp.agent.id=0\n",
+                             "n2": "a=1\n[CouchBase]\nsnmp.agent.id=0\n"})
+    rows = {p.compound: p for p in af.params}
+    assert rows["DEFAULT|snmp.agent.id"].has_mismatch
+    assert rows["DEFAULT|snmp.agent.id"].other_sections == {"n2": ["[CouchBase]"]}
+    assert rows["[CouchBase]|snmp.agent.id"].other_sections == {"n1": ["no section"]}
+    assert rows["DEFAULT|a"].other_sections == {}

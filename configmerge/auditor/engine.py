@@ -72,6 +72,7 @@ class AuditParam:
     dup_values: Dict[str, List[str]] = field(default_factory=dict)  # KV: node -> all active values when duplicated in section
     anchors: Dict[str, int] = field(default_factory=dict)  # text block: node -> line the block sits after, for nodes with no lines in it
     changed: Dict[str, List[int]] = field(default_factory=dict)  # text block: node -> lines that really differ (highlighted)
+    other_sections: Dict[str, List[str]] = field(default_factory=dict)  # KV: node missing the key here -> sections it is in
 
 
 @dataclass
@@ -1246,6 +1247,15 @@ class AuditEngine:
         params  : List[AuditParam] = []
         sections: List[dict]       = []
 
+        # key -> sections it is active in, per node (for the "missing (in [X])" hint; keys stay
+        # section-dependent — confirmed 2026-09-29)
+        key_sections: Dict[str, Dict[str, List[str]]] = {}
+        for n in parsed:
+            idx: Dict[str, List[str]] = {}
+            for (s_name, k) in docs[n].active:
+                idx.setdefault(k, []).append(s_name)
+            key_sections[n] = idx
+
         for sec in _merge_order([docs[n].section_order for n in parsed]):
             holders = [n for n in parsed if sec in docs[n].key_order]
             # A row needs the key active on at least one node
@@ -1296,6 +1306,14 @@ class AuditEngine:
                                if not commented[n] and v is not None}
                 any_missing = any(v is None for v in values.values())
 
+                other_sections = {}
+                for node in present_in:
+                    if values.get(node) is None and node in key_sections:
+                        elsewhere = [("no section" if s_name == KV_DEFAULT_SECTION else s_name)
+                                     for s_name in key_sections[node].get(key, []) if s_name != sec]
+                        if elsewhere:
+                            other_sections[node] = elsewhere
+
                 params.append(AuditParam(
                     compound     = f"{sec}|{key}",
                     section      = sec,
@@ -1305,6 +1323,7 @@ class AuditEngine:
                     has_mismatch = len(active_vals) > 1 or any_missing,
                     lines        = lines,
                     dup_values   = dup_values,
+                    other_sections = other_sections,
                 ))
 
                 for node in holders:
@@ -1455,7 +1474,8 @@ class AuditEngine:
                       present_in: List[str],
                       abs_paths: Dict[str, str],
                       all_nodes: List[str]) -> AuditFile:
-        raw_content: Dict[str, str]          = {}
+        raw_content: Dict[str, str]          = {}   # display copy (cut at _MAX_RAW_BYTES)
+        full_text  : Dict[str, str]          = {}   # compared in full (2026-09-29)
         md5_vals   : Dict[str, Optional[str]] = {}
         exact_md5  : Dict[str, str]           = {}
         warnings   : List[str]               = []
@@ -1467,6 +1487,7 @@ class AuditEngine:
             try:
                 # Use normalised text content for comparison (BUG-B + strip encoding noise)
                 text = open_text(abs_paths[node])
+                full_text[node] = text
                 # Normalise: strip BOM artefacts, CRLF→LF, trailing whitespace per line
                 norm = "\n".join(ln.rstrip() for ln in text.replace("\r\n", "\n").replace("\r", "\n").splitlines())
                 import hashlib as _hl
@@ -1505,9 +1526,10 @@ class AuditEngine:
         params = [param]
 
         # Content differs: list each changed block against the first present node
-        readable = [n for n in present_in if n in raw_content]
+        # (blocks come from the full text: the display copy stops at _MAX_RAW_BYTES)
+        readable = [n for n in present_in if n in full_text]
         if has_mismatch and len(readable) > 1:
-            blocks = _text_blocks({n: raw_content[n] for n in readable}, readable)
+            blocks = _text_blocks({n: full_text[n] for n in readable}, readable)
             if len(blocks) > _MAX_TEXT_BLOCKS:
                 warnings.append(f"{len(blocks)} changed blocks — only the first {_MAX_TEXT_BLOCKS} "
                                 f"are listed [CMT-AUD-W012]")

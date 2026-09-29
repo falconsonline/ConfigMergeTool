@@ -125,3 +125,13 @@ def test_only_lines_that_really_differ_are_highlighted(tmp_path):
     blk = _blocks(af)[0]
     assert blk.lines == {"stg": [2, 3], "prod": [2, 3], "dr": [2, 3]}
     assert blk.changed == {"stg": [2, 3], "prod": [3], "dr": [2]}
+
+
+def test_changes_past_the_display_limit_are_still_listed(tmp_path):
+    # Site A review 2026-09-29: blocks came from the text cut at 512 KB, so later changes were lost
+    filler = "".join(f"line {i}: {'x' * 60}\n" for i in range(9000))    # ~600 KB
+    af = _compare(tmp_path, {"stg": filler + "tail: 1\n", "prod": filler + "tail: 2\n"})
+    blocks = _blocks(af)
+    assert [b.values for b in blocks] == [{"stg": "tail: 1", "prod": "tail: 2"}]
+    assert blocks[0].lines == {"stg": [9001], "prod": [9001]}
+    assert any("CMT-AUD-W006" in w for w in af.warnings)       # display is still truncated

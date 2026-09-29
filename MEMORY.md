@@ -151,6 +151,10 @@ match = otherwise (incl. commented); extra = key not in base.
    site differs. Backup copies are skipped in merge too (BACKUP_FILE_SKIPPED, I004); `bck`/`bk` are backup
    markers. Trigger: merge copied release values.yaml verbatim (72 site values lost, 67 site-only dropped
    on PROD→DR) and deployed 19 backup copies.
+9. **KV keys stay section-dependent (re-confirmed 2026-09-29).** A key in `[X]` on one node and in another
+   section on another is two rows, even when the value matches (Site A dbwriter.cfg: NewLab has `[CouchBase]`
+   at L64, others no header → ~270 keys per side). Only a display hint "missing (in [X])" was added.
+   Same review: text/XML diffs must use the full text, not the 512 KB display copy.
 
 ---
 

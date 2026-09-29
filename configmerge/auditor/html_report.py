@@ -366,6 +366,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;background:#f4f6f9;c
 .rl-hl{background:#fff3c4}
 .rl-hl .rl-no{color:#b26a00;font-weight:600}
 .rl-none{color:#b26a00;font-style:italic;background:#fdf6e3}
+.missing-where{color:#b26a00;font-size:11px;font-style:italic}
+.raw-cut-note{font-weight:normal;color:#b26a00;font-size:11px}
 .rl-gap{color:#888;font-size:11px;font-style:italic;padding:3px 10px;background:#f5f6f8}
 .rl-cap{font-family:monospace;font-size:10.5px;font-weight:600;color:#1e2a3a;background:#eef1f7;
         padding:2px 10px;border-top:1px solid #dde3ed;white-space:normal;word-break:break-all}
@@ -1379,7 +1381,11 @@ function renderRawSideBySide(file, idx) {
     return `<th>${esc(n)}${from ? ` <span class="mapped-from">&#8618; ${esc(from)}</span>` : ''}</th>`;
   }).join('');
 
-  return `<p class="raw-hdr">File Content (side-by-side)</p>
+  let cut = file.presentIn.filter(n => /\[\.\.\.truncated\.\.\.\]\s*$/.test((file.rawContent || {})[n] || ''));
+  let cutNote = cut.length
+    ? ` <span class="raw-cut-note">&mdash; shows the first ${RAW_LIMIT_KB} KB of ${cut.map(esc).join(', ')}; ` +
+      `differences further down are listed in the rows above</span>` : '';
+  return `<p class="raw-hdr">File Content (side-by-side)${cutNote}</p>
      <table class="raw-table raw-full" id="raw-full-${idx}"${showDiffsOnly ? ' style="display:none"' : ''}>
        <thead><tr>${hdrs}</tr></thead>
        <tbody><tr>${cols}</tr></tbody>
@@ -1393,6 +1399,7 @@ function renderRawSideBySide(file, idx) {
 // "Show differences only" view: each changed block with RAW_CTX lines of context,
 // lined up across nodes; unchanged stretches collapse into a gap row.
 const RAW_CTX = 3;
+const RAW_LIMIT_KB = 512;   // engine _MAX_RAW_BYTES
 function renderTextHunks(file, idx, marked) {
   if (file.type === 'yaml') return renderYamlRuns(file, idx, marked);
   let nodes = file.presentIn;
@@ -1440,6 +1447,8 @@ function renderTextHunks(file, idx, marked) {
     out += `<tr class="hunk-hdr"><td colspan="${colspan}">${h.labels.map(esc).join(', ')}</td></tr><tr>`;
     out += nodes.map(n => {
       let hl = marked[n] || new Set(), [a, b] = h.win[n], body = '';
+      if (a > text[n].length)
+        return `<td class="raw-col"><div class="raw-content raw-lines">${_pastDisplay()}</div></td>`;
       let empties = h.gaps[n];
       if (empties.includes(a - 1)) body += _noLine(a - 1);
       for (let i = a; i <= b; i++) {
@@ -1508,6 +1517,10 @@ function renderYamlRuns(file, idx, marked) {
     return `<td class="raw-col"><div class="raw-content raw-lines">${body}</div></td>`;
   }).join('');
   return `<tr>${cells}</tr>`;
+}
+
+function _pastDisplay() {
+  return `<div class="rl rl-none"><span class="rl-no">&#8943;</span>past the ${RAW_LIMIT_KB} KB display limit &mdash; the changed lines are in the row above</div>`;
 }
 
 function _noLine(after) {
@@ -1744,8 +1757,12 @@ function renderCell(file, idx, param, pi, node, nodeIdx, isExpDiff) {
   }
 
   if ((origVal === null || origVal === undefined) && pendVal === undefined) {
+    // Keys are section-dependent; say where the key sits on this node instead (2026-09-29)
+    let elsewhere = ((param.otherSections || {})[node] || []);
+    let where = elsewhere.length
+      ? ` <span class="missing-where" title="On this node the key is in another section">(in ${elsewhere.map(esc).join(', ')})</span>` : '';
     return `<td class="key-missing-cell${colCls}" data-idx="${nodeIdx}">
-      <span class="missing-lbl">&mdash; missing</span>
+      <span class="missing-lbl">&mdash; missing${where}</span>
       <div><button class="add-btn"
         onclick="addKey(${idx},'${esj(param.compound)}','${esj(node)}',${pi})">+ Add</button></div>
     </td>`;
@@ -2690,6 +2707,7 @@ def _serialise_result(result: "AuditResult") -> dict:
                 "dupValues":     p.dup_values,
                 "anchors":       p.anchors,
                 "changed":       p.changed,
+                "otherSections": p.other_sections,
             }
             for p in af.params
         ]

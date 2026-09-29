@@ -1425,6 +1425,9 @@ Right panel — parameter table:
   without lines in a block shows "no line here -- between L<a> and L<a+1>".
   These rows are read-only (download the node's file to edit it).  After 500
   blocks the rest are not listed [CMT-AUD-W012].
+  Files over 512 KB are compared in full; the side-by-side view shows only
+  the first 512 KB [CMT-AUD-W006], so changes further down appear in the
+  rows only (the view says so).
   SSTP routing-rule files are compared block by block; if a node's file has
   no recognisable blocks it is compared as text instead [CMT-AUD-W010].
   YAML files (.yaml / .yml, e.g. Helm values.yaml) are compared by structure,
@@ -1463,6 +1466,10 @@ Right panel — parameter table:
       value is the effective value and is what gets compared; the duplicate
       itself is a warning [CMT-AUD-W007] naming the value used, not a mismatch.
     - Keys before the first header appear under "(no section)".
+    - A key missing from its section on a node, but present in another
+      section of that node's file, shows "-- missing (in [X])" (or "(in no
+      section)"): keys are compared within their section only, the hint
+      just says where the key sits on that node.
     - "Show differences only" still shows a section header when that section
       is absent on a node.
 
