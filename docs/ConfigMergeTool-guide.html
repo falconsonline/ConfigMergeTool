@@ -138,7 +138,7 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-si
 
 <main>
 <header class="hero">
-  <div class="eyebrow">configmergetool 3.0.2 · installation &amp; user guide</div>
+  <div class="eyebrow">configmergetool 3.0.3 · installation &amp; user guide</div>
   <h1>ConfigMergeTool 3.0</h1>
   <p class="lede">Installs into your own home folder in about two minutes. You don't need administrator rights, and nothing is written to system directories. It then audits configuration drift across nodes and merges site settings into new releases.</p>
   <div class="facts">
@@ -149,28 +149,26 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-si
     <span class="fact">macOS · Linux · Windows</span>
   </div>
   <div class="note">
-    <strong>New in 3.0.2</strong>
+    <strong>New in 3.0.3</strong>
     <ul>
-      <li>Audit compares YAML files (Helm <code>values.yaml</code>) by structure: one row per parameter, and entries in a different order are no longer flagged.</li>
-      <li><code>values.yaml</code> is the final version: other <code>values*</code> files next to it are skipped as backups. <code>values.schema.json</code> is still audited.</li>
-      <li>Merge now merges YAML with the site values winning (it used to copy the release file and lose them), and no longer deploys backup copies.</li>
-      <li>PyYAML is a new required library. For servers without internet there is a <a href="#rhel">RHEL 8/9 offline bundle</a>.</li>
+      <li>Large text and XML files (over 512 KB) are compared in full: changes further down the file are now listed too. The side-by-side view still shows the first 512 KB and says so.</li>
+      <li>In .properties / .cfg files, a key that is missing from its section but present in another section on that node shows <em>missing (in [CouchBase])</em>. Keys are still compared within their section.</li>
     </ul>
-    <p>Upgrading from 3.0.1 is a <a href="#upgrade">pip upgrade</a>. Audit totals for YAML files change, because each differing parameter is now its own row.</p>
+    <p>3.0.2 added YAML comparison by structure, <code>values*</code> backups, YAML merge and the <a href="#rhel">RHEL 8/9 offline bundle</a>. Upgrading is a <a href="#upgrade">pip upgrade</a>.</p>
   </div>
 </header>
 
 <!-- ───────────────────────────── REQUIREMENTS ───────────────────────────── -->
 <section id="requirements">
   <h2><span class="n">Install</span>Requirements and dependent libraries</h2>
-  <p>This is everything ConfigMergeTool 3.0.2 needs, and nothing more. Checked by installing the wheel into a clean environment: it pulled in exactly <code>openpyxl 3.1.5</code>, <code>et_xmlfile 2.0.0</code> and <code>PyYAML 6.0.3</code>.</p>
+  <p>This is everything ConfigMergeTool 3.0.3 needs, and nothing more. Checked by installing the wheel into a clean environment: it pulled in exactly <code>openpyxl 3.1.5</code>, <code>et_xmlfile 2.0.0</code> and <code>PyYAML 6.0.3</code>.</p>
 
   <div class="tablewrap"><table>
     <thead><tr><th>Component</th><th>Version</th><th>Status</th><th>What it is for</th><th>How it gets installed</th></tr></thead>
     <tbody>
       <tr><td><strong>Python</strong></td><td><code>3.9</code> or newer</td><td><span class="pill req">Required</span></td><td>Runs the tool.</td><td>Must already be on the machine (see note below).</td></tr>
       <tr><td><strong>pip</strong> and <strong>venv</strong></td><td>ship with Python</td><td><span class="pill req">Required</span></td><td>Install the wheel, and create an environment in your home folder.</td><td>Part of Python. Some Linux distributions ship <code>venv</code> separately (package <code>python3-venv</code>).</td></tr>
-      <tr><td><strong>configmergetool</strong></td><td><code>3.0.2</code></td><td><span class="pill req">Required</span></td><td>The tool itself.</td><td><code>configmergetool-3.0.2-py3-none-any.whl</code></td></tr>
+      <tr><td><strong>configmergetool</strong></td><td><code>3.0.3</code></td><td><span class="pill req">Required</span></td><td>The tool itself.</td><td><code>configmergetool-3.0.3-py3-none-any.whl</code></td></tr>
       <tr><td><strong>openpyxl</strong></td><td><code>&gt;=3.1, &lt;4.0</code></td><td><span class="pill req">Required</span></td><td>Writes the Excel reports: <code>audit_diffs.xlsx</code> and <code>merge_report_*.xlsx</code>.</td><td>Installed automatically with the wheel.</td></tr>
       <tr><td><strong>PyYAML</strong></td><td><code>&gt;=6.0</code></td><td><span class="pill req">Required</span></td><td>Reads YAML files so audit can compare them by structure.</td><td>Installed automatically with the wheel.</td></tr>
       <tr><td><strong>et_xmlfile</strong></td><td>any (2.0.0 tested)</td><td><span class="pill req">Required</span></td><td>openpyxl's own dependency.</td><td>Installed automatically with openpyxl.</td></tr>
@@ -228,11 +226,11 @@ footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-si
 
   <div class="cmd"><div class="cap">macOS / Linux — any folder<button class="copy">Copy</button></div><pre>INSTALL_DIR=~/venv                      <span class="c"># or /home/user/tools/cmt, /data/apps/cmt, …</span>
 [ -x "$INSTALL_DIR/bin/python" ] || python3 -m venv "$INSTALL_DIR"   <span class="c"># reuse it if it already exists</span>
-"$INSTALL_DIR/bin/pip" install --no-cache-dir "configmergetool-3.0.2-py3-none-any.whl[encoding]"
-"$INSTALL_DIR/bin/configmergetool" --version   <span class="c"># configmergetool 3.0.2</span></pre></div>
+"$INSTALL_DIR/bin/pip" install --no-cache-dir "configmergetool-3.0.3-py3-none-any.whl[encoding]"
+"$INSTALL_DIR/bin/configmergetool" --version   <span class="c"># configmergetool 3.0.3</span></pre></div>
   <div class="cmd"><div class="cap">windows powershell — any folder<button class="copy">Copy</button></div><pre>$InstallDir = "$env:USERPROFILE\venv"     <span class="c"># or D:\tools\cmt, …</span>
 if (-not (Test-Path "$InstallDir\Scripts\python.exe")) { py -m venv $InstallDir }
-&amp; "$InstallDir\Scripts\pip.exe" install --no-cache-dir "configmergetool-3.0.2-py3-none-any.whl[encoding]"
+&amp; "$InstallDir\Scripts\pip.exe" install --no-cache-dir "configmergetool-3.0.3-py3-none-any.whl[encoding]"
 &amp; "$InstallDir\Scripts\configmergetool.exe" --version</pre></div>
 
   <h3>What gets written where</h3>
@@ -286,7 +284,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.zshrc &amp;&amp; source 
 <!-- ───────────────────────────── A: VENV ───────────────────────────── -->
 <section id="venv">
   <h2>A · Install into a virtual environment in your home folder</h2>
-  <p>Copy <code>configmergetool-3.0.2-py3-none-any.whl</code> to your machine first. It's in the <code>dist/</code> folder of the source tree and attached to the GitHub release <code>v3.0.2</code>.</p>
+  <p>Copy <code>configmergetool-3.0.3-py3-none-any.whl</code> to your machine first. It's in the <code>dist/</code> folder of the source tree and attached to the GitHub release <code>v3.0.3</code>.</p>
 
   <div class="tabs" role="tablist" data-group="os">
     <button role="tab" aria-selected="true" aria-controls="venv-nix" id="t-venv-nix" data-os="nix">macOS / Linux</button>
@@ -297,13 +295,13 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.zshrc &amp;&amp; source 
       <li>Create the environment in your home folder. Skip this if <code>~/venv</code> already exists; the tool is simply added to it:
         <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>python3 -m venv ~/venv</pre></div></li>
       <li>Install the wheel into it. <code>[encoding]</code> also installs chardet, which is recommended when sites have files that aren't UTF-8:
-        <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>~/venv/bin/pip install "configmergetool-3.0.2-py3-none-any.whl[encoding]"</pre></div></li>
+        <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>~/venv/bin/pip install "configmergetool-3.0.3-py3-none-any.whl[encoding]"</pre></div></li>
       <li>Put the command on your PATH, so you can type <code>configmergetool</code> from any folder. This links it into <code>~/.local/bin</code>, which is in your home folder:
         <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>mkdir -p ~/.local/bin
 ln -sf ~/venv/bin/configmergetool ~/.local/bin/configmergetool
 <span class="c"># If ~/.local/bin is not on your PATH yet (zsh = macOS default; use ~/.bashrc for bash):</span>
 echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.zshrc &amp;&amp; source ~/.zshrc</pre></div></li>
-      <li>Check it: <code>configmergetool --version</code> should print <code>configmergetool 3.0.2</code>.</li>
+      <li>Check it: <code>configmergetool --version</code> should print <code>configmergetool 3.0.3</code>.</li>
     </ol>
     <div class="note"><strong>No activation needed</strong><p>With the link from step 3, you never need to run <code>source …/activate</code>. If you prefer activating, run <code>source ~/venv/bin/activate</code>, then use <code>configmergetool</code> and <code>pip</code> directly; <code>deactivate</code> leaves it.</p></div>
   </div>
@@ -312,11 +310,11 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.zshrc &amp;&amp; source 
       <li>Open <strong>PowerShell</strong> as yourself, not as Administrator, and create the environment in your profile folder (skip this if it already exists):
         <div class="cmd"><div class="cap">powershell<button class="copy">Copy</button></div><pre>py -m venv "$env:USERPROFILE\venv"</pre></div></li>
       <li>Install the wheel, from the folder where you saved it:
-        <div class="cmd"><div class="cap">powershell<button class="copy">Copy</button></div><pre>&amp; "$env:USERPROFILE\venv\Scripts\pip.exe" install "configmergetool-3.0.2-py3-none-any.whl[encoding]"</pre></div></li>
+        <div class="cmd"><div class="cap">powershell<button class="copy">Copy</button></div><pre>&amp; "$env:USERPROFILE\venv\Scripts\pip.exe" install "configmergetool-3.0.3-py3-none-any.whl[encoding]"</pre></div></li>
       <li>Add its <code>Scripts</code> folder to <em>your own</em> PATH. This is a per-user setting, and no admin is needed. Then open a new PowerShell window:
         <div class="cmd"><div class="cap">powershell<button class="copy">Copy</button></div><pre>$dir = "$env:USERPROFILE\venv\Scripts"
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";$dir", "User")</pre></div></li>
-      <li>Check it in the new window: <code>configmergetool --version</code> should print <code>configmergetool 3.0.2</code>.</li>
+      <li>Check it in the new window: <code>configmergetool --version</code> should print <code>configmergetool 3.0.3</code>.</li>
     </ol>
     <div class="note"><strong>Prefer activating?</strong><p>Run <code>&amp; "$env:USERPROFILE\venv\Scripts\Activate.ps1"</code>. If PowerShell refuses to run scripts, allow them for your account only, which needs no Administrator rights: <code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code>. Command Prompt users can run <code>%USERPROFILE%\venv\Scripts\activate.bat</code> instead.</p></div>
   </div>
@@ -326,9 +324,9 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' &gt;&gt; ~/.zshrc &amp;&amp; source 
 <section id="user">
   <h2>B · Install with <code>pip --user</code></h2>
   <p>This installs into your per-user Python folder (see <a href="#choose">where files end up</a>). Use it only when method A isn't an option.</p>
-  <div class="cmd"><div class="cap">macOS / Linux<button class="copy">Copy</button></div><pre>python3 -m pip install --user "configmergetool-3.0.2-py3-none-any.whl[encoding]"
+  <div class="cmd"><div class="cap">macOS / Linux<button class="copy">Copy</button></div><pre>python3 -m pip install --user "configmergetool-3.0.3-py3-none-any.whl[encoding]"
 python3 -m site --user-base   <span class="c"># prints the base folder; the command is in its bin/ subfolder</span></pre></div>
-  <div class="cmd"><div class="cap">windows powershell<button class="copy">Copy</button></div><pre>py -m pip install --user "configmergetool-3.0.2-py3-none-any.whl[encoding]"
+  <div class="cmd"><div class="cap">windows powershell<button class="copy">Copy</button></div><pre>py -m pip install --user "configmergetool-3.0.3-py3-none-any.whl[encoding]"
 py -m site --user-site      <span class="c"># the command is in the sibling Scripts\ folder</span></pre></div>
   <p>If <code>configmergetool</code> isn't found afterwards, add the user <code>bin</code> or <code>Scripts</code> folder to your PATH, the same way as in method A step 3.</p>
   <div class="note warn">
@@ -344,13 +342,13 @@ py -m site --user-site      <span class="c"># the command is in the sibling Scri
   <ol class="steps">
     <li><strong>On a connected machine</strong>, collect the wheel and its libraries into one folder:
       <div class="cmd"><div class="cap">connected machine<button class="copy">Copy</button></div><pre>mkdir wheelhouse
-cp configmergetool-3.0.2-py3-none-any.whl wheelhouse/
-python3 -m pip download -d wheelhouse "wheelhouse/configmergetool-3.0.2-py3-none-any.whl[encoding]"</pre></div>
-      The folder then holds <code>configmergetool-3.0.2-py3-none-any.whl</code>, <code>openpyxl-3.1.5-py2.py3-none-any.whl</code>, <code>et_xmlfile-2.0.0-py3-none-any.whl</code>, a <code>PyYAML-…whl</code>, and a <code>chardet-…whl</code>.</li>
+cp configmergetool-3.0.3-py3-none-any.whl wheelhouse/
+python3 -m pip download -d wheelhouse "wheelhouse/configmergetool-3.0.3-py3-none-any.whl[encoding]"</pre></div>
+      The folder then holds <code>configmergetool-3.0.3-py3-none-any.whl</code>, <code>openpyxl-3.1.5-py2.py3-none-any.whl</code>, <code>et_xmlfile-2.0.0-py3-none-any.whl</code>, a <code>PyYAML-…whl</code>, and a <code>chardet-…whl</code>.</li>
     <li><strong>Copy</strong> the whole <code>wheelhouse</code> folder to the server, for example with <code>scp -r wheelhouse user@server:~/</code>.</li>
     <li><strong>On the server</strong>, install into your home folder without touching the network:
       <div class="cmd"><div class="cap">server<button class="copy">Copy</button></div><pre>[ -x ~/venv/bin/python ] || python3 -m venv ~/venv
-~/venv/bin/pip install --no-index --find-links ~/wheelhouse "configmergetool[encoding]==3.0.2"
+~/venv/bin/pip install --no-index --find-links ~/wheelhouse "configmergetool[encoding]==3.0.3"
 ~/venv/bin/configmergetool --version</pre></div>
       Then link the command onto your PATH as in <a href="#venv">method A</a> step 3.</li>
   </ol>
@@ -364,18 +362,18 @@ python3 -m pip download -d wheelhouse "wheelhouse/configmergetool-3.0.2-py3-none
 <!-- ───────────────────────────── E: RHEL ───────────────────────────── -->
 <section id="rhel">
   <h2>E · RHEL 8 / RHEL 9 offline bundle</h2>
-  <p>For RHEL servers without internet access, the GitHub release has <code>configmergetool-3.0.2-rhel8-9-offline.tar.gz</code>. It contains the tool and every library, built for RHEL 8 and 9 on x86_64 and aarch64 with Python 3.9, 3.11 or 3.12, plus an install script. No root rights are needed.</p>
+  <p>For RHEL servers without internet access, the GitHub release has <code>configmergetool-3.0.3-rhel8-9-offline.tar.gz</code>. It contains the tool and every library, built for RHEL 8 and 9 on x86_64 and aarch64 with Python 3.9, 3.11 or 3.12, plus an install script. No root rights are needed.</p>
   <div class="tablewrap"><table>
     <thead><tr><th>Library</th><th>Version</th><th>Build</th></tr></thead>
     <tbody>
-      <tr><td>configmergetool</td><td>3.0.2</td><td>pure Python</td></tr>
+      <tr><td>configmergetool</td><td>3.0.3</td><td>pure Python</td></tr>
       <tr><td>openpyxl / et_xmlfile</td><td>3.1.5 / 2.0.0</td><td>pure Python</td></tr>
       <tr><td>PyYAML</td><td>6.0.3</td><td>per Python version and CPU (with the fast libyaml loader)</td></tr>
       <tr><td>chardet</td><td>7.6.0 (Python 3.11/3.12), 5.2.0 (Python 3.9)</td><td>per Python version and CPU</td></tr>
     </tbody>
   </table></div>
-  <div class="cmd"><div class="cap">RHEL server<button class="copy">Copy</button></div><pre>tar xzf configmergetool-3.0.2-rhel8-9-offline.tar.gz
-cd configmergetool-3.0.2-rhel8-9-offline
+  <div class="cmd"><div class="cap">RHEL server<button class="copy">Copy</button></div><pre>tar xzf configmergetool-3.0.3-rhel8-9-offline.tar.gz
+cd configmergetool-3.0.3-rhel8-9-offline
 ./install.sh                      <span class="c"># installs into ~/configmergetool</span>
 ~/configmergetool/bin/configmergetool --version</pre></div>
   <div class="note warn"><strong>RHEL 8 needs a newer Python first</strong><p>RHEL 8's default <code>python3</code> is 3.6, which is too old. The administrator installs one once: <code>sudo dnf install python39</code> (or <code>python3.11</code> / <code>python3.12</code>). RHEL 9's default Python 3.9 works as is. If the script says the environment could not be created on RHEL 8 with Python 3.11/3.12, the system libraries are older than the Python package; <code>sudo dnf update expat</code> fixes it.</p></div>
@@ -395,12 +393,12 @@ cd configmergetool-3.0.2-rhel8-9-offline
 <!-- ───────────────────────────── VERIFY ───────────────────────────── -->
 <section id="verify">
   <h2>Verify the installation</h2>
-  <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>configmergetool --version        <span class="c"># configmergetool 3.0.2</span>
+  <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>configmergetool --version        <span class="c"># configmergetool 3.0.3</span>
 configmergetool --help | head    <span class="c"># usage: configmergetool [-h] ...</span></pre></div>
   <p>To check that the libraries are in place, run the venv's pip (method A) or <code>python3 -m pip</code> (method B):</p>
   <div class="cmd"><div class="cap">terminal<button class="copy">Copy</button></div><pre>~/venv/bin/pip list
 <span class="c"># chardet          7.x    (only with [encoding])
-# configmergetool  3.0.2
+# configmergetool  3.0.3
 # et_xmlfile       2.0.0
 # openpyxl         3.1.5
 # PyYAML           6.0.3</span></pre></div>
@@ -410,9 +408,9 @@ configmergetool --help | head    <span class="c"># usage: configmergetool [-h] .
 <section id="upgrade">
   <h2>Upgrade and uninstall</h2>
   <h3>Upgrade to a newer wheel</h3>
-  <p>For example, from 3.0.1 to 3.0.2. Your venv, PATH link and run history stay as they are.</p>
-  <div class="cmd"><div class="cap">macOS / Linux<button class="copy">Copy</button></div><pre>~/venv/bin/pip install --upgrade "configmergetool-3.0.2-py3-none-any.whl[encoding]"</pre></div>
-  <div class="cmd"><div class="cap">windows powershell<button class="copy">Copy</button></div><pre>&amp; "$env:USERPROFILE\venv\Scripts\pip.exe" install --upgrade "configmergetool-3.0.2-py3-none-any.whl[encoding]"</pre></div>
+  <p>For example, from 3.0.2 to 3.0.3. Your venv, PATH link and run history stay as they are.</p>
+  <div class="cmd"><div class="cap">macOS / Linux<button class="copy">Copy</button></div><pre>~/venv/bin/pip install --upgrade "configmergetool-3.0.3-py3-none-any.whl[encoding]"</pre></div>
+  <div class="cmd"><div class="cap">windows powershell<button class="copy">Copy</button></div><pre>&amp; "$env:USERPROFILE\venv\Scripts\pip.exe" install --upgrade "configmergetool-3.0.3-py3-none-any.whl[encoding]"</pre></div>
   <p>Finish any open audit and apply its patch before upgrading. Patches are applied against the files the audit read.</p>
   <h3>Uninstall completely</h3>
   <ul>
@@ -735,7 +733,7 @@ base/config/licence.dat</pre></div>
   </table></div>
 </section>
 
-<footer>ConfigMergeTool 3.0.2 · Written against release <code>v3.0.2</code>. Dependency versions were checked with a clean install, and the offline procedure was tested with <code>--no-index</code>. Full reference: <code>ConfigMergeTool-readme.txt</code>.</footer>
+<footer>ConfigMergeTool 3.0.3 · Written against release <code>v3.0.3</code>. Dependency versions were checked with a clean install, and the offline procedure was tested with <code>--no-index</code>. Full reference: <code>ConfigMergeTool-readme.txt</code>.</footer>
 </main>
 </div>
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ConfigMergeTool 3.0.2 — offline install for RHEL 8 / RHEL 9 (x86_64 or aarch64).
+# ConfigMergeTool 3.0.3 — offline install for RHEL 8 / RHEL 9 (x86_64 or aarch64).
 #
 #   ./install.sh [INSTALL_DIR]        default INSTALL_DIR: ~/configmergetool
 #   PYTHON=/usr/bin/python3.11 ./install.sh     use a specific Python
@@ -12,7 +12,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="${1:-$HOME/configmergetool}"
-VERSION="3.0.2"
+VERSION="3.0.3"
 
 pick_python() {
     local candidates=("${PYTHON:-}" python3.12 python3.11 python3.9 python3)

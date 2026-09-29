@@ -1,5 +1,5 @@
 ================================================================================
- ConfigMergeTool v3.0.2 — User Guide
+ ConfigMergeTool v3.0.3 — User Guide
  Author: Shiju Abraham
 ================================================================================
 
@@ -55,13 +55,13 @@ Step 1 — Create a virtual environment (recommended):
 
 Step 2 — Install from wheel:
 
-  pip install configmergetool-3.0.2-py3-none-any.whl
+  pip install configmergetool-3.0.3-py3-none-any.whl
 
   # With optional auto-encoding detection (recommended for non-UTF-8 sites):
-  pip install "configmergetool-3.0.2-py3-none-any.whl[encoding]"
+  pip install "configmergetool-3.0.3-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-3.0.2-py3-none-any.whl[all]"
+  pip install "configmergetool-3.0.3-py3-none-any.whl[all]"
 
 Step 3 — Verify:
 
@@ -81,8 +81,8 @@ Nothing goes to /usr, /opt, /etc or the system Python's site-packages.
   INSTALL_DIR=~/venv                              # any folder you can write to
   [ -x "$INSTALL_DIR/bin/python" ] || python3 -m venv "$INSTALL_DIR"   # reuse if it exists
   "$INSTALL_DIR/bin/pip" install --no-cache-dir \
-      "configmergetool-3.0.2-py3-none-any.whl[encoding]"
-  "$INSTALL_DIR/bin/configmergetool" --version     # configmergetool 3.0.2
+      "configmergetool-3.0.3-py3-none-any.whl[encoding]"
+  "$INSTALL_DIR/bin/configmergetool" --version     # configmergetool 3.0.3
 
 Resulting layout (Linux/macOS; Windows uses Scripts\ and Lib\ instead):
 
@@ -159,13 +159,13 @@ Step 3 — Activate the virtual environment:
 
 Step 4 — Install from wheel (copy the .whl file to a local folder first):
 
-  pip install configmergetool-3.0.2-py3-none-any.whl
+  pip install configmergetool-3.0.3-py3-none-any.whl
 
   # With optional encoding detection:
-  pip install "configmergetool-3.0.2-py3-none-any.whl[encoding]"
+  pip install "configmergetool-3.0.3-py3-none-any.whl[encoding]"
 
   # With all optional extras:
-  pip install "configmergetool-3.0.2-py3-none-any.whl[all]"
+  pip install "configmergetool-3.0.3-py3-none-any.whl[all]"
 
 Step 5 — Verify:
 
@@ -183,20 +183,20 @@ spaces must be quoted:
  UPGRADING FROM A PREVIOUS VERSION
 --------------------------------------------------------------------------------
 
-To upgrade to a new .whl (e.g. from 3.0.1 to 3.0.2), activate your virtual
+To upgrade to a new .whl (e.g. from 3.0.2 to 3.0.3), activate your virtual
 environment and run pip with --upgrade:
 
   # Linux / macOS
   source ~/venv/bin/activate
-  pip install --upgrade configmergetool-3.0.2-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.3-py3-none-any.whl
 
   # Windows (Command Prompt)
   %USERPROFILE%\venv\Scripts\activate.bat
-  pip install --upgrade configmergetool-3.0.2-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.3-py3-none-any.whl
 
   # Windows (PowerShell)
   %USERPROFILE%\venv\Scripts\Activate.ps1
-  pip install --upgrade configmergetool-3.0.2-py3-none-any.whl
+  pip install --upgrade configmergetool-3.0.3-py3-none-any.whl
 
 Confirm the new version is active:
   configmergetool --version
@@ -211,10 +211,10 @@ To list all installed packages in the environment:
  OFFLINE INSTALL ON RHEL 8 / RHEL 9 (no internet on the server)
 --------------------------------------------------------------------------------
 
-Use the bundle  configmergetool-3.0.2-rhel8-9-offline.tar.gz  (attached to
+Use the bundle  configmergetool-3.0.3-rhel8-9-offline.tar.gz  (attached to
 the GitHub release).  It holds the tool and every library it needs, built
 for RHEL 8 and 9 on x86_64 and aarch64 with Python 3.9, 3.11 or 3.12:
-  configmergetool 3.0.2, openpyxl 3.1.5, et_xmlfile 2.0.0, PyYAML 6.0.3,
+  configmergetool 3.0.3, openpyxl 3.1.5, et_xmlfile 2.0.0, PyYAML 6.0.3,
   chardet (7.6.0 for Python 3.11/3.12, 5.2.0 for Python 3.9)
 No root rights are needed; nothing is written outside the install folder.
 
@@ -222,11 +222,11 @@ No root rights are needed; nothing is written outside the install folder.
   installs one once:  sudo dnf install python39   (or python3.11/python3.12).
   RHEL 9's default python3 is 3.9 and works as is.
 
-  tar xzf configmergetool-3.0.2-rhel8-9-offline.tar.gz
-  cd configmergetool-3.0.2-rhel8-9-offline
+  tar xzf configmergetool-3.0.3-rhel8-9-offline.tar.gz
+  cd configmergetool-3.0.3-rhel8-9-offline
   ./install.sh                         # into ~/configmergetool
   ./install.sh /opt/apps/cmt           # or any folder you can write to
-  ~/configmergetool/bin/configmergetool --version     # configmergetool 3.0.2
+  ~/configmergetool/bin/configmergetool --version     # configmergetool 3.0.3
 
   install.sh picks the newest Python 3.9+ it finds (set PYTHON=... to
   choose), creates a virtual environment and installs from the bundled
@@ -1895,6 +1895,12 @@ DON'T:
 ================================================================================
  VERSION HISTORY
 ================================================================================
+
+v3.0.3 (2026-09-29) — Large files and KV section hint
+  + Audit: text/XML files over 512 KB are compared in full (changes past
+    512 KB were not listed); the side-by-side view notes the display cut
+  + Audit: a KV key missing from its section but present in another section
+    on that node shows "missing (in [X])"; keys stay section-dependent
 
 v3.0.2 (2026-09-28) — YAML by structure, values backups, YAML merge
   + Audit: YAML files (Helm values.yaml) compared by structure, one row per

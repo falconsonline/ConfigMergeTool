@@ -1,4 +1,4 @@
-ConfigMergeTool 3.0.2 — offline bundle for RHEL 8 and RHEL 9
+ConfigMergeTool 3.0.3 — offline bundle for RHEL 8 and RHEL 9
 ==============================================================
 
 This folder installs ConfigMergeTool on a RHEL 8 or RHEL 9 server that has no
@@ -29,24 +29,24 @@ Tested (2026-09-28, offline pip install, audit + merge smoke test)
 
 Install
 -------
-  tar xzf configmergetool-3.0.2-rhel8-9-offline.tar.gz
-  cd configmergetool-3.0.2-rhel8-9-offline
+  tar xzf configmergetool-3.0.3-rhel8-9-offline.tar.gz
+  cd configmergetool-3.0.3-rhel8-9-offline
   ./install.sh                       # installs into ~/configmergetool
   ./install.sh /opt/apps/cmt         # or any folder you can write to
   PYTHON=/usr/bin/python3.11 ./install.sh   # choose the Python explicitly
 
   Then:
-    ~/configmergetool/bin/configmergetool --version     # configmergetool 3.0.2
+    ~/configmergetool/bin/configmergetool --version     # configmergetool 3.0.3
 
 Manual install (same result, without the script)
 ------------------------------------------------
   python3.9 -m venv ~/configmergetool
   ~/configmergetool/bin/pip install --no-index --no-cache-dir \
-      --find-links wheels "configmergetool[encoding]==3.0.2"
+      --find-links wheels "configmergetool[encoding]==3.0.3"
 
 What is in wheels/
 ------------------
-  configmergetool-3.0.2   the tool (pure Python)
+  configmergetool-3.0.3   the tool (pure Python)
   openpyxl 3.1.5          Excel reports                 (pure Python)
   et_xmlfile 2.0.0        needed by openpyxl            (pure Python)
   PyYAML 6.0.3            YAML audit and merge          (built per Python/CPU)
@@ -57,7 +57,7 @@ What is in wheels/
 Upgrade from an earlier version
 -------------------------------
   Run ./install.sh with the same folder: the existing environment is reused and
-  ConfigMergeTool 3.0.2 replaces the older version.
+  ConfigMergeTool 3.0.3 replaces the older version.
 
 Full documentation: ConfigMergeTool-readme.txt and ConfigMergeTool-guide.html
 (included in this bundle).

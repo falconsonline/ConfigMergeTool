@@ -1,6 +1,6 @@
 # ConfigMergeTool — Features Reference
 
-> Developer reference. Describes every feature implemented in the current codebase (v3.0.2).
+> Developer reference. Describes every feature implemented in the current codebase (v3.0.3).
 > Update this file whenever features are added, changed, or removed.
 
 ---
@@ -48,7 +48,7 @@ ConfigMergeTool/
 ├── requirements.txt            — Core runtime deps (openpyxl)
 ├── requirements-dev.txt        — Dev/test deps (pytest, build, twine, chardet)
 └── configmerge/
-    ├── __init__.py             — Public API + __version__ = "3.0.2"
+    ├── __init__.py             — Public API + __version__ = "3.0.3"
     ├── __main__.py             — Enables: python -m configmerge
     ├── cli.py                  — main() / _main() / parse_args() — pip entry point
     ├── models.py               — BaseDirConfig, RemoteConfig, MergeConfig, MergeResult,
@@ -675,7 +675,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | Feature | Detail |
 |---|---|
 | Package name | `configmergetool` |
-| Version | `3.0.2` |
+| Version | `3.0.3` |
 | Entry point | `configmergetool = "configmerge.cli:main"` |
 | Module invocation | `python -m configmerge` |
 | Legacy invocation | `python ConfigMergeTool.py` (backward compatible) |
@@ -684,8 +684,8 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 | Optional `[ssh]` | `paramiko>=3.0` — Phase 11 SSH remote node access |
 | Optional `[email]` | `imapclient>=2.3` — Phase 12 email-triggered audit |
 | Optional `[all]` | All optional extras |
-| Build | `python -m build` → `dist/configmergetool-3.0.2-py3-none-any.whl` |
-| Install | `pip install configmergetool-3.0.2-py3-none-any.whl` |
+| Build | `python -m build` → `dist/configmergetool-3.0.3-py3-none-any.whl` |
+| Install | `pip install configmergetool-3.0.3-py3-none-any.whl` |
 | Type hints | `py.typed` marker present (PEP 561) |
 | Python | 3.9+ |
 
@@ -734,6 +734,7 @@ Each run creates a new `audit_YYYYMMDD_HHMMSS/` subdirectory; previous runs are 
 
 | Date | Change |
 |---|---|
+| 2026-09-29 | **v3.0.3** — large text/XML files compared in full; KV "missing (in [X])" hint |
 | 2026-09-29 | Audit: text/XML files over 512 KB compared on the full text — changed blocks came from the display copy cut at 512 KB, so later changes were not listed (Site A: callservice.xml 9 → 20 blocks, rsc_common.xml 104 → 115); side-by-side notes the cut. KV: a key missing from its section but present in another section on that node shows "missing (in [X])" (`other_sections`); comparison stays section-dependent (user, 2026-09-29) — Site A dbwriter.cfg `snmp.agent.id` is in `[CouchBase]` on NewLab only |
 | 2026-09-28 | **v3.0.2** — audit YAML by structure, values* backups, YAML side-by-side per node, merge YAML (base wins) and merge backup skipping; PyYAML required; RHEL 8/9 offline bundle |
 | 2026-09-28 | Merge: `.yaml`/`.yml` merged by structure (`processors/yaml_proc.py`, base wins) instead of copied from release — release text edited in place (values rewritten, site-only keys/entries inserted re-indented), W018 when a site value cannot be placed (inline/empty release section, type differs), W019 for templates/invalid YAML whose site copy differs. Backup copies skipped in merge on both sides (BACKUP_FILE_SKIPPED, I004); `bck`/`bk` markers added. Real run (PRODAudit into DRAudit): 41 YAML files, 2236/2238 site values in output (2 inline `pullSecrets` → W018), 13/13 release-only kept, only the 72 value lines changed, all valid YAML; 19 backups no longer deployed; all other outputs identical. YAML model moved to `configmerge/yaml_model.py` (audit re-exports) |
